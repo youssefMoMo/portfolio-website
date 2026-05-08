@@ -1,0 +1,25 @@
+# ═══════════════════════════════════════════════════════════════
+# YOUSSEF DESIGN PORTFOLIO - Robots.txt
+# ═══════════════════════════════════════════════════════════════
+
+User-agent: *
+Allow: /
+
+# Allow all Google bots
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Googlebot-Mobile
+Allow: /
+
+# Sitemap location
+Sitemap: https://youssef-portoflio.store/sitemap.xml
+
+# Disallow admin panel
+Disallow: /admin/
+
+# Crawl-delay for politeness
+Crawl-delay: 1
