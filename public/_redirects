@@ -1,0 +1,5 @@
+# SPA fallback — every non-API path serves index.html so client-side routing
+# can resolve. Vercel uses vercel.json rewrites; this file is harmless on Vercel
+# and provides a safety net for any other host (Netlify, Cloudflare Pages, etc.).
+/api/*    /api/:splat   200
+/*        /index.html   200

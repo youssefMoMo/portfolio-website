@@ -57,7 +57,12 @@ export function DualMarqueeSection() {
   const duplicatedReviews = reviews.length > 0
     ? [...reviews, ...reviews, ...reviews, ...reviews]
     : [];
-  const duplicatedStats = [...statsData, ...statsData, ...statsData];
+  // 6× duplication ensures total width >= 2× viewport on all common screen widths
+  // (3 cards × ~240px × 6 = ~4320px, covers up to ~2160px viewport with proper seamless loop)
+  const duplicatedStats = [
+    ...statsData, ...statsData, ...statsData,
+    ...statsData, ...statsData, ...statsData,
+  ];
   const duplicatedTools = [...filteredTools, ...filteredTools, ...filteredTools, ...filteredTools];
 
   return (
@@ -113,18 +118,23 @@ export function DualMarqueeSection() {
         </div>
       )}
 
-      {/* ══ Stats Marquee ══ */}
+      {/* ══ Stats Marquee ══
+          Same animation direction as Reviews/Tools so the duplicated content
+          always reaches both viewport edges, on every screen width and in
+          every text direction. */}
       <div
         className="relative w-full overflow-hidden mb-6 sm:mb-8"
+        dir="ltr"
         style={{
+          direction: "ltr",
           maskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
           WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
         }}
       >
         <motion.div
           className="flex gap-4 sm:gap-6 whitespace-nowrap"
-          animate={{ x: ["-50%", "0%"] }}
-          transition={{ duration: 72, ease: "linear", repeat: Infinity }}
+          animate={{ x: ["0%", "-50%"] }}
+          transition={{ duration: 60, ease: "linear", repeat: Infinity }}
         >
           {duplicatedStats.map((stat, index) => {
             const Icon = STATS_ICONS[stat.icon] || Briefcase;

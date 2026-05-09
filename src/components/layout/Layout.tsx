@@ -3,6 +3,7 @@ import { Navbar } from "./Navbar";
 import { Footer } from "./Footer";
 import { useLocation } from "wouter";
 import { useEffect, useRef } from "react";
+import { BackgroundOverlay } from "@/components/BackgroundOverlay";
 
 interface LayoutProps {
   children: ReactNode;
@@ -53,8 +54,11 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col relative bg-background">
-      {/* Background layers */}
-      <div className="fixed inset-0 z-0">
+      {/* Global fixed background image + theme-aware overlay */}
+      <BackgroundOverlay />
+
+      {/* Decorative animated layers (stars, nebulas) — stacked above background */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="galaxy-bg">
           <div className="stars-layer stars-layer-1" />
           <div className="stars-layer stars-layer-2" />

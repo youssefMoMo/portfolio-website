@@ -1,0 +1,26 @@
+# ═══════════════════════════════════════════════════════════════
+# Youssef Design Portfolio - robots.txt
+# Canonical: https://www.youssef-portfolio.store
+# ═══════════════════════════════════════════════════════════════
+
+User-agent: *
+Allow: /
+
+# Block admin and sensitive areas
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/admin
+Disallow: /api/admin/
+Disallow: /config
+Disallow: /config/
+
+# Block sensitive files
+Disallow: /*.sql$
+Disallow: /*.log$
+Disallow: /*.bak$
+Disallow: /*.zip$
+Disallow: /.htaccess
+Disallow: /.htpasswd
+
+# Sitemap location
+Sitemap: https://www.youssef-portfolio.store/sitemap.xml
