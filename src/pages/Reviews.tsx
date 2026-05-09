@@ -6,6 +6,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { getAllReviews, submitReviewToTable, ReviewsContent, Review } from "@/lib/contentManager";
 import { profile } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
+import { Modal } from "@/components/ui/Modal";
 
 // ══════════════════════════════════════════
 // Write Review Popup
@@ -15,18 +16,6 @@ function WriteReviewModal({ onClose, onSubmit }: {
   onSubmit: (r: Omit<Review, "id" | "verified" | "avatar">) => void;
 }) {
   const [name, setName] = useState("");
-
-  // Lock body scroll + ESC to close
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
   const [rating, setRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
   const [text, setText] = useState("");
@@ -86,24 +75,12 @@ function WriteReviewModal({ onClose, onSubmit }: {
   };
 
   return (
-    <motion.div
-      key="backdrop"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
+    <Modal
+      open={true}
+      onClose={onClose}
+      ariaLabel="Write a review"
+      contentClassName="w-full max-w-sm bg-[#111318] border border-white/10 rounded-2xl shadow-2xl p-6"
     >
-      <motion.div
-        key="modal"
-        initial={{ opacity: 0, scale: 0.88, y: 24 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.88, y: 24 }}
-        transition={{ type: "spring", stiffness: 320, damping: 28 }}
-        className="relative w-full max-w-sm bg-[#111318] border border-white/10 rounded-2xl shadow-2xl p-6"
-        onClick={e => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-bold text-white">Write a Review</h2>
@@ -176,8 +153,7 @@ function WriteReviewModal({ onClose, onSubmit }: {
         >
           {submitting ? "Submitting..." : "Submit Review"}
         </button>
-      </motion.div>
-    </motion.div>
+    </Modal>
   );
 }
 
@@ -270,14 +246,12 @@ export default function Reviews() {
   return (
     <div className="min-h-screen pt-8 pb-20 px-4 sm:px-6">
       {/* Modal */}
-      <AnimatePresence>
-        {showModal && (
-          <WriteReviewModal
-            onClose={() => setShowModal(false)}
-            onSubmit={handleSubmitReview}
-          />
-        )}
-      </AnimatePresence>
+      {showModal && (
+        <WriteReviewModal
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmitReview}
+        />
+      )}
 
       <div className="max-w-7xl mx-auto">
         {/* Header */}

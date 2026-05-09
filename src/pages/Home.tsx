@@ -14,7 +14,7 @@ import { DualMarqueeSection } from "@/components/DualMarqueeSection";
 const ALL_PORTFOLIO_IMAGES = Array.from({ length: 22 }, (_, i) => ({
   id: i + 1,
   title: `Design ${i + 1}`,
-  image: `/images/work${i + 1}.png`,
+  image: `/images/portfolio/work${i + 1}.png`,
   category: "UI Design",
 }));
 
@@ -61,7 +61,7 @@ function HomeImage({ src, alt, className }: { src: string; alt: string; classNam
         const el = e.currentTarget;
         if (!triedFallback.current) {
           triedFallback.current = true;
-          el.src = "/images/fallback.png";
+          el.src = "/images/global/fallback.png";
         } else {
           setFailed(true);
         }
@@ -196,27 +196,39 @@ export default function Home() {
             </motion.p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {weeklyItems.map((item, i) => (
-              <motion.div
-                key={item.id} custom={i} variants={fadeUp}
-                initial="hidden" whileInView="visible" viewport={{ once: true }}
-                className="group relative overflow-hidden rounded-2xl bg-card/40 border border-white/5 hover:border-primary/30 transition-all duration-500"
-              >
-                <div className="aspect-video overflow-hidden bg-card/60 relative">
-                  <HomeImage
-                    src={item.image}
-                    alt={item.title}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
+          {/* Auto-scrolling marquee — preserves card design, adds continuous motion */}
+          <div
+            className="relative w-full overflow-hidden"
+            style={{
+              maskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+            }}
+          >
+            <motion.div
+              className="flex gap-6 w-max"
+              animate={{ x: ["0%", "-50%"] }}
+              transition={{ duration: 35, ease: "linear", repeat: Infinity }}
+            >
+              {[...weeklyItems, ...weeklyItems].map((item, i) => (
+                <div
+                  key={`${item.id}-${i}`}
+                  className="group relative overflow-hidden rounded-2xl bg-card/40 border border-white/5 hover:border-primary/30 transition-all duration-500 w-[320px] md:w-[380px] flex-shrink-0"
+                >
+                  <div className="aspect-video overflow-hidden bg-card/60 relative">
+                    <HomeImage
+                      src={item.image}
+                      alt={item.title}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500">
+                    <p className="text-white font-semibold">{item.title}</p>
+                    <p className="text-white/70 text-sm">{item.category}</p>
+                  </div>
                 </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500">
-                  <p className="text-white font-semibold">{item.title}</p>
-                  <p className="text-white/70 text-sm">{item.category}</p>
-                </div>
-              </motion.div>
-            ))}
+              ))}
+            </motion.div>
           </div>
 
           <div className="text-center mt-10">

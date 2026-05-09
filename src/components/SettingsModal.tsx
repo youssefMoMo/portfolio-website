@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 import {
   X,
   Moon,
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme";
 import { useLanguage } from "@/hooks/use-language";
 import { profile } from "@/lib/data";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SettingsModalProps = { isOpen: boolean; onClose: () => void };
 
@@ -41,14 +42,14 @@ const itemVariants = {
   visible: { opacity: 1, x: 0, y: 0, transition: { type: "spring", stiffness: 200, damping: 15 } },
 };
 
-// Flag image filenames — put these in /images/ folder:
+// Flag image filenames — files live in /public/images/global/:
 // flag-en.png (US/UK flag)
 // flag-ar.png (Saudi Arabia flag)
 // flag-es.png (Spain flag)
 const FLAG_IMAGES: Record<string, string> = {
-  en: "/images/flag-en.png",
-  ar: "/images/flag-ar.png",
-  es: "/images/flag-es.png",
+  en: "/images/global/flag-en.png",
+  ar: "/images/global/flag-ar.png",
+  es: "/images/global/flag-es.png",
 };
 
 const FLAG_EMOJI: Record<string, string> = {
@@ -86,7 +87,37 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setTheme(newTheme as "dark" | "light" | "system");
   }, [theme, setTheme, onClose]);
 
-  return (
+  // ESC closes
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
+  // Body scroll lock with scrollbar-width compensation
+  useEffect(() => {
+    if (!isOpen || typeof document === "undefined") return;
+    const body = document.body;
+    const html = document.documentElement;
+    const scrollbarWidth = window.innerWidth - html.clientWidth;
+    const prev = {
+      overflow: body.style.overflow,
+      paddingRight: body.style.paddingRight,
+    };
+    body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      body.style.overflow = prev.overflow;
+      body.style.paddingRight = prev.paddingRight;
+    };
+  }, [isOpen]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -308,6 +339,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

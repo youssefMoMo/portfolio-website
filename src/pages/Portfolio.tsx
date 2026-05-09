@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Image, MessageSquare, X, ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,16 +36,16 @@ function PortfolioImage({
 
   return (
     <img
-      src={src || "/images/fallback.png"}
+      src={src || "/images/global/fallback.png"}
       alt={alt}
       className={className}
       loading="lazy"
       decoding="async"
       onError={(e) => {
         const el = e.currentTarget;
-        if (!triedFallback.current && el.src !== "/images/fallback.png") {
+        if (!triedFallback.current && el.src !== "/images/global/fallback.png") {
           triedFallback.current = true;
-          el.src = "/images/fallback.png";
+          el.src = "/images/global/fallback.png";
         } else {
           setFailed(true);
         }
@@ -87,15 +88,15 @@ function LightboxImage({
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: slideDir * -200, opacity: 0 }}
         transition={{ duration: 0.22, ease: "easeOut" }}
-        src={src || "/images/fallback.png"}
+        src={src || "/images/global/fallback.png"}
         alt=""
         className="max-w-full max-h-[85vh] object-contain rounded-xl"
         onClick={(e) => e.stopPropagation()}
         onError={(e) => {
           const el = e.currentTarget;
-          if (!triedFallback.current && el.src !== "/images/fallback.png") {
+          if (!triedFallback.current && el.src !== "/images/global/fallback.png") {
             triedFallback.current = true;
-            el.src = "/images/fallback.png";
+            el.src = "/images/global/fallback.png";
           } else {
             setFailed(true);
           }
@@ -244,73 +245,76 @@ export default function Portfolio() {
           </motion.div>
         )}
 
-        {/* Lightbox */}
-        <AnimatePresence>
-          {selectedItem != null && selectedImg && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
-              className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
-              onClick={() => setSelectedItem(null)}
-            >
-              {/* Close */}
-              <motion.button
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.6 }}
-                transition={{ duration: 0.15 }}
-                whileHover={{ scale: 1.15, boxShadow: "0 0 20px rgba(239,68,68,0.5)" }}
-                whileTap={{ scale: 0.9 }}
-                onClick={(e) => { e.stopPropagation(); setSelectedItem(null); }}
-                className="absolute top-6 right-6 z-[60] w-12 h-12 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center shadow-lg"
+        {/* Lightbox — rendered via portal to escape PageWrapper transform context */}
+        {typeof document !== "undefined" && createPortal(
+          <AnimatePresence>
+            {selectedItem != null && selectedImg && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
+                onClick={() => setSelectedItem(null)}
               >
-                <X className="w-6 h-6" />
-              </motion.button>
-
-              {/* Prev */}
-              {currentIndex > 0 && (
+                {/* Close */}
                 <motion.button
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  whileHover={{ scale: 1.1 }}
+                  initial={{ opacity: 0, scale: 0.6 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.6 }}
+                  transition={{ duration: 0.15 }}
+                  whileHover={{ scale: 1.15, boxShadow: "0 0 20px rgba(239,68,68,0.5)" }}
                   whileTap={{ scale: 0.9 }}
-                  onClick={goPrev}
-                  className="absolute left-4 md:left-8 z-[60] w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white flex items-center justify-center border border-white/20"
+                  onClick={(e) => { e.stopPropagation(); setSelectedItem(null); }}
+                  className="absolute top-6 right-6 z-[60] w-12 h-12 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center shadow-lg"
                 >
-                  <ChevronLeft className="w-6 h-6" />
+                  <X className="w-6 h-6" />
                 </motion.button>
-              )}
 
-              {/* Next */}
-              {currentIndex < items.length - 1 && (
-                <motion.button
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={goNext}
-                  className="absolute right-4 md:right-8 z-[60] w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white flex items-center justify-center border border-white/20"
-                >
-                  <ChevronRight className="w-6 h-6" />
-                </motion.button>
-              )}
+                {/* Prev */}
+                {currentIndex > 0 && (
+                  <motion.button
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={goPrev}
+                    className="absolute left-4 md:left-8 z-[60] w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white flex items-center justify-center border border-white/20"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </motion.button>
+                )}
 
-              <LightboxImage
-                src={selectedImg.image || ""}
-                slideDir={slideDir}
-                itemKey={selectedItem}
-              />
+                {/* Next */}
+                {currentIndex < items.length - 1 && (
+                  <motion.button
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={goNext}
+                    className="absolute right-4 md:right-8 z-[60] w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white flex items-center justify-center border border-white/20"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </motion.button>
+                )}
 
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white/70 text-sm">
-                {currentIndex + 1} / {items.length}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                <LightboxImage
+                  src={selectedImg.image || ""}
+                  slideDir={slideDir}
+                  itemKey={selectedItem}
+                />
+
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white/70 text-sm">
+                  {currentIndex + 1} / {items.length}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}

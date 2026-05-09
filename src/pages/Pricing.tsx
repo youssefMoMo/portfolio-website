@@ -31,6 +31,7 @@ import { useLanguage } from "@/hooks/use-language";
 import { getContent, PricingContent, PricingPlan } from "@/lib/contentManager";
 import { profile, faqs } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
+import { Modal } from "@/components/ui/Modal";
 
 // ══════════════════════════════════════════
 // Icon map للـ plans
@@ -81,18 +82,6 @@ function OrderModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-
-  // Lock body scroll + ESC to close
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
 
   const message = `Hello
 
@@ -145,69 +134,58 @@ I want this plan at these prices`;
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
+    <Modal
+      open={true}
+      onClose={onClose}
+      ariaLabel="Order message"
+      contentClassName="w-full max-w-lg bg-[#0f1117] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
     >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.88, y: 24 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.88, y: 20 }}
-        transition={{ type: "spring", stiffness: 320, damping: 28 }}
-        className="relative w-full max-w-lg bg-[#0f1117] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 pt-6 pb-4">
-            <h2 className="text-lg font-semibold text-white">Order Message</h2>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 pt-6 pb-4">
+        <h2 className="text-lg font-semibold text-white">Order Message</h2>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
 
-          {/* Message Box */}
-          <div className="mx-6 mb-6 p-5 bg-[#1a1d27] border border-white/5 rounded-xl">
-            <pre className="text-sm text-white/80 whitespace-pre-wrap font-sans leading-relaxed">
-              {message}
-            </pre>
-          </div>
+      {/* Message Box */}
+      <div className="mx-6 mb-6 p-5 bg-[#1a1d27] border border-white/5 rounded-xl">
+        <pre className="text-sm text-white/80 whitespace-pre-wrap font-sans leading-relaxed">
+          {message}
+        </pre>
+      </div>
 
-          {/* Buttons */}
-          <div className="flex gap-3 px-6 pb-6">
-            <Button
-              variant="outline"
-              className="flex-1 gap-2 border-white/10 bg-white/5 hover:bg-white/10 text-white"
-              onClick={handleCopy}
-            >
-              {copied ? (
-                <>
-                  <CheckCheck className="w-4 h-4 text-green-400" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  Copy Message
-                </>
-              )}
-            </Button>
-            <Button
-              className="flex-1 gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow"
-              onClick={handleDiscord}
-            >
-              <MessageSquare className="w-4 h-4" />
-              Open Discord DM
-            </Button>
-          </div>
-      </motion.div>
-    </motion.div>
+      {/* Buttons */}
+      <div className="flex gap-3 px-6 pb-6">
+        <Button
+          variant="outline"
+          className="flex-1 gap-2 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+          onClick={handleCopy}
+        >
+          {copied ? (
+            <>
+              <CheckCheck className="w-4 h-4 text-green-400" />
+              Copied!
+            </>
+          ) : (
+            <>
+              <Copy className="w-4 h-4" />
+              Copy Message
+            </>
+          )}
+        </Button>
+        <Button
+          className="flex-1 gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow"
+          onClick={handleDiscord}
+        >
+          <MessageSquare className="w-4 h-4" />
+          Open Discord DM
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -250,11 +228,9 @@ export default function Pricing() {
   return (
     <div className="min-h-screen pt-8 pb-20 px-6">
       {/* ══ Order Modal ══ */}
-      <AnimatePresence>
-        {selectedPlan && (
-          <OrderModal plan={selectedPlan} onClose={() => setSelectedPlan(null)} />
-        )}
-      </AnimatePresence>
+      {selectedPlan && (
+        <OrderModal plan={selectedPlan} onClose={() => setSelectedPlan(null)} />
+      )}
 
       <div className="max-w-7xl mx-auto">
 

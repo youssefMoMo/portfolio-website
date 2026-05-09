@@ -153,12 +153,12 @@ export function useHomeContent() {
 export function usePortfolioContent() {
   const defaultPortfolio: PortfolioContent = {
     items: [
-      { id: 1, title: "Gaming UI Design", image: "/images/work1.png", category: "UI Design" },
-      { id: 2, title: "Roblox Game Interface", image: "/images/work2.png", category: "Game UI" },
-      { id: 3, title: "Mobile Game UI", image: "/images/work3.png", category: "Mobile UI" },
-      { id: 4, title: "Dashboard Design", image: "/images/work4.png", category: "Web UI" },
-      { id: 5, title: "E-commerce Platform", image: "/images/work5.png", category: "Web UI" },
-      { id: 6, title: "Social Media App", image: "/images/work6.png", category: "Mobile UI" }
+      { id: 1, title: "Gaming UI Design", image: "/images/portfolio/work1.png", category: "UI Design" },
+      { id: 2, title: "Roblox Game Interface", image: "/images/portfolio/work2.png", category: "Game UI" },
+      { id: 3, title: "Mobile Game UI", image: "/images/portfolio/work3.png", category: "Mobile UI" },
+      { id: 4, title: "Dashboard Design", image: "/images/portfolio/work4.png", category: "Web UI" },
+      { id: 5, title: "E-commerce Platform", image: "/images/portfolio/work5.png", category: "Web UI" },
+      { id: 6, title: "Social Media App", image: "/images/portfolio/work6.png", category: "Mobile UI" }
     ]
   };
 

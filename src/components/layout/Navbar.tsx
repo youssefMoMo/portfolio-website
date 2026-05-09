@@ -70,7 +70,7 @@ export function Navbar() {
               transition={{ type: "spring", stiffness: 200 }}
             >
               <SafeImage
-                src="/images/profile.png"
+                src="/images/global/profile.png"
                 alt="Youssef"
                 className="w-8 h-8 rounded-full object-cover border-2 border-primary/30 group-hover:border-primary transition-colors"
                 wrapperClassName="w-8 h-8 rounded-full"
@@ -158,7 +158,7 @@ export function Navbar() {
                 <div className="flex justify-between items-center mb-12">
                   <div className="flex items-center gap-2.5">
                     <SafeImage
-                      src="/images/profile.png"
+                      src="/images/global/profile.png"
                       alt="Y"
                       className="w-8 h-8 rounded-full object-cover border-2 border-primary/30"
                       wrapperClassName="w-8 h-8 rounded-full"

@@ -292,7 +292,7 @@ function fixPortfolioImages(content: PortfolioContent): PortfolioContent {
     items: content.items.map((item, i) => ({
       ...item,
       image: item.image.includes(OLD_SUPABASE_URL)
-        ? `/images/work${(i % 22) + 1}.png`
+        ? `/images/portfolio/work${(i % 22) + 1}.png`
         : item.image,
     })),
   };

@@ -517,7 +517,7 @@ export default function AdminDashboard() {
     const item: PortfolioItem = {
       id: crypto.randomUUID(),
       title: "New Project",
-      image: "/images/work.png",
+      image: "/images/portfolio/work.png",
       category: "UI Design",
       display_order: portfolioContent.items.length,
       is_published: true,

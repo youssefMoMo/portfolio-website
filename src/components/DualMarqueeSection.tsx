@@ -26,9 +26,9 @@ const STATS_ICONS: Record<string, any> = {
 };
 
 const filteredTools = [
-  { id: 1, name: "Photoshop", logo: "/images/photoshop.png", emoji: "🖼️" },
-  { id: 2, name: "Figma", logo: "/images/figma.png", emoji: "🎨" },
-  { id: 3, name: "Roblox Studio", logo: "/images/roblox-studio.png", emoji: "🎮" },
+  { id: 1, name: "Photoshop", logo: "/images/global/photoshop.png", emoji: "🖼️" },
+  { id: 2, name: "Figma", logo: "/images/global/figma.png", emoji: "🎨" },
+  { id: 3, name: "Roblox Studio", logo: "/images/global/roblox-studio.png", emoji: "🎮" },
 ];
 
 export function DualMarqueeSection() {

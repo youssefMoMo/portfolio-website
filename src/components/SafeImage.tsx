@@ -8,7 +8,7 @@ import { useState, useEffect, useMemo, type ReactNode, type ImgHTMLAttributes, t
  *   import { SafeImage } from "@/components/SafeImage";
  *
  * Props beyond standard <img>:
- *   - fallback: string         primary fallback URL (default: /images/fallback.png)
+ *   - fallback: string         primary fallback URL (default: /images/global/fallback.png)
  *   - fallbackIcon: ReactNode  rendered when both src AND fallback fail (replaces the <img>)
  *   - wrapperClassName: string class applied to the wrapper element when fallbackIcon is rendered
  *   - containerClassName: string alias of wrapperClassName for backward-compat
@@ -55,7 +55,7 @@ export interface SafeImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>
 export function SafeImage({
   src,
   alt = "",
-  fallback = "/images/fallback.png",
+  fallback = "/images/global/fallback.png",
   fallbackIcon,
   wrapperClassName,
   containerClassName,
