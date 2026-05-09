@@ -196,10 +196,15 @@ export default function Home() {
             </motion.p>
           </div>
 
-          {/* Auto-scrolling marquee — preserves card design, adds continuous motion */}
+          {/* Auto-scrolling marquee — preserves card design, adds continuous motion.
+              dir="ltr" forces consistent layout regardless of document direction.
+              Without this, in Arabic (RTL) the flex container's anchor flips
+              and the marquee freezes / disappears off-screen. */}
           <div
             className="relative w-full overflow-hidden"
+            dir="ltr"
             style={{
+              direction: "ltr",
               maskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
               WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
             }}

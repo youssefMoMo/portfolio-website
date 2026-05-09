@@ -72,7 +72,9 @@ export function DualMarqueeSection() {
       {duplicatedReviews.length > 0 && (
         <div
           className="relative w-full overflow-hidden mb-6 sm:mb-8"
+          dir="ltr"
           style={{
+            direction: "ltr",
             maskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
             WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
           }}
@@ -147,7 +149,9 @@ export function DualMarqueeSection() {
       {/* ══ Tools Marquee ══ */}
       <div
         className="relative w-full overflow-hidden"
+        dir="ltr"
         style={{
+          direction: "ltr",
           maskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
           WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
         }}
