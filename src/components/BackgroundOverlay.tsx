@@ -48,13 +48,15 @@ export function BackgroundOverlay() {
         }}
       />
 
-      {/* Tint overlay — slightly darker in dark mode for stronger contrast */}
+      {/* Tint overlay — lighter than before so the bg image is actually visible.
+          User reports image was "not appearing" because old 55-65% black tint
+          on a dark bg.png left almost nothing showing through. */}
       <div
         className="absolute inset-0"
         style={{
           background: isDark
-            ? "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(11,11,15,0.65) 100%)"
-            : "linear-gradient(180deg, rgba(245,245,247,0.65) 0%, rgba(245,245,247,0.78) 100%)",
+            ? "linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(11,11,15,0.45) 100%)"
+            : "linear-gradient(180deg, rgba(245,245,247,0.55) 0%, rgba(245,245,247,0.70) 100%)",
         }}
       />
     </div>

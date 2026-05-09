@@ -54,11 +54,14 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col relative bg-background">
-      {/* Global fixed background image + theme-aware overlay */}
+      {/* Global fixed background image + theme-aware overlay (bottom-most layer, z-0) */}
       <BackgroundOverlay />
 
-      {/* Decorative animated layers (stars, nebulas) — stacked above background */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
+      {/* Decorative animated layers (stars, nebulas) — z-[1] so they sit ABOVE
+          the BackgroundOverlay but BELOW page content (z-10). Without explicit
+          z-index higher than 0, this wrapper would share z-0 with BackgroundOverlay
+          and DOM order would put it on top, which used to cover the bg image. */}
+      <div className="fixed inset-0 z-[1] pointer-events-none">
         <div className="galaxy-bg">
           <div className="stars-layer stars-layer-1" />
           <div className="stars-layer stars-layer-2" />

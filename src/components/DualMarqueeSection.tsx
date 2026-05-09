@@ -63,7 +63,13 @@ export function DualMarqueeSection() {
     ...statsData, ...statsData, ...statsData,
     ...statsData, ...statsData, ...statsData,
   ];
-  const duplicatedTools = [...filteredTools, ...filteredTools, ...filteredTools, ...filteredTools];
+  // 8× duplication ensures total width ≥ 2× viewport width on common screens
+  // (3 tools × ~210px × 8 = ~5040px, covers up to ~2520px viewport with a clean
+  // seamless 0%→-50% loop). Same fix that was applied to Stats.
+  const duplicatedTools = [
+    ...filteredTools, ...filteredTools, ...filteredTools, ...filteredTools,
+    ...filteredTools, ...filteredTools, ...filteredTools, ...filteredTools,
+  ];
 
   return (
     <section className="w-full py-10 sm:py-12 overflow-hidden border-y border-white/5 relative">
