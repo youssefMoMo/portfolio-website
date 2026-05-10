@@ -39,6 +39,14 @@ export default defineConfig(({ mode }) => {
           assetFileNames: 'assets/[name]-[hash][extname]',
           chunkFileNames: 'assets/[name]-[hash].js',
           entryFileNames: 'assets/[name]-[hash].js',
+          manualChunks: {
+            // Heavy UI libs that public pages use — keep separate from app code
+            // so they cache across deploys when only app code changes.
+            'vendor-framer':   ['framer-motion'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-react':    ['react', 'react-dom', 'wouter'],
+            'vendor-icons':    ['lucide-react'],
+          },
         },
       },
     },

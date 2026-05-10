@@ -8,13 +8,14 @@ import { useTableRealtime } from "@/hooks/useContentRealtime";
 import { profile } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
 import { Modal } from "@/components/ui/Modal";
+import { useToast } from "@/hooks/use-toast";
 
 // ══════════════════════════════════════════
 // Write Review Popup
 // ══════════════════════════════════════════
 function WriteReviewModal({ onClose, onSubmit }: {
   onClose: () => void;
-  onSubmit: (r: Omit<Review, "id" | "verified" | "avatar">) => void;
+  onSubmit: (r: Omit<Review, "id" | "verified" | "avatar" | "status">) => void;
 }) {
   const [name, setName] = useState("");
   const [rating, setRating] = useState(5);
@@ -163,6 +164,7 @@ function WriteReviewModal({ onClose, onSubmit }: {
 // ══════════════════════════════════════════
 export default function Reviews() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [content, setContent] = useState<ReviewsContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -213,35 +215,33 @@ export default function Reviews() {
     };
   }, [content]);
 
-  const handleSubmitReview = useCallback(async (reviewData: Omit<Review, "id" | "verified" | "avatar">) => {
-    const newReview: Review = {
-      id: crypto.randomUUID(),
-      ...reviewData,
-      verified: true,
-      avatar: reviewData.name.charAt(0).toUpperCase(),
-    };
-    // 1. Optimistically update UI immediately
-    const currentReviews = content?.reviews ?? [];
-    setContent({ reviews: [...currentReviews, newReview] });
+  const handleSubmitReview = useCallback(async (reviewData: Omit<Review, "id" | "verified" | "avatar" | "status">) => {
+    // Submit as pending — admin will approve before it shows publicly
+    const result = await submitReviewToTable({
+      name:         reviewData.name,
+      rating:       reviewData.rating,
+      text:         reviewData.text,
+      project_type: reviewData.project_type,
+      date:         reviewData.date,
+    });
 
-    // 2. Save to Supabase dedicated `reviews` table (public INSERT allowed)
-    await submitReviewToTable(newReview);
+    if (!result.ok) {
+      // Surface real error to user — no fake success
+      toast({
+        title: "Submission failed",
+        description: result.error ?? "Unknown error.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // 3. Refresh from Supabase to get the saved version
-    const t1 = setTimeout(async () => {
-      try {
-        const allRevs = await getAllReviews();
-        if (mountedRef.current) setContent({ reviews: Array.isArray(allRevs) ? allRevs : [] });
-      } catch {}
-    }, 1000);
-    timersRef.current.push(t1);
-
+    // Show "thanks, pending approval" feedback
     if (mountedRef.current) setSubmitSuccess(true);
-    const t2 = setTimeout(() => {
+    const t = setTimeout(() => {
       if (mountedRef.current) setSubmitSuccess(false);
-    }, 4000);
-    timersRef.current.push(t2);
-  }, [content]);
+    }, 6000);
+    timersRef.current.push(t);
+  }, [toast]);
 
   if (loading) {
     return (

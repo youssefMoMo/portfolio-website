@@ -467,17 +467,24 @@ export default function AdminDashboard() {
   ) => {
     setIsSaving(true);
     try {
-      const ok = await saveContent(type, content as any);
-      toast({
-        title: ok ? "✅ Saved" : "⚠️ Saved locally",
-        variant: ok ? "default" : "destructive",
-      });
-      if (ok) {
+      const result = await saveContent(type, content as any);
+      if (result.ok) {
+        toast({ title: "✅ Saved" });
         setHasChanges(false);
         await loadContent();
+      } else {
+        toast({
+          title: "❌ Save failed",
+          description: result.error ?? "Unknown error — check console.",
+          variant: "destructive",
+        });
       }
-    } catch {
-      toast({ title: "Save failed", variant: "destructive" });
+    } catch (e: unknown) {
+      toast({
+        title: "❌ Save failed",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
     } finally {
       setIsSaving(false);
     }
