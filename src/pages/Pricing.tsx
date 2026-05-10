@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { useLanguage } from "@/hooks/use-language";
 import { getContent, PricingContent, PricingPlan } from "@/lib/contentManager";
+import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { profile, faqs } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
 import { Modal } from "@/components/ui/Modal";
@@ -214,6 +215,15 @@ export default function Pricing() {
       finally { if (mountedRef.current) setLoading(false); }
     })();
   }, []);
+
+  // Live updates from admin saves
+  useContentRealtime("pricing", async () => {
+    if (!mountedRef.current) return;
+    try {
+      const data = await getContent("pricing");
+      if (mountedRef.current) setContent(data);
+    } catch { /* ignore */ }
+  });
 
   if (loading) {
     return (

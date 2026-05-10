@@ -13,7 +13,7 @@ import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { isSupabaseEnabled } from "@/lib/supabase";
+import { isSupabaseEnabled, getConfigErrorMessage } from "@/lib/supabase";
 import { loginWithPassword, isAuthenticatedSync } from "@/lib/auth";
 
 export default function AdminLogin() {
@@ -32,6 +32,7 @@ export default function AdminLogin() {
 
   // Supabase not configured → can't authenticate at all.
   if (!isSupabaseEnabled) {
+    const detail = getConfigErrorMessage();
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <motion.div
@@ -50,13 +51,20 @@ export default function AdminLogin() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+              {detail && (
+                <p className="text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2 text-xs">
+                  {detail}
+                </p>
+              )}
               <p>Set the following environment variables in your Vercel project, then redeploy:</p>
               <ul className="list-disc list-inside space-y-1 font-mono text-xs">
                 <li>VITE_SUPABASE_URL</li>
                 <li>VITE_SUPABASE_ANON_KEY</li>
               </ul>
               <p className="pt-3 text-xs">
-                Both are available in your Supabase project settings → API.
+                Get both from Supabase → Settings → API.{" "}
+                <strong>Use the project URL only</strong> (e.g. <code>https://xxx.supabase.co</code>) —{" "}
+                <strong>never</strong> include <code>/rest/v1</code> or any other path.
               </p>
             </CardContent>
           </Card>

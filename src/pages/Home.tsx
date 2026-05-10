@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/use-language";
 import { getContent, HomeContent } from "@/lib/contentManager";
+import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { profile, statsData } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
 import { DualMarqueeSection } from "@/components/DualMarqueeSection";
@@ -82,13 +83,24 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const home = await getContent("home");
-        if (mountedRef.current) setHomeContent(home);
+        if (mountedRef.current && !cancelled) setHomeContent(home);
       } catch { /* keep null — UI uses t() fallbacks */ }
     })();
+    return () => { cancelled = true; };
   }, []);
+
+  // Live updates from admin saves
+  useContentRealtime("home", async () => {
+    if (!mountedRef.current) return;
+    try {
+      const home = await getContent("home");
+      if (mountedRef.current) setHomeContent(home);
+    } catch { /* ignore */ }
+  });
 
   const content = homeContent;
 

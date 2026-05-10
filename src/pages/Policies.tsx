@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/use-language";
 import { getContent, PoliciesContent } from "@/lib/contentManager";
+import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { profile } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
 
@@ -58,6 +59,14 @@ export default function Policies() {
       setLoading(false);
     })();
   }, []);
+
+  // Live updates from admin saves
+  useContentRealtime("policies", async () => {
+    try {
+      const data = await getContent("policies");
+      setContent(data);
+    } catch { /* ignore */ }
+  });
 
   if (loading) {
     return (

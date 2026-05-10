@@ -5,6 +5,7 @@ import { Image, MessageSquare, X, ChevronLeft, ChevronRight, ImageOff } from "lu
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/use-language";
 import { getContent, PortfolioContent } from "@/lib/contentManager";
+import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { profile } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
 
@@ -130,6 +131,15 @@ export default function Portfolio() {
       finally { if (mountedRef.current) setLoading(false); }
     })();
   }, []);
+
+  // Live updates from admin saves
+  useContentRealtime("portfolio", async () => {
+    if (!mountedRef.current) return;
+    try {
+      const data = await getContent("portfolio");
+      if (mountedRef.current) setContent(data);
+    } catch { /* ignore */ }
+  });
 
   // Body scroll lock + ESC for lightbox
   useEffect(() => {

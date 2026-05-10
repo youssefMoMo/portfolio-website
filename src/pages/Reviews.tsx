@@ -4,6 +4,7 @@ import { Star, MessageCircle, MessageSquare, Quote, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/use-language";
 import { getAllReviews, submitReviewToTable, ReviewsContent, Review } from "@/lib/contentManager";
+import { useTableRealtime } from "@/hooks/useContentRealtime";
 import { profile } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
 import { Modal } from "@/components/ui/Modal";
@@ -189,6 +190,15 @@ export default function Reviews() {
       }
     })();
   }, []);
+
+  // Live updates: re-fetch when reviews are added/approved/deleted from admin
+  useTableRealtime("reviews", async () => {
+    if (!mountedRef.current) return;
+    try {
+      const allRevs = await getAllReviews();
+      if (mountedRef.current) setContent({ reviews: Array.isArray(allRevs) ? allRevs : [] });
+    } catch { /* ignore */ }
+  });
 
   // Dynamic stats — recalculates whenever reviews change (including new submissions)
   const stats = useMemo(() => {
