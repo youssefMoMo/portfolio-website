@@ -1,17 +1,23 @@
 // src/components/ProtectedRoute.tsx
+// Gates admin routes. Checks (in order):
+//   1. Supabase is configured
+//   2. A session exists in localStorage (fast sync check, prevents spinner flash)
+//   3. The session belongs to an active row in admin_users (full async check)
+// On any failure → redirects to /admin (the login screen).
+
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { isAuthenticatedSync, logout } from "@/lib/auth";
+import { isAuthenticatedSync, verifyAdmin } from "@/lib/auth";
 
 interface ProtectedRouteProps { children: React.ReactNode }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const [, navigate]  = useLocation();
+  const [, navigate]            = useLocation();
   const [checking, setChecking] = useState(true);
   const [allowed,  setAllowed]  = useState(false);
-  const mountedRef = useRef(true);
+  const mountedRef              = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -19,37 +25,27 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }, []);
 
   useEffect(() => {
-    // Dev bypass — set by loginDev() when Supabase not configured
-    if (sessionStorage.getItem("yd_dev_admin") === "1") {
-      if (mountedRef.current) { setAllowed(true); setChecking(false); }
+    // No Supabase = no admin access at all.
+    if (!supabase) {
+      navigate("/admin");
       return;
     }
 
-    // Instant sync check to avoid spinner flash when session is clearly valid
+    // Fast sync check: cached session must exist and not be expired.
     if (!isAuthenticatedSync()) {
       navigate("/admin");
       return;
     }
 
-    // Full async Supabase verification
+    // Full verification: session is real AND user is in admin_users.
     (async () => {
-      if (!supabase) {
-        if (mountedRef.current) navigate("/admin");
-        return;
-      }
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!mountedRef.current) return;
-        if (!session) {
-          await logout();
-          if (mountedRef.current) navigate("/admin");
-          return;
-        }
-        if (mountedRef.current) setAllowed(true);
-      } catch {
-        if (mountedRef.current) navigate("/admin");
-      } finally {
-        if (mountedRef.current) setChecking(false);
+      const result = await verifyAdmin();
+      if (!mountedRef.current) return;
+      if (result.success) {
+        setAllowed(true);
+        setChecking(false);
+      } else {
+        navigate("/admin");
       }
     })();
   }, [navigate]);

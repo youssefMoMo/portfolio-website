@@ -1,7 +1,7 @@
 // src/lib/supabase.ts
-import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 
 if (import.meta.env.DEV && (!supabaseUrl || !supabaseAnonKey)) {
@@ -11,18 +11,23 @@ if (import.meta.env.DEV && (!supabaseUrl || !supabaseAnonKey)) {
   );
 }
 
-export const supabase: SupabaseClient | null = 
+// Lazily create the client only when both env vars are present.
+// Module-time `typeof window` guard so SSR-style imports don't crash.
+const browserStorage =
+  typeof window !== "undefined" ? window.localStorage : undefined;
+
+export const supabase: SupabaseClient | null =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey, {
         auth: {
-          autoRefreshToken: true,
-          persistSession: true,
+          autoRefreshToken:   true,
+          persistSession:     true,
           detectSessionInUrl: true,
-          storage: window.localStorage,
-          storageKey: 'youssef-portfolio-auth',
+          storage:            browserStorage,
+          storageKey:         "youssef-portfolio-auth",
         },
         global: {
-          headers: { 'x-application-name': 'youssef-portfolio' },
+          headers: { "x-application-name": "youssef-portfolio" },
         },
         realtime: {
           params: { eventsPerSecond: 10 },
@@ -37,20 +42,18 @@ export type Database = {
     Tables: {
       admin_users: {
         Row: {
-          id: string;
-          discord_id: string;
-          discord_username: string | null;
-          discord_avatar: string | null;
+          id: string;            // == auth.users.id (UUID)
+          email: string;
+          full_name: string | null;
           is_active: boolean;
           last_login: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
-          id?: string;
-          discord_id: string;
-          discord_username?: string | null;
-          discord_avatar?: string | null;
+          id: string;
+          email: string;
+          full_name?: string | null;
           is_active?: boolean;
           last_login?: string | null;
           created_at?: string;
@@ -58,9 +61,8 @@ export type Database = {
         };
         Update: {
           id?: string;
-          discord_id?: string;
-          discord_username?: string | null;
-          discord_avatar?: string | null;
+          email?: string;
+          full_name?: string | null;
           is_active?: boolean;
           last_login?: string | null;
           created_at?: string;
@@ -70,9 +72,9 @@ export type Database = {
       site_content: {
         Row: {
           id: string;
-          content_type: 'home' | 'portfolio' | 'pricing' | 'reviews' | 'policies';
+          content_type: "home" | "portfolio" | "pricing" | "reviews" | "policies";
           content_key: string;
-          content_value: any;
+          content_value: unknown;
           is_published: boolean;
           version: number;
           created_by: string | null;
@@ -81,9 +83,9 @@ export type Database = {
         };
         Insert: {
           id?: string;
-          content_type: 'home' | 'portfolio' | 'pricing' | 'reviews' | 'policies';
+          content_type: "home" | "portfolio" | "pricing" | "reviews" | "policies";
           content_key: string;
-          content_value: any;
+          content_value: unknown;
           is_published?: boolean;
           version?: number;
           created_by?: string | null;
@@ -92,9 +94,9 @@ export type Database = {
         };
         Update: {
           id?: string;
-          content_type?: 'home' | 'portfolio' | 'pricing' | 'reviews' | 'policies';
+          content_type?: "home" | "portfolio" | "pricing" | "reviews" | "policies";
           content_key?: string;
-          content_value?: any;
+          content_value?: unknown;
           is_published?: boolean;
           version?: number;
           created_by?: string | null;

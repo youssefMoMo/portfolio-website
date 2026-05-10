@@ -1,78 +1,94 @@
+// src/pages/AdminLogin.tsx
+// Admin login screen — Supabase email/password auth.
+// No hardcoded credentials, no dev panel. If Supabase env vars are missing,
+// show a clear configuration message instead of a fallback form.
+
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Lock, Eye, EyeOff, LogIn, Terminal } from "lucide-react";
+import { Lock, Eye, EyeOff, LogIn, AlertCircle, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
+} from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { isSupabaseEnabled } from "@/lib/supabase";
-import { loginWithDiscord, loginDev, isAuthenticatedSync } from "@/lib/auth";
-
-// Dev credentials: VITE_DEV_ADMIN_ID + VITE_DEV_ADMIN_PASSWORD from .env
-// Hard fallback when those are also missing: id=admin, password=admin123
-const DEV_FALLBACK_ID  = "admin";
-const DEV_FALLBACK_PWD = "admin123";
+import { loginWithPassword, isAuthenticatedSync } from "@/lib/auth";
 
 export default function AdminLogin() {
-  const [, navigate]    = useLocation();
-  const { toast }       = useToast();
-  const [discordId, setDiscordId]         = useState("");
-  const [password, setPassword]           = useState("");
-  const [showPassword, setShowPassword]   = useState(false);
-  const [isLoading, setIsLoading]         = useState(false);
+  const [, navigate]                    = useLocation();
+  const { toast }                       = useToast();
+  const [email, setEmail]               = useState("");
+  const [password, setPassword]         = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading]       = useState(false);
+  const [error, setError]               = useState<string | null>(null);
 
-  // Determine what dev credentials are actually configured
-  const envId  = import.meta.env.VITE_DEV_ADMIN_ID  ?? "";
-  const envPwd = import.meta.env.VITE_DEV_ADMIN_PASSWORD ?? "";
-  const hasEnvCreds = envId !== "" && envPwd !== "";
-
+  // Already signed in? Skip straight to the dashboard.
   useEffect(() => {
     if (isAuthenticatedSync()) navigate("/admin/dashboard");
   }, [navigate]);
 
-  const handleDiscordLogin = async () => {
-    setIsLoading(true);
-    try {
-      await loginWithDiscord();
-    } catch {
-      toast({ title: "❌ Error", description: "Failed to start Discord login", variant: "destructive" });
-      setIsLoading(false);
-    }
-  };
+  // Supabase not configured → can't authenticate at all.
+  if (!isSupabaseEnabled) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        >
+          <Card className="w-full max-w-md bg-card/60 backdrop-blur-xl border-amber-500/20 shadow-2xl">
+            <CardHeader className="text-center">
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-amber-400" />
+              </div>
+              <CardTitle className="text-xl font-bold">Supabase not configured</CardTitle>
+              <CardDescription className="pt-2">
+                Authentication is unavailable until the backend is connected.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+              <p>Set the following environment variables in your Vercel project, then redeploy:</p>
+              <ul className="list-disc list-inside space-y-1 font-mono text-xs">
+                <li>VITE_SUPABASE_URL</li>
+                <li>VITE_SUPABASE_ANON_KEY</li>
+              </ul>
+              <p className="pt-3 text-xs">
+                Both are available in your Supabase project settings → API.
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
 
-  const handleFallbackLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!discordId.trim() || !password) return;
+    setError(null);
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
+      return;
+    }
     setIsLoading(true);
-
-    // First try the env-based loginDev
-    const result = await loginDev(discordId.trim(), password);
+    const result = await loginWithPassword(email, password);
+    setIsLoading(false);
 
     if (result.success) {
-      toast({ title: "✅ Success", description: "Welcome to Admin Panel!" });
-      setTimeout(() => navigate("/admin/dashboard"), 400);
-      setIsLoading(false);
+      toast({ title: "✅ Signed in", description: "Welcome back to the admin panel." });
+      // Slight delay so the toast renders before navigation
+      setTimeout(() => navigate("/admin/dashboard"), 200);
       return;
     }
 
-    // Hard fallback: when no env vars set, accept admin/admin123
-    if (!hasEnvCreds) {
-      if (discordId.trim() === DEV_FALLBACK_ID && password === DEV_FALLBACK_PWD) {
-        sessionStorage.setItem("yd_dev_admin", "1");
-        toast({ title: "✅ Dev Access", description: "Logged in with fallback credentials" });
-        setTimeout(() => navigate("/admin/dashboard"), 400);
-        setIsLoading(false);
-        return;
-      }
-    }
-
+    setError(result.error ?? "Login failed.");
     toast({
-      title: "❌ Login Failed",
-      description: result.error ?? result.message ?? "Invalid credentials",
+      title: "❌ Login failed",
+      description: result.error ?? "Invalid credentials.",
       variant: "destructive",
     });
-    setIsLoading(false);
   };
 
   return (
@@ -89,97 +105,81 @@ export default function AdminLogin() {
               <Lock className="w-8 h-8 text-white" />
             </div>
             <CardTitle className="text-2xl font-bold">Admin Panel</CardTitle>
-            <CardDescription>Secure login required</CardDescription>
+            <CardDescription>Sign in with your admin account</CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-6">
-            {isSupabaseEnabled ? (
-              <>
-                <Button
-                  onClick={handleDiscordLogin}
-                  disabled={isLoading}
-                  className="w-full h-12 gap-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-base discord-glow"
-                >
-                  {isLoading
-                    ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-current border-t-transparent" />
-                    : <LogIn className="w-5 h-5" />}
-                  {isLoading ? "Redirecting..." : "Login with Discord"}
-                </Button>
-                <p className="text-xs text-center text-muted-foreground">
-                  Only registered admin accounts can access the dashboard
-                </p>
-              </>
-            ) : (
-              <>
-                {/* Dev mode notice */}
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
-                    <Terminal className="w-4 h-4 shrink-0" />
-                    Development Mode
-                  </div>
-                  <p className="text-xs text-amber-300/80 leading-relaxed">
-                    Supabase is not configured. Use the credentials below to log in.
-                  </p>
-                  {hasEnvCreds ? (
-                    <div className="bg-black/30 rounded-lg p-3 text-xs font-mono text-amber-200/70 space-y-1">
-                      <p>ID: <span className="text-amber-300">{envId}</span></p>
-                      <p>Password: set in <span className="text-amber-300">VITE_DEV_ADMIN_PASSWORD</span></p>
-                    </div>
-                  ) : (
-                    <div className="bg-black/30 rounded-lg p-3 text-xs font-mono text-amber-200/70 space-y-1">
-                      <p>ID: <span className="text-amber-300">{DEV_FALLBACK_ID}</span></p>
-                      <p>Password: <span className="text-amber-300">{DEV_FALLBACK_PWD}</span></p>
-                      <p className="text-amber-400/50 pt-1 text-[10px]">
-                        Set VITE_DEV_ADMIN_ID + VITE_DEV_ADMIN_PASSWORD in .env to use custom credentials
-                      </p>
-                    </div>
-                  )}
+            <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
+              <div className="space-y-2">
+                <label htmlFor="email" className="text-sm text-muted-foreground">
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 pointer-events-none" />
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="bg-background/50 border-white/10 pl-10"
+                    required
+                    autoComplete="email"
+                    autoFocus
+                  />
                 </div>
+              </div>
 
-                <form onSubmit={handleFallbackLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground">
-                      {hasEnvCreds ? "Discord ID" : "Username"}
-                    </label>
-                    <Input
-                      type="text"
-                      value={discordId}
-                      onChange={(e) => setDiscordId(hasEnvCreds ? e.target.value.replace(/\D/g, "") : e.target.value)}
-                      placeholder={hasEnvCreds ? "Your Discord ID" : DEV_FALLBACK_ID}
-                      className="bg-background/50 border-white/10"
-                      required
-                      autoComplete="username"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm text-muted-foreground">Password</label>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder={hasEnvCreds ? "" : DEV_FALLBACK_PWD}
-                        className="bg-background/50 border-white/10 pr-10"
-                        required
-                        autoComplete="current-password"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Authenticating..." : "Login"}
+              <div className="space-y-2">
+                <label htmlFor="password" className="text-sm text-muted-foreground">
+                  Password
+                </label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-background/50 border-white/10 pr-10"
+                    required
+                    autoComplete="current-password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </Button>
-                </form>
-              </>
-            )}
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">
+                  {error}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full h-11 gap-2"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-current border-t-transparent" />
+                ) : (
+                  <LogIn className="w-4 h-4" />
+                )}
+                {isLoading ? "Signing in…" : "Sign in"}
+              </Button>
+            </form>
+
+            <p className="text-xs text-center text-muted-foreground">
+              Admin accounts are managed in Supabase. Contact the site owner to request access.
+            </p>
           </CardContent>
         </Card>
       </motion.div>
