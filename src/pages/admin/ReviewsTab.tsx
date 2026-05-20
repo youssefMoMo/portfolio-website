@@ -108,7 +108,7 @@ function ReviewFormPanel({
     </div>
   );
 
-  const inputCls = "bg-background/50 border-white/10 text-sm focus:border-primary/40";
+  const inputCls = "bg-white dark:bg-background/50 border-slate-200 dark:border-white/10 text-slate-900 dark:text-foreground text-sm focus:border-primary/40";
 
   return (
     <motion.div
@@ -437,7 +437,9 @@ export default function ReviewsTab() {
                   key={f}
                   onClick={() => changeFilter(f)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                    filter === f ? `${cfg.color} ${cfg.badge}` : "border-white/10 text-muted-foreground hover:border-white/20"
+                    filter === f
+                      ? `${cfg.color} ${cfg.badge}`
+                      : "border-slate-200 dark:border-white/10 text-slate-600 dark:text-muted-foreground hover:border-slate-400 dark:hover:border-white/20 bg-white dark:bg-transparent shadow-sm dark:shadow-none"
                   }`}
                 >
                   {cfg.label} ({counts[f]})

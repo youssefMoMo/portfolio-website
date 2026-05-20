@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Image as ImageIcon, MessageSquare, X, ChevronLeft, ChevronRight,
-  ImageOff, Maximize2, Tag, Target, Layers, ExternalLink,
+  ImageOff, Maximize2, Tag, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/use-language";
@@ -25,15 +25,7 @@ const CATEGORIES = [
   { key: "Web UI",     label: "Web UI",       color: "from-rose-500 to-pink-600" },
 ];
 
-// Design context per category (shown in lightbox)
-const CATEGORY_GOALS: Record<string, { goal: string; flow: string }> = {
-  "UI Design":  { goal: "Deliver clean, scalable Roblox UI components with consistent visual language and clear information hierarchy.", flow: "Component architecture → Visual hierarchy → Style tokens → Final asset export." },
-  "Game UI":    { goal: "Create immersive in-game overlays that blend seamlessly with the game world while staying highly readable under motion.", flow: "Gameplay context analysis → Layout zones → Contrast testing → Motion-safe implementation." },
-  "HUD":        { goal: "Design minimal heads-up displays that communicate critical game data at a glance without disrupting immersion.", flow: "Data priority mapping → Minimalism pass → Legibility testing → Player feedback." },
-  "Mobile UI":  { goal: "Build touch-first mobile interfaces with generous tap targets and thumb-zone-optimised layouts.", flow: "Mobile grid setup → Tap target sizing → One-hand reachability → Responsive breakpoints." },
-  "Web UI":     { goal: "Design modern web interfaces with strong typographic hierarchy and fluid responsive behaviour.", flow: "Breakpoint grid → Type scale → Component library → Responsive testing." },
-  "Default":    { goal: "Crafting polished, player-friendly interfaces that elevate the game experience.", flow: "Research → Wireframes → Visual design → Final asset delivery." },
-};
+
 
 // ─────────────────────────────────────────
 // Safe image component
@@ -79,7 +71,8 @@ function LightboxImage({ src, slideDir, itemKey }: { src: string; slideDir: numb
         exit={{ x: slideDir * -120, opacity: 0, scale: 0.97 }}
         transition={{ duration: 0.22, ease: "easeOut" }}
         src={src || "/images/global/fallback.png"} alt=""
-        className="max-w-full max-h-[60vh] object-contain rounded-xl shadow-2xl"
+        className="w-full h-full object-contain"
+        style={{ maxHeight: "80vh" }}
         onClick={e => e.stopPropagation()}
         onError={e => {
           const el = e.currentTarget;
@@ -103,7 +96,6 @@ function Lightbox({
   const idx = items.findIndex(i => i.id === item.id);
   const [slideDir, setSlideDir] = useState(0);
   const [currentId, setCurrentId] = useState(item.id);
-  const ctx = CATEGORY_GOALS[item.category] ?? CATEGORY_GOALS["Default"];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -123,9 +115,33 @@ function Lightbox({
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4"
+      className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 sm:p-8"
       onClick={onClose}
     >
+      {/* ── Screen-edge navigation arrows ── */}
+      {idx > 0 && (
+        <motion.button
+          initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.92 }}
+          onClick={e => { e.stopPropagation(); go(-1); }}
+          className="fixed left-3 sm:left-5 top-1/2 -translate-y-1/2 z-[10001] w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors shadow-2xl backdrop-blur-sm"
+          aria-label="Previous"
+        >
+          <ChevronLeft className="w-6 h-6" />
+        </motion.button>
+      )}
+      {idx < items.length - 1 && (
+        <motion.button
+          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.92 }}
+          onClick={e => { e.stopPropagation(); go(1); }}
+          className="fixed right-3 sm:right-5 top-1/2 -translate-y-1/2 z-[10001] w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors shadow-2xl backdrop-blur-sm"
+          aria-label="Next"
+        >
+          <ChevronRight className="w-6 h-6" />
+        </motion.button>
+      )}
+
       {/* Close */}
       <motion.button
         initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }}
@@ -147,20 +163,6 @@ function Lightbox({
         <div className="relative flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-white/[0.02] to-transparent min-h-[300px]">
           <LightboxImage src={item.image || ""} slideDir={slideDir} itemKey={currentId} />
 
-          {/* Prev / Next overlaid on image pane */}
-          {idx > 0 && (
-            <button onClick={() => go(-1)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-colors">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-          )}
-          {idx < items.length - 1 && (
-            <button onClick={() => go(1)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-colors">
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          )}
-
           {/* Counter */}
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white/60 text-xs">
             {idx + 1} / {items.length}
@@ -179,26 +181,6 @@ function Lightbox({
             <h2 className="text-xl font-bold font-display leading-snug">
               {item.title || "Untitled Design"}
             </h2>
-          </div>
-
-          {/* Design goal */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5" /> Design Goal
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {item.description || ctx.goal}
-            </p>
-          </div>
-
-          {/* UX Flow */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5" /> UX Process
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {ctx.flow}
-            </p>
           </div>
 
           {/* Tags */}
@@ -252,11 +234,11 @@ function FilterBar({
             className={`relative px-4 py-2 rounded-full text-sm font-medium border transition-all duration-250 ${
               isActive
                 ? `bg-gradient-to-r ${cat.color} border-transparent text-white shadow-lg`
-                : "border-white/10 text-muted-foreground hover:border-white/25 hover:text-foreground bg-card/30"
+                : "border-slate-200 dark:border-white/10 text-slate-600 dark:text-muted-foreground hover:border-slate-400 dark:hover:border-white/25 hover:text-slate-900 dark:hover:text-foreground bg-white dark:bg-card/30 shadow-sm dark:shadow-none"
             }`}
           >
             {cat.label}
-            <span className={`ml-1.5 text-[10px] font-bold ${isActive ? "text-white/80" : "text-muted-foreground"}`}>
+            <span className={`ml-1.5 text-[10px] font-bold ${isActive ? "text-white/80" : "text-slate-400 dark:text-muted-foreground"}`}>
               {count}
             </span>
           </motion.button>

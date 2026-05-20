@@ -235,7 +235,7 @@ export default function Home() {
             <div
               className="flex gap-6 w-max"
               style={{
-                animation: rafReady ? "marquee-scroll-left 35s linear infinite" : "none",
+                animation: rafReady ? "marquee-scroll-left 60s linear infinite" : "none",
                 willChange: "transform",
                 transform: "translateZ(0)",
               }}

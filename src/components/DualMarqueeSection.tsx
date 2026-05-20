@@ -131,7 +131,7 @@ export function DualMarqueeSection() {
       {/* ── Reviews row ─────────────────────────────────────── */}
       {dupReviews.length > 0 && (
         <div className="mb-6 sm:mb-8">
-          <MarqueeRow duration={60} direction="left" ready={ready}>
+          <MarqueeRow duration={90} direction="left" ready={ready}>
             {dupReviews.map((review, idx) => (
               <div
                 key={`rev-${review.id}-${idx}`}
@@ -163,7 +163,7 @@ export function DualMarqueeSection() {
 
       {/* ── Stats row ────────────────────────────────────────── */}
       <div className="mb-6 sm:mb-8">
-        <MarqueeRow duration={60} direction="left" ready={ready}>
+        <MarqueeRow duration={80} direction="left" ready={ready}>
           {dupStats.map((stat, idx) => {
             const Icon = STATS_ICONS[stat.icon] ?? Briefcase;
             return (

@@ -151,7 +151,7 @@ export const reviewsApi = {
     verified?: boolean;
   }): Promise<void> => {
     const now = new Date().toISOString();
-    const { error } = await assertSupabase().from("reviews").insert({
+    const insertPayload: Record<string, unknown> = {
       name:         fields.name,
       rating:       fields.rating,
       text:         fields.text,
@@ -162,11 +162,12 @@ export const reviewsApi = {
       rejected:     false,
       featured:     fields.featured ?? false,
       verified:     fields.verified ?? false,
-      // new status column — "approved" or "pending"
-      status:       fields.approved ? "approved" : "pending",
       created_at:   now,
       updated_at:   now,
-    });
+    };
+    const { error } = await assertSupabase()
+      .from("reviews")
+      .insert([insertPayload]);
     if (error) throw error;
   },
 
