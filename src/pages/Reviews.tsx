@@ -251,7 +251,7 @@ export default function Reviews() {
     );
   }
 
-  const reviews = content?.reviews?.filter(r => r.verified) || [];
+  const reviews = content?.reviews?.filter(r => r.status === "approved") || [];
 
   return (
     <div className="min-h-screen pt-8 pb-20 px-4 sm:px-6">

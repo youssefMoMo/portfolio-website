@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Settings, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DISCORD_PROFILE_URL } from "@/lib/discord";
 import { profile, type TranslationKey } from "@/lib/data";
 import { useLanguage } from "@/hooks/use-language";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -50,7 +51,7 @@ export function Navbar() {
     return () => clearInterval(interval);
   }, []);
 
-  const discordUrl = `https://discord.com/users/${profile.discord.split("/").pop()}`;
+  
 
   return (
     <>
@@ -125,7 +126,7 @@ export function Navbar() {
             </Button>
 
             <a
-              href={discordUrl}
+              href={DISCORD_PROFILE_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="hidden sm:inline-flex h-8 items-center justify-center rounded-full bg-[#5865F2] px-4 text-xs font-semibold text-white shadow transition-colors hover:bg-[#4752C4] gap-1.5 discord-glow"
@@ -198,7 +199,7 @@ export function Navbar() {
                     className="mt-4"
                   >
                     <a
-                      href={discordUrl}
+                      href={DISCORD_PROFILE_URL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-[#5865F2] px-6 text-base font-medium text-white shadow hover:bg-[#4752C4] gap-2 discord-glow"

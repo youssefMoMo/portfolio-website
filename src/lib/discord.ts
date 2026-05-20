@@ -1,43 +1,44 @@
 // src/lib/discord.ts
+//
+// ✅ CENTRALIZED Discord configuration — single source of truth.
+//    ALL Discord buttons/links across the site must use `openDiscord()`.
+//    Never hardcode a different URL anywhere else.
+// ──────────────────────────────────────────────────────────────────────
+
+/** The canonical Discord User ID — update only here. */
+export const DISCORD_USER_ID = "1077620522680057856";
+
+/** The canonical Discord profile URL derived from the ID above. */
+export const DISCORD_PROFILE_URL = `https://discord.com/users/${DISCORD_USER_ID}`;
 
 /**
- * ✅ يفتح بروفايل ديسكورد بشكل صحيح
- * يتجنب مشكلة فتح التطبيق من غير توجيه للبروفايل
+ * ✅ Opens the correct Discord profile in a new tab.
+ * Use this everywhere instead of hardcoding URLs.
  */
-export const openDiscordProfile = (discordUrl: string): void => {
+export const openDiscord = (): void => {
   try {
-    // استخراج الـ User ID من الرابط
-    const parts = discordUrl.split('/');
-    const userId = parts[parts.length - 1];
-    
-    // التأكد إن ده User ID رقمي (مش invite link)
-    if (userId && /^\d{17,19}$/.test(userId)) {
-      const profileUrl = `https://discord.com/users/${userId}`;
-      
-      // ✅ افتح في نافذة جديدة مع خيارات محددة
-      const newWindow = window.open(
-        profileUrl,
-        '_blank',
-        'noopener,noreferrer,width=1200,height=800,scrollbars=yes'
-      );
-      
-      // ✅ Fallback: لو النافذة متفتحتش (Blocked by popup blocker)
-      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-        window.location.href = profileUrl;
-      }
-    } else {
-      // ✅ لو ده invite link أو أي رابط تاني، افتحه عادي
-      window.open(discordUrl, '_blank', 'noopener,noreferrer');
+    const newWindow = window.open(
+      DISCORD_PROFILE_URL,
+      "_blank",
+      "noopener,noreferrer,width=1200,height=800,scrollbars=yes",
+    );
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === "undefined") {
+      window.location.href = DISCORD_PROFILE_URL;
     }
-  } catch (error) {
-    // ✅ Ultimate fallback
-    window.open(discordUrl, '_blank', 'noopener,noreferrer');
+  } catch {
+    window.open(DISCORD_PROFILE_URL, "_blank", "noopener,noreferrer");
   }
 };
 
 /**
- * ✅ يفتح رابط ديسكورد (دعوة أو بروفايل)
+ * @deprecated Use `openDiscord()` instead.
+ * Kept for backward compatibility.
  */
+export const openDiscordProfile = (_url?: string): void => {
+  openDiscord();
+};
+
+/** Opens any arbitrary Discord link (invite links, etc.) */
 export const openDiscordLink = (url: string): void => {
-  window.open(url, '_blank', 'noopener,noreferrer');
+  window.open(url, "_blank", "noopener,noreferrer");
 };

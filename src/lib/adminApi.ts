@@ -11,6 +11,7 @@ export interface Review {
   project_type: string;
   date: string;
   verified: boolean;
+  featured?: boolean;
   approved: boolean;
   rejected: boolean;
   avatar?: string;
@@ -133,6 +134,45 @@ export const reviewsApi = {
   update: async (id: string, fields: Partial<Pick<Review, "text" | "name" | "rating" | "project_type">>): Promise<void> => {
     const { error } = await assertSupabase().from("reviews").update({
       ...fields,
+      updated_at: new Date().toISOString(),
+    }).eq("id", id);
+    if (error) throw error;
+  },
+
+  create: async (fields: {
+    name: string;
+    rating: number;
+    text: string;
+    project_type: string;
+    avatar?: string;
+    date?: string;
+    approved?: boolean;
+    featured?: boolean;
+    verified?: boolean;
+  }): Promise<void> => {
+    const now = new Date().toISOString();
+    const { error } = await assertSupabase().from("reviews").insert({
+      name:         fields.name,
+      rating:       fields.rating,
+      text:         fields.text,
+      project_type: fields.project_type,
+      avatar:       fields.avatar ?? null,
+      date:         fields.date ?? now.split("T")[0],
+      approved:     fields.approved ?? false,
+      rejected:     false,
+      featured:     fields.featured ?? false,
+      verified:     fields.verified ?? false,
+      // new status column — "approved" or "pending"
+      status:       fields.approved ? "approved" : "pending",
+      created_at:   now,
+      updated_at:   now,
+    });
+    if (error) throw error;
+  },
+
+  pin: async (id: string, featured: boolean): Promise<void> => {
+    const { error } = await assertSupabase().from("reviews").update({
+      featured,
       updated_at: new Date().toISOString(),
     }).eq("id", id);
     if (error) throw error;

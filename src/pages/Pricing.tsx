@@ -28,10 +28,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useLanguage } from "@/hooks/use-language";
-import { getContent, PricingContent, PricingPlan } from "@/lib/contentManager";
+import { getContent, PricingContent, PricingPlan, FaqItem } from "@/lib/contentManager";
 import { useContentRealtime } from "@/hooks/useContentRealtime";
-import { profile, faqs } from "@/lib/data";
-import { openDiscordProfile } from "@/lib/discord";
+import { profile } from "@/lib/data";
+import { openDiscord } from "@/lib/discord";
 import { Modal } from "@/components/ui/Modal";
 
 // ══════════════════════════════════════════
@@ -71,6 +71,22 @@ const whyChooseItems = [
     desc: "Risk-free service with clear refund policies if expectations aren't met.",
   },
 ];
+
+// ── Per-plan delivery & revision metadata ──────────────────────
+// Indexed by plan name (case-insensitive) so it works regardless of
+// whether plans come from Supabase or the static pricingPlans fallback.
+const PLAN_META: Record<string, { delivery: string; revisions: number; highlight: boolean; badge: string | null }> = {
+  starter:    { delivery: "1–2 days",  revisions: 2, highlight: false, badge: null              },
+  basic:      { delivery: "2–3 days",  revisions: 3, highlight: false, badge: null              },
+  standard:   { delivery: "3–5 days",  revisions: 5, highlight: true,  badge: "Most Popular"    },
+  professional:{ delivery: "5–7 days", revisions: 7, highlight: false, badge: "Best Value"      },
+  premium:    { delivery: "7–10 days", revisions: 10,highlight: false, badge: null              },
+  enterprise: { delivery: "Custom",    revisions: -1,highlight: false, badge: "Enterprise"      },
+};
+const DEFAULT_META_PR = { delivery: "3–5 days", revisions: 3, highlight: false, badge: null };
+function planMeta(name: string) {
+  return PLAN_META[name?.toLowerCase().trim()] ?? DEFAULT_META_PR;
+}
 
 // ══════════════════════════════════════════
 // Order Message Modal
@@ -131,7 +147,7 @@ I want this plan at these prices`;
 
   const handleDiscord = async () => {
     await handleCopy();
-    openDiscordProfile(profile.discord);
+    openDiscord();
   };
 
   return (
@@ -197,8 +213,9 @@ export default function Pricing() {
   const { t } = useLanguage();
   const [content, setContent] = useState<PricingContent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [openFaq, setOpenFaq] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<PricingPlan | null>(null);
+  const [faqs, setFaqs] = useState<FaqItem[]>([]);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -209,8 +226,14 @@ export default function Pricing() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await getContent("pricing");
-        if (mountedRef.current) setContent(data);
+        const [pricingData, faqData] = await Promise.all([
+          getContent("pricing"),
+          getContent("faqs"),
+        ]);
+        if (mountedRef.current) {
+          setContent(pricingData);
+          setFaqs(faqData?.items?.filter(f => f.is_published !== false) ?? []);
+        }
       } catch { /* keep null — UI shows empty state */ }
       finally { if (mountedRef.current) setLoading(false); }
     })();
@@ -223,6 +246,15 @@ export default function Pricing() {
       const data = await getContent("pricing");
       if (mountedRef.current) setContent(data);
     } catch { /* ignore */ }
+  });
+
+  // Live FAQ updates when admin saves from PoliciesTab
+  useContentRealtime("faqs", async () => {
+    if (!mountedRef.current) return;
+    try {
+      const data = await getContent("faqs");
+      if (mountedRef.current) setFaqs(data?.items?.filter(f => f.is_published !== false) ?? []);
+    } catch {}
   });
 
   if (loading) {
@@ -343,20 +375,28 @@ export default function Pricing() {
                   transition={{ delay: i * 0.08 }}
                   className="relative"
                 >
-                  {/* Featured badge */}
-                  {plan.featured && (
-                    <div className="absolute -top-3 right-5 z-10">
-                      <span className="px-3 py-1 rounded-md bg-primary text-white text-xs font-bold tracking-wide uppercase">
-                        FEATURED
-                      </span>
-                    </div>
-                  )}
+                  {/* Plan badge — Most Popular / Best Value */}
+                  {(() => {
+                    const pm = planMeta(plan.name);
+                    const label = pm.badge ?? (plan.featured ? "Featured" : null);
+                    if (!label) return null;
+                    const isHighlight = pm.highlight || plan.featured;
+                    return (
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
+                        <span className={`px-4 py-1 rounded-full text-[11px] font-bold tracking-widest uppercase whitespace-nowrap shadow-lg ${
+                          isHighlight
+                            ? "bg-gradient-to-r from-primary to-indigo-500 text-white"
+                            : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
+                        }`}>{label}</span>
+                      </div>
+                    );
+                  })()}
 
                   <div
                     className={`h-full rounded-2xl p-7 flex flex-col gap-5 transition-all duration-300 border ${
-                      plan.featured
-                        ? "border-primary/50 bg-[#10121a] shadow-lg shadow-primary/10"
-                        : "border-white/8 bg-[#10121a] hover:border-white/15"
+                      planMeta(plan.name).highlight || plan.featured
+                        ? "border-primary/50 bg-[#10121a] shadow-xl shadow-primary/12 ring-1 ring-primary/10"
+                        : "border-white/8 bg-[#10121a] hover:border-white/20"
                     }`}
                   >
                     {/* Icon */}
@@ -364,26 +404,37 @@ export default function Pricing() {
                       <Icon className="w-5 h-5 text-primary/80" strokeWidth={1.5} />
                     </div>
 
-                    {/* Name */}
+                    {/* Name + price */}
                     <div>
                       <h3 className="text-xl font-bold text-white mb-1">{plan.name}</h3>
-
-                      {/* Price */}
                       <div className="flex items-end gap-1.5 mb-0.5">
-                        <span className="text-4xl font-extrabold text-white">
-                          ${plan.price_usd}
-                        </span>
+                        <span className="text-4xl font-extrabold text-white">${plan.price_usd}</span>
                         <span className="text-sm text-white/50 mb-1.5">USD</span>
                       </div>
-                      <p className="text-sm font-semibold text-primary/80">
-                        {plan.price_robux}+Tax R$
-                      </p>
+                      <p className="text-sm font-semibold text-primary/80">{plan.price_robux}+Tax R$</p>
                     </div>
 
                     {/* Frames */}
-                    <p className="text-sm font-semibold text-white/80 border-b border-white/5 pb-4">
+                    <p className="text-sm font-semibold text-white/80 border-b border-white/5 pb-3">
                       Includes: {plan.frames}
                     </p>
+
+                    {/* Delivery & revisions — new Phase 2 info row */}
+                    {(() => {
+                      const pm = planMeta(plan.name);
+                      return (
+                        <div className="flex gap-3 -mt-1">
+                          <div className="flex items-center gap-1.5 text-xs text-white/50 bg-white/4 border border-white/6 rounded-lg px-2.5 py-1.5">
+                            <Clock className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                            {pm.delivery}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-white/50 bg-white/4 border border-white/6 rounded-lg px-2.5 py-1.5">
+                            <RefreshCw className="w-3 h-3 text-green-400 flex-shrink-0" />
+                            {pm.revisions < 0 ? "Unlimited" : `${pm.revisions} revisions`}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Features */}
                     <div className="flex flex-col gap-2.5 flex-1">
@@ -446,7 +497,7 @@ export default function Pricing() {
                 >
                   <button
                     className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/4 transition-colors"
-                    onClick={() => setOpenFaq(openFaq === faq.id ? null : faq.id)}
+                    onClick={() => setOpenFaq(openFaq === String(faq.id) ? null : String(faq.id))}
                   >
                     <span className="text-sm font-medium text-white/90 pr-4">{faq.question}</span>
                     <motion.div
@@ -458,7 +509,7 @@ export default function Pricing() {
                     </motion.div>
                   </button>
                   <AnimatePresence initial={false}>
-                    {openFaq === faq.id && (
+                    {openFaq === String(faq.id) && (
                       <motion.div
                         key="answer"
                         initial={{ height: 0, opacity: 0 }}
@@ -492,7 +543,7 @@ export default function Pricing() {
           <Button
             size="lg"
             className="gap-2 rounded-full px-8 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow"
-            onClick={() => openDiscordProfile(profile.discord)}
+            onClick={() => openDiscord()}
           >
             <MessageSquare className="w-4 h-4" />
             {t("pricing.contactDiscord")}

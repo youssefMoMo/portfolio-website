@@ -1,4 +1,5 @@
 import { Helmet } from "react-helmet-async";
+import { DISCORD_PROFILE_URL } from "@/lib/discord";
 
 type SEOProps = {
   title?: string;
@@ -66,7 +67,7 @@ export function SEO({
           description:
             "Professional Roblox UI/UX Designer specializing in creating immersive and high-quality user interfaces for games",
           sameAs: [
-            "https://discord.com/users/1077620522680057856",
+            DISCORD_PROFILE_URL,
             "https://twitter.com/youssef_design",
             "https://behance.net/youssef_design",
           ],

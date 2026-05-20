@@ -961,3 +961,24 @@ body.is-scrolling .shooting-star {
     transform  0.35s ease-out;
   will-change: opacity, filter, transform;
 }
+
+/* ═══════════════════════════════════════════════════════
+   MARQUEE SCROLL — pure CSS keyframes (never freezes)
+   Used by DualMarqueeSection and Featured Designs.
+   GPU-accelerated via translate3d. Pauses on hover.
+═══════════════════════════════════════════════════════ */
+@keyframes marquee-scroll-left {
+  0%   { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes marquee-scroll-right {
+  0%   { transform: translate3d(-50%, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+/* Pause marquee while user is scrolling (avoids jank) */
+body.is-scrolling [style*="marquee-scroll-left"],
+body.is-scrolling [style*="marquee-scroll-right"] {
+  animation-play-state: paused;
+}

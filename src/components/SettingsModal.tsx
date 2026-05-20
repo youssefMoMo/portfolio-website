@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
+import { DISCORD_PROFILE_URL } from "@/lib/discord";
 import {
   X,
   Moon,
@@ -306,7 +307,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <span>Contact</span>
                   </div>
                   <motion.a
-                    href={profile.discord}
+                    href={DISCORD_PROFILE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                     whileHover={{ scale: 1.03, fontWeight: 700 }}

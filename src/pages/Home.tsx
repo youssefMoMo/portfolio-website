@@ -74,12 +74,23 @@ function HomeImage({ src, alt, className }: { src: string; alt: string; classNam
 export default function Home() {
   const { t } = useLanguage();
   const [homeContent, setHomeContent] = useState<HomeContent | null>(null);
+  const [rafReady, setRafReady] = useState(false);
   const weeklyItems = useMemo(() => getWeeklyRandomItems(6), []);
   const mountedRef = useRef(true);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    // ✅ Double-RAF: start Featured Designs animation only after first paint
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = requestAnimationFrame(() => {
+        if (mountedRef.current) setRafReady(true);
+      });
+    });
+    return () => {
+      mountedRef.current = false;
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -221,10 +232,13 @@ export default function Home() {
               WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
             }}
           >
-            <motion.div
+            <div
               className="flex gap-6 w-max"
-              animate={{ x: ["0%", "-50%"] }}
-              transition={{ duration: 35, ease: "linear", repeat: Infinity }}
+              style={{
+                animation: rafReady ? "marquee-scroll-left 35s linear infinite" : "none",
+                willChange: "transform",
+                transform: "translateZ(0)",
+              }}
             >
               {[...weeklyItems, ...weeklyItems].map((item, i) => (
                 <div
@@ -245,7 +259,7 @@ export default function Home() {
                   </div>
                 </div>
               ))}
-            </motion.div>
+            </div>
           </div>
 
           <div className="text-center mt-10">

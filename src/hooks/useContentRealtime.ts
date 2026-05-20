@@ -12,7 +12,7 @@
 import { useEffect, useRef } from "react";
 import { supabase, isSupabaseEnabled } from "@/lib/supabase";
 
-type ContentType = "home" | "portfolio" | "pricing" | "reviews" | "policies";
+type ContentType = "home" | "portfolio" | "pricing" | "reviews" | "policies" | "faqs";
 
 export function useContentRealtime(
   contentType: ContentType,

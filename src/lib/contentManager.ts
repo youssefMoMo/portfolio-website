@@ -23,6 +23,7 @@ import {
   pricingPlans,
   policies as defaultPoliciesData,
   portfolioItems as defaultPortfolioItems,
+  faqs,
 } from "./data";
 
 const CONTENT_PREFIX  = "admin_";
@@ -39,6 +40,7 @@ export interface HomeContent {
 }
 export interface PortfolioItem {
   id: number | string; title: string; image: string; category: string;
+  description?: string; tags?: string[];
   display_order?: number; is_published?: boolean;
 }
 export interface PortfolioContent { items: PortfolioItem[] }
@@ -81,6 +83,18 @@ export interface PoliciesContent {
   policies: Policy[];
   page_title?: string;
   page_description?: string;
+}
+
+// FAQ — stored in site_content under type "faqs"
+export interface FaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  display_order?: number;
+  is_published?: boolean;
+}
+export interface FaqsContent {
+  items: FaqItem[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -128,7 +142,7 @@ export function clearErrorLogs(): void {
 // CONTENT-TYPE MAP + DEFAULTS
 // ═══════════════════════════════════════════════════════════════
 
-export type ContentType = "home" | "portfolio" | "pricing" | "reviews" | "policies";
+export type ContentType = "home" | "portfolio" | "pricing" | "reviews" | "policies" | "faqs";
 
 export type ContentByType<T extends ContentType> =
   T extends "home"      ? HomeContent      :
@@ -136,6 +150,7 @@ export type ContentByType<T extends ContentType> =
   T extends "pricing"   ? PricingContent   :
   T extends "reviews"   ? ReviewsContent   :
   T extends "policies"  ? PoliciesContent  :
+  T extends "faqs"      ? FaqsContent      :
   never;
 
 const defaultContent = {
@@ -171,6 +186,16 @@ const defaultContent = {
     page_title: "Policies & Terms",
     page_description: "Understand my working policies and terms",
   } as PoliciesContent,
+
+  faqs: {
+    items: faqs.map((f, i) => ({
+      id: String(f.id),
+      question: f.question,
+      answer: f.answer,
+      display_order: i,
+      is_published: true,
+    })),
+  } as FaqsContent,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -558,3 +583,19 @@ export function clearLocalCache(): void {
     } catch { /* ignore */ }
   });
 }
+
+// ═══════════════════════════════════════════════════════════════
+// SQL MIGRATION NOTE — run once in Supabase SQL Editor
+// ═══════════════════════════════════════════════════════════════
+//
+// The "faqs" content type is stored in the existing site_content table
+// using content_type = 'faqs' and content_key = 'data', exactly like
+// all other content types. No new table is needed.
+//
+// To seed the initial FAQ data, run saveContent("faqs", ...) once from
+// the admin PoliciesTab — the upsert will create the row automatically.
+//
+// The site_content table must already have:
+//   content_type TEXT, content_key TEXT, content_value JSONB,
+//   is_published BOOLEAN, updated_at TIMESTAMPTZ
+//   UNIQUE(content_type, content_key)

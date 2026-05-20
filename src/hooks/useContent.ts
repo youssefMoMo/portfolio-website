@@ -173,7 +173,7 @@ export function usePricingContent() {
   const defaultPricing: PricingContent = {
     plans: [
       {
-        id: 1,
+        id: "default-1",
         name: "Mini",
         price_usd: "15",
         price_robux: "4K",
@@ -320,12 +320,13 @@ export function useReviewsContent() {
   const defaultReviews: ReviewsContent = {
     reviews: [
       {
-        id: 1,
+        id: "default-1",
         name: "schwerer",
         rating: 5,
         text: "affordable, fast, flexible with revisions and good quality solid",
         project_type: "UI Design",
         date: "2024-11",
+        status: "approved" as const,
         verified: true,
         avatar: "S"
       }
@@ -407,7 +408,7 @@ export function usePoliciesContent() {
   const defaultPolicies: PoliciesContent = {
     policies: [
       {
-        id: 1,
+        id: "default-1",
         title: "Payment Policy",
         description: "50% upfront, 50% upon completion. Payment must be made before work begins. We accept PayPal, Robux, and other payment methods.",
         icon: "shield"

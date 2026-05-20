@@ -67,10 +67,12 @@ import { isSupabaseEnabled, supabase } from "@/lib/supabase";
 import { isAuthenticatedSync, logout } from "@/lib/auth";
 
 // Lazy-load new tab modules
-const AnalyticsTab = lazy(() => import("./admin/AnalyticsTab"));
-const ReviewsTab = lazy(() => import("./admin/ReviewsTab"));
-const UsersTab = lazy(() => import("./admin/UsersTab"));
-const GamesTab = lazy(() => import("./admin/GamesTab"));
+const AnalyticsTab  = lazy(() => import("./admin/AnalyticsTab"));
+const ReviewsTab    = lazy(() => import("./admin/ReviewsTab"));
+const UsersTab      = lazy(() => import("./admin/UsersTab"));
+const GamesTab      = lazy(() => import("./admin/GamesTab"));
+const HomeTab       = lazy(() => import("./admin/HomeTab"));
+const PoliciesTab   = lazy(() => import("./admin/PoliciesTab"));
 
 type TabType =
   | "analytics"
@@ -724,131 +726,11 @@ export default function AdminDashboard() {
           {/* ── Logs ── */}
           {activeTab === "logs" && <LogsTab key="logs" />}
 
-          {/* ── Home content ── */}
-          {activeTab === "home" && homeContent && (
-            <motion.div
-              key="home"
-              initial={{ opacity: 0, x: -40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500">
-                      <Home className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-2xl">
-                        Home Page Content
-                      </CardTitle>
-                      <CardDescription>
-                        Edit hero section & stats
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    {[
-                      { label: "Hero Badge", key: "hero_badge" as const },
-                      { label: "Hero Title 1", key: "hero_title1" as const },
-                    ].map(({ label, key }) => (
-                      <div key={key} className="space-y-2">
-                        <label className="text-sm font-medium">{label}</label>
-                        <Input
-                          value={(homeContent as any)[key] ?? ""}
-                          onChange={(e) =>
-                            setHomeContent({
-                              ...homeContent,
-                              [key]: e.target.value,
-                            })
-                          }
-                          className="bg-background/50 border-white/10"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  {(
-                    [
-                      "hero_title2",
-                      "hero_subtitle",
-                      "cta_title",
-                      "cta_subtitle",
-                    ] as const
-                  ).map((key) => (
-                    <div key={key} className="space-y-2">
-                      <label className="text-sm font-medium capitalize">
-                        {key.replace(/_/g, " ")}
-                      </label>
-                      {key.includes("subtitle") ? (
-                        <Textarea
-                          value={(homeContent as any)[key] ?? ""}
-                          onChange={(e) =>
-                            setHomeContent({
-                              ...homeContent,
-                              [key]: e.target.value,
-                            })
-                          }
-                          rows={2}
-                          className="bg-background/50 border-white/10"
-                        />
-                      ) : (
-                        <Input
-                          value={(homeContent as any)[key] ?? ""}
-                          onChange={(e) =>
-                            setHomeContent({
-                              ...homeContent,
-                              [key]: e.target.value,
-                            })
-                          }
-                          className="bg-background/50 border-white/10"
-                        />
-                      )}
-                    </div>
-                  ))}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {(
-                      [
-                        "stats_projects",
-                        "stats_clients",
-                        "stats_rating",
-                        "stats_years",
-                      ] as const
-                    ).map((key) => (
-                      <div key={key} className="space-y-2">
-                        <label className="text-sm font-medium capitalize">
-                          {key.replace("stats_", "")}
-                        </label>
-                        <Input
-                          value={(homeContent as any)[key] ?? ""}
-                          onChange={(e) =>
-                            setHomeContent({
-                              ...homeContent,
-                              [key]: e.target.value,
-                            })
-                          }
-                          className="bg-background/50 border-white/10"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <Button
-                    onClick={() => save("home", homeContent)}
-                    disabled={isSaving}
-                    className="gap-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
-                  >
-                    {isSaving ? (
-                      <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    {isSaving ? "Saving…" : "Save Home Content"}
-                  </Button>
-                </CardContent>
-              </Card>
-            </motion.div>
+          {/* ── Home content (dedicated tab) ── */}
+          {activeTab === "home" && (
+            <Suspense key="home" fallback={TAB_SPINNER}>
+              <HomeTab />
+            </Suspense>
           )}
 
           {/* ── Portfolio ── */}
@@ -1421,223 +1303,13 @@ export default function AdminDashboard() {
             </motion.div>
           )}
 
-          {/* ── Policies ── */}
-          {activeTab === "policies" && policiesContent && (
-            <motion.div
-              key="policies"
-              initial={{ opacity: 0, x: -40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-gradient-to-r from-orange-500 to-red-500">
-                        <FileText className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-2xl">
-                          Policies ({policiesContent.policies.length})
-                        </CardTitle>
-                        <CardDescription>
-                          Manage terms & policies
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const p: Policy = {
-                          id: crypto.randomUUID(),
-                          title: "New Policy",
-                          description: "Enter description…",
-                          icon: "shield",
-                          display_order: policiesContent.policies.length,
-                          is_published: true,
-                        };
-                        setPoliciesContent({
-                          ...policiesContent,
-                          policies: [...policiesContent.policies, p],
-                        });
-                        setHasChanges(true);
-                      }}
-                      className="gap-2"
-                    >
-                      <Plus className="w-4 h-4" /> Add Policy
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {policiesContent.policies.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-white/10 rounded-xl">
-                      <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
-                      <p className="text-muted-foreground mb-4">
-                        No policies yet
-                      </p>
-                    </div>
-                  ) : (
-                    policiesContent.policies.map((policy, idx) => (
-                      <motion.div
-                        key={policy.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.04 }}
-                      >
-                        <Card className="bg-background/30 border-white/5">
-                          <CardContent className="p-6 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium flex items-center gap-2">
-                                <Shield className="w-4 h-4 text-primary" />
-                                Policy #{idx + 1}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    setPoliciesContent({
-                                      ...policiesContent,
-                                      policies: moveUp(
-                                        policiesContent.policies,
-                                        idx,
-                                      ),
-                                    })
-                                  }
-                                  disabled={idx === 0}
-                                  className="h-8 w-8"
-                                >
-                                  <ArrowUp className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    setPoliciesContent({
-                                      ...policiesContent,
-                                      policies: moveDown(
-                                        policiesContent.policies,
-                                        idx,
-                                      ),
-                                    })
-                                  }
-                                  disabled={
-                                    idx === policiesContent.policies.length - 1
-                                  }
-                                  className="h-8 w-8"
-                                >
-                                  <ArrowDown className="w-4 h-4" />
-                                </Button>
-                                <Switch
-                                  checked={policy.is_published !== false}
-                                  onCheckedChange={(v) => {
-                                    const a = [...policiesContent.policies];
-                                    a[idx].is_published = v;
-                                    setPoliciesContent({
-                                      ...policiesContent,
-                                      policies: a,
-                                    });
-                                    setHasChanges(true);
-                                  }}
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium">
-                                Title
-                              </label>
-                              <Input
-                                value={policy.title}
-                                onChange={(e) => {
-                                  const a = [...policiesContent.policies];
-                                  a[idx].title = e.target.value;
-                                  setPoliciesContent({
-                                    ...policiesContent,
-                                    policies: a,
-                                  });
-                                  setHasChanges(true);
-                                }}
-                                className="bg-background/50 border-white/10"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium">
-                                Description
-                              </label>
-                              <Textarea
-                                value={policy.description}
-                                onChange={(e) => {
-                                  const a = [...policiesContent.policies];
-                                  a[idx].description = e.target.value;
-                                  setPoliciesContent({
-                                    ...policiesContent,
-                                    policies: a,
-                                  });
-                                  setHasChanges(true);
-                                }}
-                                rows={3}
-                                className="bg-background/50 border-white/10"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium">
-                                Icon
-                              </label>
-                              <Input
-                                value={policy.icon}
-                                onChange={(e) => {
-                                  const a = [...policiesContent.policies];
-                                  a[idx].icon = e.target.value;
-                                  setPoliciesContent({
-                                    ...policiesContent,
-                                    policies: a,
-                                  });
-                                  setHasChanges(true);
-                                }}
-                                placeholder="shield, refresh, clock, lock, code"
-                                className="bg-background/50 border-white/10"
-                              />
-                            </div>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => {
-                                setPoliciesContent({
-                                  ...policiesContent,
-                                  policies: policiesContent.policies.filter(
-                                    (_, i) => i !== idx,
-                                  ),
-                                });
-                                setHasChanges(true);
-                              }}
-                              className="gap-2"
-                            >
-                              <Trash2 className="w-4 h-4" /> Remove
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))
-                  )}
-                  {policiesContent.policies.length > 0 && (
-                    <Button
-                      onClick={() => save("policies", policiesContent)}
-                      disabled={isSaving}
-                      className="gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
-                    >
-                      {isSaving ? (
-                        <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
-                      ) : (
-                        <Save className="w-4 h-4" />
-                      )}
-                      {isSaving ? "Saving…" : "Save Policies"}
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
+          {/* ── Policies (dedicated tab) ── */}
+          {activeTab === "policies" && (
+            <Suspense key="policies" fallback={TAB_SPINNER}>
+              <PoliciesTab />
+            </Suspense>
           )}
+
         </AnimatePresence>
       </div>
     </div>

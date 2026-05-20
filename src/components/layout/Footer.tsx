@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Twitter, MessageSquare, Heart } from "lucide-react";
 import { useLanguage } from "@/hooks/use-language";
+import { DISCORD_PROFILE_URL } from "@/lib/discord";
 
 export function Footer() {
   const { t, isRTL } = useLanguage();
@@ -45,7 +46,7 @@ export function Footer() {
                 <Twitter className="w-5 h-5 text-primary" />
               </motion.a>
               <motion.a
-                href="https://discord.com/users/1077620522680057856"
+                href={DISCORD_PROFILE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 whileHover={{ scale: 1.1, y: -2 }}
