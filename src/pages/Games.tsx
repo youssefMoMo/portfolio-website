@@ -16,6 +16,24 @@ interface GameEntry {
   id: string; place_id: string; name: string; universe_id: string | null;
   visits: number; icon_url: string; creator: string;
   display_order: number; is_published: boolean;
+  /** Optional override: full Roblox URL or raw 15-digit place ID string */
+  link?: string;
+}
+
+/**
+ * Safely builds a Roblox game URL from either:
+ *  - A raw place ID (any length, always treated as a STRING to avoid
+ *    JS Number truncation of 15-digit IDs > Number.MAX_SAFE_INTEGER).
+ *  - A fully-qualified URL (passes through unchanged).
+ * Falls back to place_id when no link override is set.
+ */
+function getRobloxUrl(game: GameEntry): string {
+  const raw = (game.link ?? game.place_id ?? "").trim();
+  if (!raw) return "#";
+  // Already a full URL — pass through untouched
+  if (raw.startsWith("http")) return raw;
+  // Raw ID — always embed as a string, never parse to Number
+  return `https://www.roblox.com/games/${raw}`;
 }
 
 // Extended metadata applied on top of Supabase/fallback data
@@ -191,7 +209,7 @@ function FeaturedCard({ game }: { game: GameEntry }) {
             by <span className="text-white/85 font-medium">{game.creator}</span>
           </p>
           <a
-            href={`https://www.roblox.com/games/${game.place_id}`}
+            href={getRobloxUrl(game)}
             target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors shadow-lg"
           >
@@ -252,7 +270,7 @@ function GameCard({ game, index }: { game: GameEntry; index: number }) {
 
           {/* Roblox link */}
           <a
-            href={`https://www.roblox.com/games/${game.place_id}`}
+            href={getRobloxUrl(game)}
             target="_blank" rel="noopener noreferrer"
             className="mt-auto block"
           >
