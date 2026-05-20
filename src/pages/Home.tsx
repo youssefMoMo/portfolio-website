@@ -150,7 +150,7 @@ export default function Home() {
           <motion.p
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.6 }}
-            className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
+            className="text-lg md:text-xl text-slate-600 dark:text-zinc-400 max-w-2xl mx-auto mb-10"
           >
             {content?.hero_subtitle || t("hero.subtitle")}
           </motion.p>
@@ -189,7 +189,7 @@ export default function Home() {
                 <motion.div
                   key={stat.id} custom={i} variants={fadeUp}
                   initial="hidden" whileInView="visible" viewport={{ once: true }}
-                  className="group relative p-6 rounded-2xl bg-card/40 backdrop-blur-xl border border-white/5 hover:border-primary/30 transition-all duration-300 text-center"
+                  className="group relative p-6 rounded-2xl bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-300 text-center shadow-sm dark:shadow-none"
                 >
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="relative">
@@ -197,7 +197,7 @@ export default function Home() {
                     <p className="text-3xl md:text-4xl font-bold font-display bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
                       {dynamicValues[stat.id] || stat.value}
                     </p>
-                    <p className="text-sm text-muted-foreground mt-1">{stat.title}</p>
+                    <p className="text-sm text-slate-600 dark:text-zinc-400 mt-1">{stat.title}</p>
                   </div>
                 </motion.div>
               );
@@ -214,7 +214,7 @@ export default function Home() {
             <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-3xl md:text-4xl font-display font-bold mb-4">
               {t("portfolio.title")}
             </motion.h2>
-            <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="text-muted-foreground max-w-xl mx-auto">
+            <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="text-slate-600 dark:text-zinc-400 max-w-xl mx-auto">
               {t("portfolio.subtitle")}
             </motion.p>
           </div>
@@ -243,7 +243,7 @@ export default function Home() {
               {[...weeklyItems, ...weeklyItems].map((item, i) => (
                 <div
                   key={`${item.id}-${i}`}
-                  className="group relative overflow-hidden rounded-2xl bg-card/40 border border-white/5 hover:border-primary/30 transition-all duration-500 w-[320px] md:w-[380px] flex-shrink-0"
+                  className="group relative overflow-hidden rounded-2xl bg-slate-100 dark:bg-card/40 border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-500 w-[320px] md:w-[380px] flex-shrink-0"
                 >
                   <div className="aspect-video overflow-hidden bg-card/60 relative">
                     <HomeImage
@@ -276,14 +276,14 @@ export default function Home() {
         <div className="max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-            className="relative rounded-3xl bg-card/40 backdrop-blur-xl border border-white/10 p-12 md:p-16 text-center overflow-hidden"
+            className="relative rounded-3xl bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 p-12 md:p-16 text-center overflow-hidden shadow-sm dark:shadow-none"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-cyan-500/10" />
             <div className="relative">
-              <h2 className="text-3xl md:text-4xl font-display font-bold mb-4">
+              <h2 className="text-3xl md:text-4xl font-display font-bold mb-4 text-slate-900 dark:text-zinc-100">
                 {content?.cta_title || t("cta.title")}
               </h2>
-              <p className="text-muted-foreground max-w-xl mx-auto mb-8">
+              <p className="text-slate-600 dark:text-zinc-400 max-w-xl mx-auto mb-8">
                 {content?.cta_subtitle || t("cta.subtitle")}
               </p>
               <div className="flex flex-wrap gap-4 justify-center">

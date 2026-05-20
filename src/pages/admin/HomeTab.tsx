@@ -25,7 +25,7 @@ const DEFAULTS: HomeContent = {
 function Field({
   label, value, onChange, multiline = false,
 }: { label: string; value: string; onChange: (v: string) => void; multiline?: boolean }) {
-  const cls = "bg-background/50 border-white/10 text-sm focus:border-primary/40 mt-1.5";
+  const cls = "bg-white dark:bg-background/50 border-slate-200 dark:border-white/10 text-sm focus:border-primary/40 mt-1.5";
   return (
     <div>
       <label className="text-xs font-medium text-muted-foreground">{label}</label>
@@ -39,7 +39,7 @@ function Field({
 
 function Section({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <div className="border border-white/5 rounded-xl p-5 space-y-4 bg-background/20">
+    <div className="border border-slate-100 dark:border-white/5 rounded-xl p-5 space-y-4 bg-background/20">
       <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
         <Icon className="w-4 h-4" /> {title}
       </h3>
@@ -86,7 +86,7 @@ export default function HomeTab() {
 
   return (
     <motion.div key="home-tab" initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }} transition={{ duration: 0.3 }}>
-      <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
+      <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">

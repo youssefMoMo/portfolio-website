@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, MessageCircle, MessageSquare, Quote, X } from "lucide-react";
+import { Star, MessageCircle, Quote, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/use-language";
 import { getAllReviews, submitReviewToTable, ReviewsContent, Review } from "@/lib/contentManager";
 import { useTableRealtime } from "@/hooks/useContentRealtime";
-import { profile } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
+import { profile } from "@/lib/data";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/hooks/use-toast";
 
@@ -24,10 +24,8 @@ function WriteReviewModal({ onClose, onSubmit }: {
   const [submitting, setSubmitting] = useState(false);
   const [validationMsg, setValidationMsg] = useState("");
 
-  // Detect Arabic text
   const hasArabic = (str: string) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(str);
 
-  // Basic profanity filter
   const BLOCKED_WORDS = ["fuck","shit","ass","bitch","dick","pussy","damn","bastard","crap","hell","cock","nigger","nigga","whore","slut","piss","cunt"];
   const hasProfanity = (str: string) => {
     const lower = str.toLowerCase();
@@ -81,14 +79,14 @@ function WriteReviewModal({ onClose, onSubmit }: {
       open={true}
       onClose={onClose}
       ariaLabel="Write a review"
-      contentClassName="w-full max-w-sm bg-[#111318] border border-white/10 rounded-2xl shadow-2xl p-6"
+      contentClassName="w-full max-w-sm bg-white dark:bg-[#111318] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl p-6"
     >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-bold text-white">Write a Review</h2>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">Write a Review</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-white/10 transition-colors text-white/50 hover:text-white"
+            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-slate-400 dark:text-white/50 hover:text-slate-700 dark:hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
@@ -96,19 +94,19 @@ function WriteReviewModal({ onClose, onSubmit }: {
 
         {/* Name */}
         <div className="mb-4">
-          <label className="block text-xs font-medium text-white/70 mb-1.5">Your Name</label>
+          <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-1.5">Your Name</label>
           <input
             type="text"
             value={name}
             onChange={e => validateName(e.target.value)}
             placeholder="e.g. John Doe"
-            className="w-full px-3 py-2.5 bg-[#1a1d27] border border-white/8 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary/40 transition-colors"
+            className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#1a1d27] border border-slate-200 dark:border-white/8 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 focus:outline-none focus:border-primary/40 transition-colors"
           />
         </div>
 
         {/* Rating Stars */}
         <div className="mb-4">
-          <label className="block text-xs font-medium text-white/70 mb-2">Rating</label>
+          <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-2">Rating</label>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map(i => (
               <button
@@ -122,7 +120,7 @@ function WriteReviewModal({ onClose, onSubmit }: {
                   className={`w-7 h-7 transition-colors ${
                     i <= (hoverRating || rating)
                       ? "fill-yellow-400 text-yellow-400"
-                      : "fill-white/10 text-white/20"
+                      : "fill-slate-200 dark:fill-white/10 text-slate-300 dark:text-white/20"
                   }`}
                 />
               </button>
@@ -132,16 +130,16 @@ function WriteReviewModal({ onClose, onSubmit }: {
 
         {/* Feedback */}
         <div className="mb-5">
-          <label className="block text-xs font-medium text-white/70 mb-1.5">Your Feedback</label>
+          <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-1.5">Your Feedback</label>
           <textarea
             value={text}
             onChange={e => validateText(e.target.value)}
             placeholder="How was your experience?"
             rows={4}
-            className="w-full px-3 py-2.5 bg-[#1a1d27] border border-white/8 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary/40 transition-colors resize-none"
+            className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#1a1d27] border border-slate-200 dark:border-white/8 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 focus:outline-none focus:border-primary/40 transition-colors resize-none"
           />
           {validationMsg && (
-            <p className="mt-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+            <p className="mt-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg px-3 py-2">
               {validationMsg}
             </p>
           )}
@@ -193,7 +191,7 @@ export default function Reviews() {
     })();
   }, []);
 
-  // Live updates: re-fetch when reviews are added/approved/deleted from admin
+  // Live updates: re-fetch when reviews are approved/created/deleted from admin
   useTableRealtime("reviews", async () => {
     if (!mountedRef.current) return;
     try {
@@ -202,7 +200,6 @@ export default function Reviews() {
     } catch { /* ignore */ }
   });
 
-  // Dynamic stats — recalculates whenever reviews change (including new submissions)
   const stats = useMemo(() => {
     if (!content?.reviews?.length) return { avg: 0, total: 0, fiveStarPct: 0 };
     const total = content.reviews.length;
@@ -216,7 +213,6 @@ export default function Reviews() {
   }, [content]);
 
   const handleSubmitReview = useCallback(async (reviewData: Omit<Review, "id" | "verified" | "avatar" | "status">) => {
-    // Submit as pending — admin will approve before it shows publicly
     const result = await submitReviewToTable({
       name:         reviewData.name,
       rating:       reviewData.rating,
@@ -226,7 +222,6 @@ export default function Reviews() {
     });
 
     if (!result.ok) {
-      // Surface real error to user — no fake success
       toast({
         title: "Submission failed",
         description: result.error ?? "Unknown error.",
@@ -235,12 +230,11 @@ export default function Reviews() {
       return;
     }
 
-    // Show "thanks, pending approval" feedback
     if (mountedRef.current) setSubmitSuccess(true);
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (mountedRef.current) setSubmitSuccess(false);
     }, 6000);
-    timersRef.current.push(t);
+    timersRef.current.push(timer);
   }, [toast]);
 
   if (loading) {
@@ -286,19 +280,19 @@ export default function Reviews() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto"
+            className="text-base sm:text-lg text-slate-600 dark:text-zinc-400 max-w-2xl mx-auto"
           >
             {t("reviews.subtitle")}
           </motion.p>
         </div>
 
-        {/* Rating Summary — live calculated */}
+        {/* Rating Summary */}
         {stats.total > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="max-w-md mx-auto mb-12 sm:mb-16 p-6 sm:p-8 rounded-2xl bg-card/40 backdrop-blur-xl border border-white/5 text-center"
+            className="max-w-md mx-auto mb-12 sm:mb-16 p-6 sm:p-8 rounded-2xl bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/5 text-center shadow-sm dark:shadow-none"
           >
             <p className="text-5xl sm:text-6xl font-bold font-display bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent mb-2">
               {stats.avg}
@@ -313,13 +307,13 @@ export default function Reviews() {
                   transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.15 }}
                 >
                   <Star
-                    className={`w-6 h-6 ${i < Math.round(stats.avg) ? "fill-yellow-400 text-yellow-400" : "fill-muted text-muted"}`}
+                    className={`w-6 h-6 ${i < Math.round(stats.avg) ? "fill-yellow-400 text-yellow-400" : "fill-slate-200 dark:fill-muted text-slate-300 dark:text-muted"}`}
                   />
                 </motion.div>
               ))}
             </div>
-            <p className="text-muted-foreground text-sm">
-              {t("reviews.based")} <strong>{stats.total}</strong>{" "}
+            <p className="text-slate-600 dark:text-zinc-400 text-sm">
+              {t("reviews.based")} <strong className="text-slate-900 dark:text-zinc-100">{stats.total}</strong>{" "}
               {t("reviews.reviewsText")} • {stats.fiveStarPct}% ★★★★★
             </p>
           </motion.div>
@@ -332,7 +326,7 @@ export default function Reviews() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="max-w-md mx-auto mb-6 p-4 rounded-xl bg-green-500/15 border border-green-500/25 text-center text-green-400 text-sm font-medium"
+              className="max-w-md mx-auto mb-6 p-4 rounded-xl bg-green-50 dark:bg-green-500/15 border border-green-200 dark:border-green-500/25 text-center text-green-700 dark:text-green-400 text-sm font-medium"
             >
               ✅ Your review was submitted successfully!
             </motion.div>
@@ -342,8 +336,8 @@ export default function Reviews() {
         {/* Reviews Grid */}
         {reviews.length === 0 ? (
           <div className="text-center py-16 sm:py-20">
-            <MessageCircle className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <p className="text-muted-foreground mb-6">No reviews yet — be the first!</p>
+            <MessageCircle className="w-16 h-16 text-slate-400 dark:text-muted-foreground mx-auto mb-4 opacity-50" />
+            <p className="text-slate-600 dark:text-muted-foreground mb-6">No reviews yet — be the first!</p>
             <Button
               onClick={() => setShowModal(true)}
               className="gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-full px-6 font-semibold discord-glow"
@@ -360,13 +354,14 @@ export default function Reviews() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: Math.min(i * 0.05, 0.3) }}
-                className="break-inside-avoid group relative rounded-2xl bg-card/40 backdrop-blur-xl border border-white/5 hover:border-primary/20 p-5 sm:p-6 transition-all duration-300"
+                className="break-inside-avoid group relative rounded-2xl bg-white dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/5 hover:border-primary/20 p-5 sm:p-6 transition-all duration-300 shadow-sm dark:shadow-none"
               >
                 <Quote className="w-7 h-7 text-primary/20 mb-3" />
-                <p className="text-sm sm:text-base text-foreground leading-relaxed mb-4">
+                <p className="text-sm sm:text-base text-slate-900 dark:text-foreground leading-relaxed mb-4">
                   "{review.text}"
                 </p>
-                {/* Stars with glow */}
+
+                {/* Stars */}
                 <div className="flex items-center gap-1 mb-4">
                   {[...Array(5)].map((_, si) => (
                     <motion.div
@@ -377,18 +372,19 @@ export default function Reviews() {
                       transition={{ duration: 3, repeat: Infinity, delay: si * 0.2 + i * 0.1 }}
                     >
                       <Star
-                        className={`w-5 h-5 ${si < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-muted text-muted"}`}
+                        className={`w-5 h-5 ${si < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-slate-200 dark:fill-muted text-slate-300 dark:text-muted"}`}
                       />
                     </motion.div>
                   ))}
                 </div>
+
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-indigo-500/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
                     {review.avatar || review.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-semibold text-sm truncate">{review.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="font-semibold text-sm text-slate-900 dark:text-zinc-100 truncate">{review.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-zinc-500 truncate">
                       {review.project_type} • {review.date}
                     </p>
                   </div>
@@ -408,12 +404,12 @@ export default function Reviews() {
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="mt-16 sm:mt-24 bg-card/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 sm:p-12 text-center"
+          className="mt-16 sm:mt-24 bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-3xl p-8 sm:p-12 text-center shadow-sm dark:shadow-none"
         >
-          <h2 className="text-2xl sm:text-3xl font-display font-bold mb-4">
+          <h2 className="text-2xl sm:text-3xl font-display font-bold mb-4 text-slate-900 dark:text-zinc-100">
             {t("reviews.ctaTitle")}
           </h2>
-          <p className="text-muted-foreground mb-6 sm:mb-8 max-w-xl mx-auto text-sm sm:text-base">
+          <p className="text-slate-600 dark:text-zinc-400 mb-6 sm:mb-8 max-w-xl mx-auto text-sm sm:text-base">
             {t("reviews.ctaText")}
           </p>
           <Button

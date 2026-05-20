@@ -18,7 +18,7 @@ import {
   FaqsContent, FaqItem,
 } from "@/lib/contentManager";
 
-const INPUT_CLS = "bg-background/50 border-white/10 text-sm focus:border-primary/40 mt-1.5";
+const INPUT_CLS = "bg-white dark:bg-background/50 border-slate-200 dark:border-white/10 text-sm focus:border-primary/40 mt-1.5";
 
 // ── Reusable accordion row ─────────────────────────────────────
 function AccordionRow({
@@ -34,7 +34,7 @@ function AccordionRow({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border border-white/5 rounded-xl bg-background/20 overflow-hidden">
+    <div className="border border-slate-100 dark:border-white/5 rounded-xl bg-background/20 overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2.5">
         {/* drag handle visual */}
         <GripVertical className="w-4 h-4 text-muted-foreground/30 flex-shrink-0" />
@@ -59,7 +59,7 @@ function AccordionRow({
             transition={{ duration: 0.22, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-white/5">
+            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-slate-100 dark:border-white/5">
               {children}
             </div>
           </motion.div>
@@ -203,7 +203,7 @@ export default function PoliciesTab() {
       exit={{ opacity: 0, x: 40 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
+      <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -270,7 +270,7 @@ export default function PoliciesTab() {
           </section>
 
           {/* divider */}
-          <div className="border-t border-white/5" />
+          <div className="border-t border-slate-100 dark:border-white/5" />
 
           {/* ── FAQs ── */}
           <section>

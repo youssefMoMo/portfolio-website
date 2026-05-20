@@ -171,7 +171,7 @@ function LogsTab() {
       exit={{ opacity: 0, x: 40 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
+      <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -229,7 +229,7 @@ function LogsTab() {
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
-            <div className="text-center py-16 border-2 border-dashed border-white/10 rounded-xl">
+            <div className="text-center py-16 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
               <p className="font-semibold text-green-400 mb-1">
                 {logs.length === 0
                   ? "No errors recorded"
@@ -267,7 +267,7 @@ function LogsTab() {
                                 {log.page}
                               </code>
                             </div>
-                            <p className="text-xs text-white/80 mt-0.5 line-clamp-2">
+                            <p className="text-xs text-slate-700 dark:text-white/80 mt-0.5 line-clamp-2">
                               {log.message}
                             </p>
                           </div>
@@ -742,7 +742,7 @@ export default function AdminDashboard() {
               exit={{ opacity: 0, x: 40 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
+              <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -781,7 +781,7 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {portfolioContent.items.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-white/10 rounded-xl">
+                    <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
                       <Image className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
                       <p className="text-muted-foreground mb-4">
                         No portfolio items yet
@@ -802,7 +802,7 @@ export default function AdminDashboard() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.04 }}
                       >
-                        <Card className="bg-background/30 border-white/5">
+                        <Card className="bg-white/50 dark:bg-background/30 border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none">
                           <CardContent className="p-6 space-y-4">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium">
@@ -864,7 +864,7 @@ export default function AdminDashboard() {
                                 <img
                                   src={previewImages[item.id] || item.image}
                                   alt={item.title}
-                                  className="w-full h-48 object-cover rounded-lg border border-white/10"
+                                  className="w-full h-48 object-cover rounded-lg border border-slate-200 dark:border-white/10"
                                 />
                                 <Button
                                   size="icon"
@@ -934,7 +934,7 @@ export default function AdminDashboard() {
                                 setHasChanges(true);
                               }}
                               placeholder="https://example.com/image.png"
-                              className="bg-background/50 border-white/10"
+                              className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
                             />
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <div className="space-y-2">
@@ -952,7 +952,7 @@ export default function AdminDashboard() {
                                     });
                                     setHasChanges(true);
                                   }}
-                                  className="bg-background/50 border-white/10"
+                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
                                 />
                               </div>
                               <div className="space-y-2">
@@ -970,7 +970,7 @@ export default function AdminDashboard() {
                                     });
                                     setHasChanges(true);
                                   }}
-                                  className="bg-background/50 border-white/10"
+                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
                                 />
                               </div>
                             </div>
@@ -1042,7 +1042,7 @@ export default function AdminDashboard() {
               exit={{ opacity: 0, x: 40 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
+              <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1067,7 +1067,7 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {pricingContent.plans.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-white/10 rounded-xl">
+                    <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
                       <DollarSign className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
                       <p className="text-muted-foreground mb-4">
                         No pricing plans yet
@@ -1092,7 +1092,7 @@ export default function AdminDashboard() {
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: idx * 0.04 }}
                         >
-                          <Card className="bg-background/30 border-white/5">
+                          <Card className="bg-white/50 dark:bg-background/30 border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none">
                             <CardContent className="p-6 space-y-4">
                               <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium flex items-center gap-2">
@@ -1169,7 +1169,7 @@ export default function AdminDashboard() {
                                         });
                                         setHasChanges(true);
                                       }}
-                                      className="bg-background/50 border-white/10"
+                                      className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
                                     />
                                   </div>
                                 ))}
@@ -1189,7 +1189,7 @@ export default function AdminDashboard() {
                                     });
                                     setHasChanges(true);
                                   }}
-                                  className="bg-background/50 border-white/10"
+                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
                                 />
                               </div>
                               <div className="space-y-2">
@@ -1209,7 +1209,7 @@ export default function AdminDashboard() {
                                     });
                                     setHasChanges(true);
                                   }}
-                                  className="bg-background/50 border-white/10"
+                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
                                 />
                               </div>
                               <div className="flex flex-wrap gap-2">

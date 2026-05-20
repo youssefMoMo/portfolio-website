@@ -1,4 +1,7 @@
 // src/lib/adminApi.ts — All admin operations via Supabase directly (no PHP backend)
+// FIX: All mutations now write BOTH the legacy boolean columns (approved/rejected)
+//      AND the canonical `status` column that contentManager.getAllReviews() queries.
+//      Without `status`, reviews created/approved here were invisible on the public page.
 
 import { supabase } from "./supabase";
 
@@ -12,8 +15,11 @@ export interface Review {
   date: string;
   verified: boolean;
   featured?: boolean;
+  // Legacy boolean columns (kept for backward compat & admin UI)
   approved: boolean;
   rejected: boolean;
+  // Canonical status column read by contentManager.getAllReviews()
+  status?: "pending" | "approved" | "rejected";
   avatar?: string;
   created_at: string;
   approved_by?: string;
@@ -56,15 +62,16 @@ export const analyticsApi = {
       portfolio, contentSections, recentReviews,
     ] = await Promise.all([
       db.from("reviews").select("*", { count: "exact", head: true }),
-      db.from("reviews").select("*", { count: "exact", head: true }).eq("approved", false).eq("rejected", false),
-      db.from("reviews").select("*", { count: "exact", head: true }).eq("approved", true),
-      db.from("reviews").select("rating").eq("approved", true).limit(1000),
+      // Pending = status is "pending" OR (legacy: approved=false AND rejected=false)
+      db.from("reviews").select("*", { count: "exact", head: true }).or("status.eq.pending,and(approved.eq.false,rejected.eq.false)"),
+      db.from("reviews").select("*", { count: "exact", head: true }).or("status.eq.approved,approved.eq.true"),
+      db.from("reviews").select("rating").or("status.eq.approved,approved.eq.true").limit(1000),
       db.from("games").select("name, visits, icon_url").eq("is_published", true).order("visits", { ascending: false }).limit(5),
       db.from("games").select("*", { count: "exact", head: true }),
       db.from("games").select("*", { count: "exact", head: true }).eq("is_published", true),
       db.from("site_content").select("content_value").eq("content_type", "portfolio").eq("content_key", "data").maybeSingle(),
       db.from("site_content").select("content_type, updated_at").order("updated_at", { ascending: false }).limit(20),
-      db.from("reviews").select("id, name, rating, text, project_type, approved, rejected, created_at").order("created_at", { ascending: false }).limit(5),
+      db.from("reviews").select("id, name, rating, text, project_type, approved, rejected, status, created_at").order("created_at", { ascending: false }).limit(5),
     ]);
 
     const ratings   = (ratingsRows.data ?? []).map(r => Number(r.rating));
@@ -100,28 +107,54 @@ export const analyticsApi = {
 
 // ── Reviews ───────────────────────────────────────────────────
 export const reviewsApi = {
+  /**
+   * List reviews by status. Checks both the canonical `status` column
+   * AND the legacy boolean columns so older rows are still visible.
+   */
   list: async (status: "all" | "pending" | "approved" | "rejected" = "all", page = 1): Promise<Review[]> => {
     const db   = assertSupabase();
     const PAGE = 20;
     let q = db.from("reviews").select("*").order("created_at", { ascending: false }).range((page - 1) * PAGE, page * PAGE - 1);
-    if (status === "pending")  q = q.eq("approved", false).eq("rejected", false);
-    if (status === "approved") q = q.eq("approved", true);
-    if (status === "rejected") q = q.eq("rejected", true);
+
+    if (status === "pending") {
+      // status='pending' OR (no status AND approved=false AND rejected=false)
+      q = q.or("status.eq.pending,and(approved.eq.false,rejected.eq.false)");
+    } else if (status === "approved") {
+      q = q.or("status.eq.approved,approved.eq.true");
+    } else if (status === "rejected") {
+      q = q.or("status.eq.rejected,rejected.eq.true");
+    }
+
     const { data, error } = await q;
     if (error) throw error;
     return (data ?? []) as Review[];
   },
 
+  /**
+   * Approve a review — writes BOTH the legacy boolean AND the canonical
+   * `status` column so contentManager.getAllReviews() sees it immediately.
+   */
   approve: async (id: string): Promise<void> => {
     const { error } = await assertSupabase().from("reviews").update({
-      approved: true, rejected: false, updated_at: new Date().toISOString(),
+      approved:    true,
+      rejected:    false,
+      status:      "approved",          // ← canonical column for public query
+      approved_at: new Date().toISOString(),
+      rejected_at: null,
+      updated_at:  new Date().toISOString(),
     }).eq("id", id);
     if (error) throw error;
   },
 
+  /** Reject a review — writes both legacy and canonical columns. */
   reject: async (id: string): Promise<void> => {
     const { error } = await assertSupabase().from("reviews").update({
-      approved: false, rejected: true, updated_at: new Date().toISOString(),
+      approved:    false,
+      rejected:    true,
+      status:      "rejected",          // ← canonical column
+      rejected_at: new Date().toISOString(),
+      approved_at: null,
+      updated_at:  new Date().toISOString(),
     }).eq("id", id);
     if (error) throw error;
   },
@@ -139,6 +172,11 @@ export const reviewsApi = {
     if (error) throw error;
   },
 
+  /**
+   * Create a review from the admin panel.
+   * Writes `status` so the public Reviews page reflects it instantly —
+   * no cache flush or manual Supabase migration needed.
+   */
   create: async (fields: {
     name: string;
     rating: number;
@@ -151,15 +189,22 @@ export const reviewsApi = {
     verified?: boolean;
   }): Promise<void> => {
     const now = new Date().toISOString();
+    const isApproved = fields.approved ?? false;
+
     const insertPayload: Record<string, unknown> = {
       name:         fields.name,
       rating:       fields.rating,
       text:         fields.text,
       project_type: fields.project_type,
-      avatar:       fields.avatar ?? null,
+      avatar:       fields.avatar || fields.name.charAt(0).toUpperCase(),
       date:         fields.date ?? now.split("T")[0],
-      approved:     fields.approved ?? false,
+      // Legacy boolean columns
+      approved:     isApproved,
       rejected:     false,
+      // Canonical status column — this is what contentManager.getAllReviews() filters on
+      status:       isApproved ? "approved" : "pending",
+      approved_at:  isApproved ? now : null,
+      rejected_at:  null,
       featured:     fields.featured ?? false,
       verified:     fields.verified ?? false,
       created_at:   now,

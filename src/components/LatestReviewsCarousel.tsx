@@ -119,13 +119,13 @@ export function LatestReviewsCarousel() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1, duration: 0.5 }}
               >
-                <Card className="h-full bg-card/60 backdrop-blur-xl border border-white/10 hover:border-primary/30 transition-all duration-300">
+                <Card className="h-full bg-white/60 dark:bg-card/60 backdrop-blur-xl border border-slate-200 dark:border-white/10 hover:border-primary/30 transition-all duration-300 shadow-sm dark:shadow-none">
                   <CardContent className="p-6">
                     {/* Header: Avatar + Name + Verified */}
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
-                          <Star className="w-6 h-6 text-white fill-white" />
+                          <Star className="w-6 h-6 text-yellow-400 fill-yellow-400" />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">

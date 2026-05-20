@@ -151,7 +151,7 @@ export default function GamesTab() {
 
   return (
     <motion.div key="games" initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }} transition={{ duration: 0.3 }}>
-      <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
+      <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -181,20 +181,20 @@ export default function GamesTab() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Place ID <span className="text-red-400">*</span></label>
-                  <Input value={form.place_id} onChange={(e) => setForm((f) => ({ ...f, place_id: e.target.value.replace(/\D/g, "") }))} placeholder="e.g. 111021125092689" className="bg-background/50 border-white/10 font-mono text-sm" />
+                  <Input value={form.place_id} onChange={(e) => setForm((f) => ({ ...f, place_id: e.target.value.replace(/\D/g, "") }))} placeholder="e.g. 111021125092689" className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10 font-mono text-sm" />
                   <p className="text-[10px] text-muted-foreground">From: roblox.com/games/<strong>ID</strong>/game-name</p>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Game Name (optional — auto from Roblox)</label>
-                  <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Leave blank to auto-detect" className="bg-background/50 border-white/10" />
+                  <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Leave blank to auto-detect" className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Creator Name</label>
-                  <Input value={form.creator} onChange={(e) => setForm((f) => ({ ...f, creator: e.target.value }))} className="bg-background/50 border-white/10" />
+                  <Input value={form.creator} onChange={(e) => setForm((f) => ({ ...f, creator: e.target.value }))} className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Display Order</label>
-                  <Input type="number" value={form.display_order} onChange={(e) => setForm((f) => ({ ...f, display_order: parseInt(e.target.value) || 0 }))} className="bg-background/50 border-white/10" />
+                  <Input type="number" value={form.display_order} onChange={(e) => setForm((f) => ({ ...f, display_order: parseInt(e.target.value) || 0 }))} className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10" />
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -217,7 +217,7 @@ export default function GamesTab() {
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/20 border-t-primary" />
             </div>
           ) : games.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed border-white/10 rounded-xl">
+            <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
               <Gamepad2 className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
               <p className="text-muted-foreground">No games yet — add one above</p>
             </div>
@@ -225,7 +225,7 @@ export default function GamesTab() {
             <div className="space-y-3">
               {games.map((game, idx) => (
                 <motion.div key={game.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.04 }}>
-                  <Card className={`bg-background/30 border-white/5 ${editingId === game.id ? "border-cyan-500/40" : ""}`}>
+                  <Card className={`bg-white/50 dark:bg-background/30 border-slate-100 dark:border-white/5 ${editingId === game.id ? "border-cyan-500/40" : ""}`}>
                     <CardContent className="p-4 flex items-center gap-4">
                       <div className="w-14 h-14 rounded-xl overflow-hidden bg-gradient-to-br from-primary/20 to-indigo-500/20 flex-shrink-0 flex items-center justify-center">
                         {game.icon_url

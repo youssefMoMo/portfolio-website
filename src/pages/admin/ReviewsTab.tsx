@@ -260,16 +260,25 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
     }
   };
 
-  const statusBadge = review.approved
-    ? "bg-green-500/15 text-green-400"
-    : review.rejected
-    ? "bg-red-500/15 text-red-400"
-    : "bg-amber-500/15 text-amber-400";
-  const statusLabel = review.approved ? "Approved" : review.rejected ? "Rejected" : "Pending";
+  // Resolve status from canonical column first, fall back to legacy booleans
+  const resolvedStatus: "approved" | "rejected" | "pending" =
+    review.status === "approved" || review.approved
+      ? "approved"
+      : review.status === "rejected" || review.rejected
+      ? "rejected"
+      : "pending";
+  const statusBadge =
+    resolvedStatus === "approved"
+      ? "bg-green-500/15 text-green-400"
+      : resolvedStatus === "rejected"
+      ? "bg-red-500/15 text-red-400"
+      : "bg-amber-500/15 text-amber-400";
+  const statusLabel =
+    resolvedStatus === "approved" ? "Approved" : resolvedStatus === "rejected" ? "Rejected" : "Pending";
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-      <Card className={`bg-background/30 border-white/5 ${review.featured ? "border-primary/30 ring-1 ring-primary/10" : ""}`}>
+      <Card className={`bg-white/60 dark:bg-background/30 border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none ${review.featured ? "border-primary/30 ring-1 ring-primary/10" : ""}`}>
         <CardContent className="p-5 space-y-3">
           {review.featured && (
             <div className="flex items-center gap-1 text-[10px] text-primary font-medium">
@@ -307,7 +316,7 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
 
               {/* Actions */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                {!review.approved && (
+                {resolvedStatus !== "approved" && (
                   <Button size="sm" variant="outline"
                     className="gap-1.5 border-green-500/30 text-green-400 hover:bg-green-500/10"
                     onClick={() => act("approve")} disabled={!!busy}
@@ -316,7 +325,7 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
                     Approve
                   </Button>
                 )}
-                {!review.rejected && (
+                {resolvedStatus !== "rejected" && (
                   <Button size="sm" variant="outline"
                     className="gap-1.5 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
                     onClick={() => act("reject")} disabled={!!busy}
@@ -390,9 +399,9 @@ export default function ReviewsTab() {
 
   const counts = {
     all:      reviews.length,
-    pending:  reviews.filter((r) => !r.approved && !r.rejected).length,
-    approved: reviews.filter((r) => r.approved).length,
-    rejected: reviews.filter((r) => r.rejected).length,
+    pending:  reviews.filter((r) => (r.status === "pending") || (!r.status && !r.approved && !r.rejected)).length,
+    approved: reviews.filter((r) => (r.status === "approved") || r.approved).length,
+    rejected: reviews.filter((r) => (r.status === "rejected") || r.rejected).length,
   };
 
   return (
@@ -403,7 +412,7 @@ export default function ReviewsTab() {
       exit={{ opacity: 0, x: 40 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="bg-card/60 backdrop-blur-xl border-white/10 shadow-2xl">
+      <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -466,7 +475,7 @@ export default function ReviewsTab() {
               <div className="animate-spin h-8 w-8 rounded-full border-2 border-primary/20 border-t-primary" />
             </div>
           ) : reviews.length === 0 ? (
-            <div className="text-center py-16 border-2 border-dashed border-white/10 rounded-xl">
+            <div className="text-center py-16 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
               <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
               <p className="text-muted-foreground mb-4">No {filter !== "all" ? filter : ""} reviews found</p>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowCreate(true)}>

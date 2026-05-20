@@ -121,7 +121,7 @@ export function DualMarqueeSection() {
   const dupTools   = duplicate(TOOLS, 8);
 
   return (
-    <section className="w-full py-10 sm:py-12 overflow-hidden border-y border-white/5 relative">
+    <section className="w-full py-10 sm:py-12 overflow-hidden border-y border-slate-200 dark:border-white/5 relative">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-8 sm:mb-10 relative z-10">
         <h3 className="text-lg sm:text-xl md:text-2xl font-display font-bold text-center bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent px-2">
           What People Say &amp; Key Achievements
@@ -135,7 +135,7 @@ export function DualMarqueeSection() {
             {dupReviews.map((review, idx) => (
               <div
                 key={`rev-${review.id}-${idx}`}
-                className="flex-shrink-0 bg-card/60 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] hover:border-primary/30 hover:bg-card/80 transition-all cursor-default"
+                className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] hover:border-primary/30 hover:bg-white/90 dark:hover:bg-card/80 transition-all cursor-default shadow-sm dark:shadow-none"
               >
                 <div className="flex items-center gap-2.5 sm:gap-3 mb-3">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center text-primary font-bold text-xs sm:text-sm flex-shrink-0">
@@ -152,7 +152,7 @@ export function DualMarqueeSection() {
                     <Star key={i} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-muted text-muted"}`} />
                   ))}
                 </div>
-                <p className="text-[11px] sm:text-sm text-muted-foreground leading-relaxed line-clamp-2">
+                <p className="text-[11px] sm:text-sm text-slate-700 dark:text-zinc-400 leading-relaxed line-clamp-2">
                   "{review.text}"
                 </p>
               </div>
@@ -169,7 +169,7 @@ export function DualMarqueeSection() {
             return (
               <div
                 key={`stat-${stat.id}-${idx}`}
-                className="flex-shrink-0 bg-card/60 backdrop-blur-sm border border-primary/20 rounded-xl sm:rounded-2xl p-4 sm:p-5 w-[200px] sm:w-[240px] hover:border-primary/40 hover:bg-card/80 transition-all cursor-default"
+                className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm border border-primary/20 rounded-xl sm:rounded-2xl p-4 sm:p-5 w-[200px] sm:w-[240px] hover:border-primary/40 hover:bg-white/90 dark:hover:bg-card/80 transition-all cursor-default shadow-sm dark:shadow-none"
               >
                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-3 sm:mb-4">
                   <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -189,7 +189,7 @@ export function DualMarqueeSection() {
         {dupTools.map((tool, idx) => (
           <div
             key={`tool-${tool.name}-${idx}`}
-            className="flex-shrink-0 bg-card/60 backdrop-blur-sm border border-white/10 rounded-xl sm:rounded-2xl p-5 sm:p-6 w-[140px] sm:w-[160px] hover:border-primary/30 hover:bg-card/80 transition-all cursor-default flex flex-col items-center justify-center gap-3"
+            className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-2xl p-5 sm:p-6 w-[140px] sm:w-[160px] hover:border-primary/30 hover:bg-white/90 dark:hover:bg-card/80 transition-all cursor-default flex flex-col items-center justify-center gap-3 shadow-sm dark:shadow-none"
           >
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-primary/10 flex items-center justify-center relative overflow-hidden">
               <img
