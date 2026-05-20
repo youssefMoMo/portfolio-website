@@ -71,17 +71,26 @@ function HomeImage({ src, alt, className }: { src: string; alt: string; classNam
   );
 }
 
+// ── Portfolio reel speed target: 50 px/s luxury crawl ──────────────────────
+const PORTFOLIO_PX_PER_SEC = 50;
+const PORTFOLIO_MIN_DUR    = 30; // seconds floor
+
 export default function Home() {
   const { t } = useLanguage();
-  const [homeContent, setHomeContent] = useState<HomeContent | null>(null);
-  const [rafReady, setRafReady] = useState(false);
-  const weeklyItems = useMemo(() => getWeeklyRandomItems(6), []);
-  const mountedRef = useRef(true);
-  const rafRef = useRef<number | null>(null);
+  const [homeContent,       setHomeContent]      = useState<HomeContent | null>(null);
+  const [rafReady,          setRafReady]          = useState(false);
+  const [portfolioDuration, setPortfolioDuration] = useState(0);
 
+  const weeklyItems      = useMemo(() => getWeeklyRandomItems(6), []);
+  const mountedRef       = useRef(true);
+  const rafRef           = useRef<number | null>(null);
+  // Ref on the INNER scrolling track (not the overflow-hidden wrapper)
+  const portfolioTrackRef = useRef<HTMLDivElement>(null);
+
+  // Double-RAF mount guard: sets rafReady after the first composited frame.
+  // Measurement of portfolioTrackRef happens in a chained effect below.
   useEffect(() => {
     mountedRef.current = true;
-    // ✅ Double-RAF: start Featured Designs animation only after first paint
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = requestAnimationFrame(() => {
         if (mountedRef.current) setRafReady(true);
@@ -92,6 +101,23 @@ export default function Home() {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
+
+  // Measure the portfolio reel track once rafReady fires.
+  // We use 2× duplication, so scrollWidth / 2 = one set's pixel width.
+  // duration = oneSetWidth / PX_PER_SEC → guaranteed constant visual speed.
+  useEffect(() => {
+    if (!rafReady || !portfolioTrackRef.current) return;
+    const id = requestAnimationFrame(() => {
+      if (!portfolioTrackRef.current) return;
+      const oneSetWidth = portfolioTrackRef.current.scrollWidth / 2;
+      if (oneSetWidth > 0) {
+        setPortfolioDuration(
+          Math.max(oneSetWidth / PORTFOLIO_PX_PER_SEC, PORTFOLIO_MIN_DUR),
+        );
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [rafReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,29 +245,37 @@ export default function Home() {
             </motion.p>
           </div>
 
-          {/* Auto-scrolling marquee — preserves card design, adds continuous motion.
-              dir="ltr" forces consistent layout regardless of document direction.
-              Without this, in Arabic (RTL) the flex container's anchor flips
-              and the marquee freezes / disappears off-screen. */}
+          {/*
+            ── Slider 3: Featured Designs / Portfolio Reel ──────────────────
+            Architecture:
+              • dir="ltr" forces consistent RTL/LTR behaviour in Arabic locale
+              • 2× duplication (minimum for a seamless -50% CSS loop)
+              • Dynamic duration = measuredOneSetWidth / PORTFOLIO_PX_PER_SEC
+                guarantees a constant 50 px/s crawl on every screen size
+              • ref attached to the inner scrolling track (not the clip wrapper)
+          */}
           <div
             className="relative w-full overflow-hidden"
             dir="ltr"
             style={{
-              direction: "ltr",
-              maskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
-              WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+              direction       : "ltr",
+              maskImage       : "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+              WebkitMaskImage : "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
             }}
           >
             <div
+              ref={portfolioTrackRef}
               className="flex gap-6 w-max"
               style={{
-                animation: rafReady ? "marquee-scroll-left 200s linear infinite" : "none",
+                animation : (rafReady && portfolioDuration > 0)
+                  ? `marquee-scroll-left ${portfolioDuration.toFixed(3)}s linear infinite`
+                  : "none",
                 willChange: "transform",
-                transform: "translateZ(0)",
+                transform : "translateZ(0)",
               }}
             >
-              {/* 4× duplication = ~4 viewports of content → seamless loop never shows a gap */}
-              {[...weeklyItems, ...weeklyItems, ...weeklyItems, ...weeklyItems].map((item, i) => (
+              {/* 2× duplication — exactly what the @keyframes -50% translate requires */}
+              {[...weeklyItems, ...weeklyItems].map((item, i) => (
                 <div
                   key={`${item.id}-${i}`}
                   className="group relative overflow-hidden rounded-2xl bg-slate-100 dark:bg-card/40 border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-500 w-[320px] md:w-[380px] flex-shrink-0"

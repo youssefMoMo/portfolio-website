@@ -612,50 +612,13 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   3D TRANSFORM EFFECTS FOR MARQUEES
+   NOTE: .marquee-item (float3D), .marquee-container::before, and
+   @keyframes float3D have been REMOVED.
+   They were orphaned legacy classes unused by any active component.
+   Keeping them was a latent hazard: any element that accidentally
+   received the .marquee-item class would get a competing 3-second
+   transform loop that fights the parent scroll animation.
    ═══════════════════════════════════════════════════════════════ */
-.transform-style-3d {
-  transform-style: preserve-3d;
-  backface-visibility: visible;
-  perspective: 1000px;
-}
-
-@keyframes float3D {
-  0%,
-  100% {
-    transform: perspective(1000px) rotateX(0deg) rotateY(0deg) translateZ(0);
-  }
-  50% {
-    transform: perspective(1000px) rotateX(2deg) rotateY(2deg) translateZ(10px);
-  }
-}
-
-.marquee-item {
-  animation: float3D 3s ease-in-out infinite;
-  will-change: transform;
-}
-.marquee-item:hover {
-  animation-play-state: paused;
-  transform: perspective(1000px) rotateX(5deg) rotateY(10deg) translateZ(20px) !important;
-  transition: transform 0.3s ease-out;
-  z-index: 10;
-}
-
-.marquee-container::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(
-    ellipse at center,
-    transparent 0%,
-    rgba(0, 0, 0, 0.2) 100%
-  );
-  pointer-events: none;
-  z-index: 5;
-}
 
 .tool-logo {
   transition:
@@ -963,26 +926,34 @@ body.is-scrolling .shooting-star {
 }
 
 /* ═══════════════════════════════════════════════════════
-   MARQUEE SCROLL — pure CSS keyframes (never freezes)
-   Used by DualMarqueeSection and Featured Designs.
-   GPU-accelerated via translate3d. Pauses on hover.
+   MARQUEE SCROLL — pure CSS @keyframes (single engine)
+   ───────────────────────────────────────────────────────
+   Used by DualMarqueeSection and Home Featured Designs.
+   GPU-accelerated via translate3d + will-change:transform.
 
-   SPEED MATH (DO NOT REDUCE DURATION WITHOUT READING THIS):
-   ─────────────────────────────────────────────────────────
-   The keyframe moves the track by -50% of its own width.
-   Total track = N × single_set_width.
-   Pixels moved  = N × single_set_width × 0.5
-   Speed (px/s)  = (N × single_set_width) / (2 × duration)
+   SPEED CALIBRATION — 2026 ARCHITECTURE:
+   ────────────────────────────────────────
+   DO NOT set a static duration. Duration is computed at
+   runtime in the React component via:
 
-   Current targets (luxury crawl ≈ 15–25 px/s):
-     DualMarqueeSection  — N=8 sets  → duration 200s
-     Home Featured       — N=4 sets  → duration 200s
-     SkillsMarquee       — N=4 sets  → duration 200s (Framer)
-     ReviewsMarquee      — N=4 sets  → duration 200s (Framer)
+     oneSetWidth = trackRef.scrollWidth / 2   ← 2× duplication
+     duration    = oneSetWidth / PX_PER_SECOND
 
-   Rule: if you add more items (increase N), scale duration
-   proportionally  (duration_new = duration_old × N_new / N_old)
-   to keep the same perceived speed.
+   Targets:
+     Reviews row    → 50 px/s
+     Stats row      → 45 px/s
+     Tools row      → 38 px/s
+     Portfolio reel → 50 px/s
+
+   This guarantees a constant luxury crawl regardless of how
+   many Supabase reviews load, viewport width, or card sizes.
+
+   DUPLICATION: Always exactly 2× (copy-A + copy-B).
+   With 2× duplication the -50% keyframe translates by
+   exactly one set's width → seamless loop with zero gap.
+
+   SkillsMarquee.tsx and ReviewsMarquee.tsx have been
+   removed (dead code — never imported by any page).
 ═══════════════════════════════════════════════════════ */
 @keyframes marquee-scroll-left {
   0%   { transform: translate3d(0, 0, 0); }

@@ -1,21 +1,43 @@
 // src/components/DualMarqueeSection.tsx
 //
-// ✅ ROOT-CAUSE SLIDER FIX:
-//   - Pure CSS @keyframes marquee (never freezes — no JS animation dependency)
-//   - requestAnimationFrame mount guard: animation only starts AFTER first paint
-//   - status === "approved" filter (replaces broken `verified` check)
-//   - Proper cleanup on unmount to prevent memory leaks
-//   - CSS `will-change: transform` + `translateZ(0)` for GPU layer promotion
-//   - No framer-motion on the scroll loop (framer's `repeat: Infinity` can
-//     desync on first paint; CSS animations start immediately with no tick delay)
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  MARQUEE ANIMATION ARCHITECTURE — 2026 OVERHAUL                        ║
+// ║                                                                          ║
+// ║  SINGLE ENGINE: Pure CSS @keyframes only. Zero Framer Motion on scroll  ║
+// ║  tracks. FM's repeat:Infinity desynchronises on first paint; CSS        ║
+// ║  animations start on the compositing thread with no JS tick delay.      ║
+// ║                                                                          ║
+// ║  DYNAMIC SPEED CALIBRATION — the critical fix:                          ║
+// ║    1. Duplicate items exactly 2× (minimum for a -50% seamless loop).    ║
+// ║    2. After first paint, measure scrollWidth / 2 = one set's width.     ║
+// ║    3. Compute duration = oneSetWidth / PX_PER_SECOND.                   ║
+// ║    This locks every row to a constant pixel-per-second crawl regardless ║
+// ║    of how many reviews Supabase returns, screen DPI, or card sizes.     ║
+// ║                                                                          ║
+// ║  NO .marquee-item / float3D: those CSS classes are removed. They        ║
+// ║  applied a competing transform animation on child elements.             ║
+// ║                                                                          ║
+// ║  RAF MOUNT GUARD: setReady fires only after double-rAF → guaranteed     ║
+// ║  to land after the browser's first composited frame.                    ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Star, CheckCircle, Briefcase, Users, Clock,
   Zap, Gamepad, RefreshCw, Repeat,
 } from "lucide-react";
 import { statsData } from "@/lib/data";
 import { getAllReviews, type Review } from "@/lib/contentManager";
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+/** Target scroll speed in CSS pixels per second. 50 px/s ≈ a slow, cinematic drift. */
+const REVIEWS_PX_PER_SEC  = 50;
+const STATS_PX_PER_SEC    = 45;
+const TOOLS_PX_PER_SEC    = 38;
+
+/** Minimum animation duration (seconds) — prevents sub-second flickers on tiny viewports. */
+const MIN_DURATION = 30;
 
 const STATS_ICONS: Record<string, React.ElementType> = {
   briefcase: Briefcase, users: Users, clock: Clock, star: Star,
@@ -26,28 +48,60 @@ const TOOLS = [
   { id: 1, name: "Photoshop",     logo: "/images/global/photoshop.png",     emoji: "🖼️" },
   { id: 2, name: "Figma",         logo: "/images/global/figma.png",         emoji: "🎨" },
   { id: 3, name: "Roblox Studio", logo: "/images/global/roblox-studio.png", emoji: "🎮" },
+  { id: 4, name: "Illustrator",   logo: "",                                  emoji: "🎭" },
+  { id: 5, name: "After Effects", logo: "",                                  emoji: "✨" },
+  { id: 6, name: "Blender",       logo: "",                                  emoji: "🔷" },
 ];
 
-// Duplicate enough for a seamless loop: the track is 2× the original set width.
-// We animate translate from 0 → -50%, so the second half is always offscreen.
-function duplicate<T>(arr: T[], times = 6): T[] {
-  const out: T[] = [];
-  for (let i = 0; i < times; i++) out.push(...arr);
-  return out;
+// Edge-fade mask applied to every marquee row wrapper
+const MASK =
+  "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)";
+
+// ─── Generic MarqueeRow ──────────────────────────────────────────────────────
+//
+// Accepts items[] + renderItem (not pre-duplicated children).
+// Handles 2× duplication internally so it can precisely measure oneSetWidth
+// and compute the correct duration to achieve the target px/s.
+
+interface MarqueeRowProps<T> {
+  items     : T[];
+  renderItem: (item: T, globalIdx: number) => React.ReactNode;
+  direction ?: "left" | "right";
+  pxPerSec  ?: number;
+  ready     : boolean;
 }
 
-// Fade-edge mask applied to every marquee row
-const MASK = "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)";
+function MarqueeRow<T extends NonNullable<unknown>>({
+  items,
+  renderItem,
+  direction  = "left",
+  pxPerSec   = REVIEWS_PX_PER_SEC,
+  ready,
+}: MarqueeRowProps<T>) {
+  const trackRef             = useRef<HTMLDivElement>(null);
+  const [duration, setDur]   = useState(0);
+  const animName             =
+    direction === "left" ? "marquee-scroll-left" : "marquee-scroll-right";
 
-interface MarqueeRowProps {
-  duration: number;
-  direction?: "left" | "right";
-  children: React.ReactNode;
-  ready: boolean;
-}
+  // After first paint (ready=true) — or whenever items change (async Supabase load) —
+  // measure half of scrollWidth (= one set's width) and derive the CSS duration.
+  useEffect(() => {
+    if (!ready || !trackRef.current || items.length === 0) return;
+    const id = requestAnimationFrame(() => {
+      if (!trackRef.current) return;
+      // scrollWidth = copy-A width + copy-B width = 2 × oneSetWidth
+      const oneSetWidth = trackRef.current.scrollWidth / 2;
+      if (oneSetWidth > 0) {
+        setDur(Math.max(oneSetWidth / pxPerSec, MIN_DURATION));
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [ready, items, pxPerSec]);
 
-function MarqueeRow({ duration, direction = "left", children, ready }: MarqueeRowProps) {
-  const animName = direction === "left" ? "marquee-scroll-left" : "marquee-scroll-right";
+  if (items.length === 0) return null;
+
+  const isAnimating = ready && duration > 0;
+
   return (
     <div
       className="relative w-full overflow-hidden"
@@ -55,41 +109,47 @@ function MarqueeRow({ duration, direction = "left", children, ready }: MarqueeRo
       style={{ maskImage: MASK, WebkitMaskImage: MASK }}
     >
       <div
+        ref={trackRef}
         className="flex gap-4 sm:gap-6 w-max"
         style={{
-          // Only apply animation after first paint — eliminates "frozen on load"
-          animation: ready ? `${animName} ${duration}s linear infinite` : "none",
+          animation : isAnimating
+            ? `${animName} ${duration.toFixed(3)}s linear infinite`
+            : "none",
           willChange: "transform",
-          transform: "translateZ(0)",
+          transform : "translateZ(0)",
         }}
       >
-        {children}
+        {/* Copy A — keys prefixed "a-" */}
+        {items.map((item, i) => renderItem(item, i))}
+        {/* Copy B — keys prefixed "b-" via offset index */}
+        {items.map((item, i) => renderItem(item, items.length + i))}
       </div>
     </div>
   );
 }
 
+// ─── DualMarqueeSection ──────────────────────────────────────────────────────
+
 export function DualMarqueeSection() {
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [ready, setReady]     = useState(false);
+  const [ready,   setReady]   = useState(false);
   const rafRef                = useRef<number | null>(null);
   const mountedRef            = useRef(true);
 
-  // Load approved reviews
+  // Load approved reviews from Supabase / content manager
   useEffect(() => {
     mountedRef.current = true;
-    getAllReviews().then((data) => {
-      if (mountedRef.current) {
-        // getAllReviews already filters status === 'approved' at the DB level
-        setReviews(Array.isArray(data) ? data : []);
-      }
-    }).catch(() => {
-      if (mountedRef.current) setReviews([]);
-    });
+    getAllReviews()
+      .then((data) => {
+        if (mountedRef.current) setReviews(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (mountedRef.current) setReviews([]);
+      });
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Live update listener
+  // Live update listener (admin panel pushes contentUpdated events)
   useEffect(() => {
     const handler = (e: CustomEvent) => {
       if (e.detail?.type === "reviews" && mountedRef.current) {
@@ -103,9 +163,9 @@ export function DualMarqueeSection() {
     return () => window.removeEventListener("contentUpdated", handler as EventListener);
   }, []);
 
-  // ✅ RAF mount guard — start animations only after first paint
+  // Double-RAF mount guard — guarantees first paint before animations start.
+  // A single rAF fires before layout; two rAFs guarantee at least one painted frame.
   useEffect(() => {
-    // Double-RAF guarantees the browser has painted at least one frame
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = requestAnimationFrame(() => {
         if (mountedRef.current) setReady(true);
@@ -116,12 +176,6 @@ export function DualMarqueeSection() {
     };
   }, []);
 
-  // ⚡ SPEED FIX: More duplicates = longer pixel track = mathematically ensures
-  // the 200s duration produces a luxury crawl regardless of screen width.
-  const dupReviews = duplicate(reviews, reviews.length > 0 ? 8 : 0);
-  const dupStats   = duplicate(statsData, 8);
-  const dupTools   = duplicate(TOOLS, 10);
-
   return (
     <section className="w-full py-10 sm:py-12 overflow-hidden border-y border-slate-200 dark:border-white/5 relative">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-8 sm:mb-10 relative z-10">
@@ -130,13 +184,17 @@ export function DualMarqueeSection() {
         </h3>
       </div>
 
-      {/* ── Reviews row ─────────────────────────────────────── */}
-      {dupReviews.length > 0 && (
+      {/* ── Slider 1: Testimonials / Reviews loop ─────────────────────────── */}
+      {reviews.length > 0 && (
         <div className="mb-6 sm:mb-8">
-          <MarqueeRow duration={200} direction="left" ready={ready}>
-            {dupReviews.map((review, idx) => (
+          <MarqueeRow
+            items={reviews}
+            direction="left"
+            pxPerSec={REVIEWS_PX_PER_SEC}
+            ready={ready}
+            renderItem={(review, idx) => (
               <div
-                key={`rev-${review.id}-${idx}`}
+                key={`rev-${idx}`}
                 className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px] hover:border-primary/30 hover:bg-white/90 dark:hover:bg-card/80 transition-all cursor-default shadow-sm dark:shadow-none"
               >
                 <div className="flex items-center gap-2.5 sm:gap-3 mb-3">
@@ -144,33 +202,50 @@ export function DualMarqueeSection() {
                     {review.avatar || review.name.charAt(0)}
                   </div>
                   <div className="min-w-0">
-                    <h4 className="font-semibold text-foreground text-xs sm:text-sm truncate">{review.name}</h4>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{review.project_type} • {review.date}</p>
+                    <h4 className="font-semibold text-foreground text-xs sm:text-sm truncate">
+                      {review.name}
+                    </h4>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
+                      {review.project_type} • {review.date}
+                    </p>
                   </div>
-                  {review.verified && <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 ml-auto flex-shrink-0" />}
+                  {review.verified && (
+                    <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 ml-auto flex-shrink-0" />
+                  )}
                 </div>
                 <div className="flex gap-0.5 sm:gap-1 mb-2">
                   {[...Array(5)].map((_, i) => (
-                    <Star key={i} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-muted text-muted"}`} />
+                    <Star
+                      key={i}
+                      className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 ${
+                        i < review.rating
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "fill-muted text-muted"
+                      }`}
+                    />
                   ))}
                 </div>
                 <p className="text-[11px] sm:text-sm text-slate-700 dark:text-zinc-400 leading-relaxed line-clamp-2">
-                  "{review.text}"
+                  &ldquo;{review.text}&rdquo;
                 </p>
               </div>
-            ))}
-          </MarqueeRow>
+            )}
+          />
         </div>
       )}
 
-      {/* ── Stats row ────────────────────────────────────────── */}
+      {/* ── Slider 2: Stats / Key Achievements loop ───────────────────────── */}
       <div className="mb-6 sm:mb-8">
-        <MarqueeRow duration={200} direction="left" ready={ready}>
-          {dupStats.map((stat, idx) => {
+        <MarqueeRow
+          items={statsData}
+          direction="left"
+          pxPerSec={STATS_PX_PER_SEC}
+          ready={ready}
+          renderItem={(stat, idx) => {
             const Icon = STATS_ICONS[stat.icon] ?? Briefcase;
             return (
               <div
-                key={`stat-${stat.id}-${idx}`}
+                key={`stat-${idx}`}
                 className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm border border-primary/20 rounded-xl sm:rounded-2xl p-4 sm:p-5 w-[200px] sm:w-[240px] hover:border-primary/40 hover:bg-white/90 dark:hover:bg-card/80 transition-all cursor-default shadow-sm dark:shadow-none"
               >
                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-3 sm:mb-4">
@@ -179,40 +254,55 @@ export function DualMarqueeSection() {
                 <div className="text-2xl sm:text-3xl font-display font-bold bg-gradient-to-r from-primary to-indigo-400 bg-clip-text text-transparent mb-1 sm:mb-2">
                   {stat.value}
                 </div>
-                <p className="text-[11px] sm:text-xs text-muted-foreground">{stat.title}</p>
+                <p className="text-[11px] sm:text-xs text-muted-foreground">
+                  {stat.title}
+                </p>
               </div>
             );
-          })}
-        </MarqueeRow>
+          }}
+        />
       </div>
 
-      {/* ── Tools row ────────────────────────────────────────── */}
-      <MarqueeRow duration={200} direction="right" ready={ready}>
-        {dupTools.map((tool, idx) => (
+      {/* ── Tools / software row (right-scroll) ───────────────────────────── */}
+      <MarqueeRow
+        items={TOOLS}
+        direction="right"
+        pxPerSec={TOOLS_PX_PER_SEC}
+        ready={ready}
+        renderItem={(tool, idx) => (
           <div
-            key={`tool-${tool.name}-${idx}`}
+            key={`tool-${idx}`}
             className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm border border-slate-200 dark:border-white/10 rounded-xl sm:rounded-2xl p-5 sm:p-6 w-[140px] sm:w-[160px] hover:border-primary/30 hover:bg-white/90 dark:hover:bg-card/80 transition-all cursor-default flex flex-col items-center justify-center gap-3 shadow-sm dark:shadow-none"
           >
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-primary/10 flex items-center justify-center relative overflow-hidden">
-              <img
-                src={tool.logo}
-                alt={tool.name}
-                className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement;
-                  img.style.display = "none";
-                  const fb = img.parentElement?.querySelector(".emoji-fb") as HTMLElement | null;
-                  if (fb) fb.style.display = "flex";
-                }}
-              />
-              <div className="emoji-fb hidden absolute inset-0 items-center justify-center text-2xl sm:text-3xl">
+              {tool.logo ? (
+                <img
+                  src={tool.logo}
+                  alt={tool.name}
+                  className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+                  onError={(e) => {
+                    const img = e.target as HTMLImageElement;
+                    img.style.display = "none";
+                    const fb = img.parentElement?.querySelector(
+                      ".emoji-fb",
+                    ) as HTMLElement | null;
+                    if (fb) fb.style.display = "flex";
+                  }}
+                />
+              ) : null}
+              <div
+                className="emoji-fb absolute inset-0 items-center justify-center text-2xl sm:text-3xl"
+                style={{ display: tool.logo ? "none" : "flex" }}
+              >
                 {tool.emoji}
               </div>
             </div>
-            <p className="text-[11px] sm:text-xs font-medium text-foreground text-center">{tool.name}</p>
+            <p className="text-[11px] sm:text-xs font-medium text-foreground text-center">
+              {tool.name}
+            </p>
           </div>
-        ))}
-      </MarqueeRow>
+        )}
+      />
     </section>
   );
 }
