@@ -11,7 +11,7 @@ const toolsData = [
 ];
 
 export function SkillsMarquee() {
-  const duplicatedTools = [...toolsData, ...toolsData, ...toolsData];
+  const duplicatedTools = [...toolsData, ...toolsData, ...toolsData, ...toolsData];
 
   return (
     <section className="w-full py-12 overflow-hidden border-y border-white/5">
@@ -34,9 +34,9 @@ export function SkillsMarquee() {
         <motion.div
           className="flex gap-8"
           initial={{ x: 0 }}
-          animate={{ x: "-33.33%" }}
+          animate={{ x: "-25%" }}
           transition={{
-            duration: 30,
+            duration: 200,
             ease: "linear",
             repeat: Infinity,
           }}

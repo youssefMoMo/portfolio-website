@@ -3,8 +3,8 @@ import { Star, CheckCircle2 } from "lucide-react";
 import { reviewsData } from "@/lib/data";
 
 export function ReviewsMarquee() {
-  // Duplicate reviews for seamless loop
-  const duplicatedReviews = [...reviewsData, ...reviewsData, ...reviewsData];
+  // Quadruple for seamless loop: -25% translate covers exactly one original set
+  const duplicatedReviews = [...reviewsData, ...reviewsData, ...reviewsData, ...reviewsData];
 
   return (
     <section className="w-full max-w-7xl mx-auto px-6 mb-24 relative z-10 overflow-hidden">
@@ -39,10 +39,10 @@ export function ReviewsMarquee() {
         <div className="flex gap-6">
           <motion.div
             className="flex gap-6"
-            animate={{ x: [0, -33.333] }}
+            animate={{ x: "-25%" }}
             transition={{
-              duration: 60,
-              repeat: 999999,
+              duration: 200,
+              repeat: Infinity,
               ease: "linear",
               repeatType: "loop",
             }}

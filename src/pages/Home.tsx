@@ -235,12 +235,13 @@ export default function Home() {
             <div
               className="flex gap-6 w-max"
               style={{
-                animation: rafReady ? "marquee-scroll-left 75s linear infinite" : "none",
+                animation: rafReady ? "marquee-scroll-left 200s linear infinite" : "none",
                 willChange: "transform",
                 transform: "translateZ(0)",
               }}
             >
-              {[...weeklyItems, ...weeklyItems].map((item, i) => (
+              {/* 4× duplication = ~4 viewports of content → seamless loop never shows a gap */}
+              {[...weeklyItems, ...weeklyItems, ...weeklyItems, ...weeklyItems].map((item, i) => (
                 <div
                   key={`${item.id}-${i}`}
                   className="group relative overflow-hidden rounded-2xl bg-slate-100 dark:bg-card/40 border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-500 w-[320px] md:w-[380px] flex-shrink-0"

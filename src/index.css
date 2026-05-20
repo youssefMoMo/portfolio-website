@@ -966,6 +966,23 @@ body.is-scrolling .shooting-star {
    MARQUEE SCROLL — pure CSS keyframes (never freezes)
    Used by DualMarqueeSection and Featured Designs.
    GPU-accelerated via translate3d. Pauses on hover.
+
+   SPEED MATH (DO NOT REDUCE DURATION WITHOUT READING THIS):
+   ─────────────────────────────────────────────────────────
+   The keyframe moves the track by -50% of its own width.
+   Total track = N × single_set_width.
+   Pixels moved  = N × single_set_width × 0.5
+   Speed (px/s)  = (N × single_set_width) / (2 × duration)
+
+   Current targets (luxury crawl ≈ 15–25 px/s):
+     DualMarqueeSection  — N=8 sets  → duration 200s
+     Home Featured       — N=4 sets  → duration 200s
+     SkillsMarquee       — N=4 sets  → duration 200s (Framer)
+     ReviewsMarquee      — N=4 sets  → duration 200s (Framer)
+
+   Rule: if you add more items (increase N), scale duration
+   proportionally  (duration_new = duration_old × N_new / N_old)
+   to keep the same perceived speed.
 ═══════════════════════════════════════════════════════ */
 @keyframes marquee-scroll-left {
   0%   { transform: translate3d(0, 0, 0); }

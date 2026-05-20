@@ -116,9 +116,11 @@ export function DualMarqueeSection() {
     };
   }, []);
 
-  const dupReviews = duplicate(reviews, reviews.length > 0 ? 6 : 0);
-  const dupStats   = duplicate(statsData, 6);
-  const dupTools   = duplicate(TOOLS, 8);
+  // ⚡ SPEED FIX: More duplicates = longer pixel track = mathematically ensures
+  // the 200s duration produces a luxury crawl regardless of screen width.
+  const dupReviews = duplicate(reviews, reviews.length > 0 ? 8 : 0);
+  const dupStats   = duplicate(statsData, 8);
+  const dupTools   = duplicate(TOOLS, 10);
 
   return (
     <section className="w-full py-10 sm:py-12 overflow-hidden border-y border-slate-200 dark:border-white/5 relative">
@@ -131,7 +133,7 @@ export function DualMarqueeSection() {
       {/* ── Reviews row ─────────────────────────────────────── */}
       {dupReviews.length > 0 && (
         <div className="mb-6 sm:mb-8">
-          <MarqueeRow duration={75} direction="left" ready={ready}>
+          <MarqueeRow duration={200} direction="left" ready={ready}>
             {dupReviews.map((review, idx) => (
               <div
                 key={`rev-${review.id}-${idx}`}
@@ -163,7 +165,7 @@ export function DualMarqueeSection() {
 
       {/* ── Stats row ────────────────────────────────────────── */}
       <div className="mb-6 sm:mb-8">
-        <MarqueeRow duration={75} direction="left" ready={ready}>
+        <MarqueeRow duration={200} direction="left" ready={ready}>
           {dupStats.map((stat, idx) => {
             const Icon = STATS_ICONS[stat.icon] ?? Briefcase;
             return (
@@ -185,7 +187,7 @@ export function DualMarqueeSection() {
       </div>
 
       {/* ── Tools row ────────────────────────────────────────── */}
-      <MarqueeRow duration={75} direction="right" ready={ready}>
+      <MarqueeRow duration={200} direction="right" ready={ready}>
         {dupTools.map((tool, idx) => (
           <div
             key={`tool-${tool.name}-${idx}`}
