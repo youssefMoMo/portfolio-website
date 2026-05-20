@@ -48,9 +48,6 @@ const TOOLS = [
   { id: 1, name: "Photoshop",     logo: "/images/global/photoshop.png",     emoji: "🖼️" },
   { id: 2, name: "Figma",         logo: "/images/global/figma.png",         emoji: "🎨" },
   { id: 3, name: "Roblox Studio", logo: "/images/global/roblox-studio.png", emoji: "🎮" },
-  { id: 4, name: "Illustrator",   logo: "",                                  emoji: "🎭" },
-  { id: 5, name: "After Effects", logo: "",                                  emoji: "✨" },
-  { id: 6, name: "Blender",       logo: "",                                  emoji: "🔷" },
 ];
 
 // Edge-fade mask applied to every marquee row wrapper

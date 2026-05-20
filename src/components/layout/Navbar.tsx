@@ -30,11 +30,46 @@ export function Navbar() {
   const [isScrolled,    setIsScrolled]    = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [settingsOpen,  setSettingsOpen]  = useState(false);
-  const [time,          setTime]          = useState(() =>
-    typeof window === "undefined"
-      ? ""
-      : new Date().toLocaleTimeString("en-US", { hour12: false }),
-  );
+  const [time,      setTime]      = useState("");
+  const [gmtOffset, setGmtOffset] = useState(2);
+
+  // ── Egypt seasonal timezone utility ──────────────────────────────────────
+  // Egypt observes GMT+3 (summer) from the last Friday of April through the
+  // last Thursday of October, and GMT+2 (winter) for the rest of the year.
+  // This function is pure and recalculates on every tick so it self-corrects
+  // at the exact moment of the seasonal boundary without any hardcoded dates.
+  const getEgyptOffset = (): number => {
+    const now  = new Date();
+    const year = now.getFullYear();
+
+    const lastWeekdayOfMonth = (y: number, month: number, weekday: number): Date => {
+      // month: 0-indexed (3 = April, 9 = October); weekday: 0=Sun … 6=Sat
+      const lastDay = new Date(y, month + 1, 0).getDate();
+      for (let d = lastDay; d >= 1; d--) {
+        if (new Date(y, month, d).getDay() === weekday) {
+          return new Date(y, month, d, 0, 0, 0, 0);
+        }
+      }
+      return new Date(y, month, lastDay, 0, 0, 0, 0);
+    };
+
+    // Summer window: last Friday of April (start, inclusive) →
+    //                last Thursday of October (end-of-day, inclusive)
+    const summerStart = lastWeekdayOfMonth(year, 3, 5);   // last Friday of April
+    const summerEnd   = lastWeekdayOfMonth(year, 9, 4);   // last Thursday of October
+    summerEnd.setHours(23, 59, 59, 999);
+
+    return now >= summerStart && now <= summerEnd ? 3 : 2;
+  };
+
+  // Build an HH:MM:SS string for the given UTC offset (avoids relying on the
+  // host machine's local timezone, which may differ from Egypt).
+  const formatEgyptTime = (offset: number): string => {
+    const now    = new Date();
+    const utcMs  = now.getTime() + now.getTimezoneOffset() * 60_000;
+    const local  = new Date(utcMs + offset * 3_600_000);
+    return local.toLocaleTimeString("en-US", { hour12: false });
+  };
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -44,9 +79,18 @@ export function Navbar() {
 
   useEffect(() => { setMobileMenuOpen(false); }, [location]);
 
+  // Initialise on first client render (avoids SSR mismatch)
+  useEffect(() => {
+    const offset = getEgyptOffset();
+    setGmtOffset(offset);
+    setTime(formatEgyptTime(offset));
+  }, []);
+
   useEffect(() => {
     const interval = setInterval(() => {
-      setTime(new Date().toLocaleTimeString("en-US", { hour12: false }));
+      const offset = getEgyptOffset();
+      setGmtOffset(offset);
+      setTime(formatEgyptTime(offset));
     }, 1000);
     return () => clearInterval(interval);
   }, []);
@@ -110,8 +154,23 @@ export function Navbar() {
 
           {/* Right Actions */}
           <div className="flex items-center gap-2">
-            <div className="hidden sm:block text-xs font-mono text-muted-foreground w-[70px] text-center">
-              {time}
+            {/* ── Clock + GMT badge ──────────────────────────────────────── */}
+            <div className="hidden sm:flex items-center gap-1.5">
+              {/* Live time display */}
+              <div className="text-xs font-mono text-muted-foreground bg-muted/40 border border-border/60 rounded-md px-2 py-1 tabular-nums w-[70px] text-center leading-none">
+                {time}
+              </div>
+              {/* Dynamic GMT offset badge — auto-switches GMT+2 ↔ GMT+3 seasonally */}
+              <div
+                className="text-[10px] font-mono font-semibold leading-none px-2 py-1 rounded-md border border-border/60 bg-muted/40 text-muted-foreground tabular-nums"
+                title={
+                  gmtOffset === 3
+                    ? "Egypt Summer Time (GMT+3) — last Friday of April → last Thursday of October"
+                    : "Egypt Winter Time (GMT+2)"
+                }
+              >
+                GMT+{gmtOffset}
+              </div>
             </div>
 
             <Button
