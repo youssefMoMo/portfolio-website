@@ -1,151 +1,176 @@
-import { Suspense, lazy, useEffect, useState } from "react";
-import { Switch, Route, useLocation } from "wouter";
-import { AnimatePresence, motion } from "framer-motion";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider } from "@/hooks/use-theme";
-import { LanguageProvider } from "@/hooks/use-language";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Layout } from "@/components/layout/Layout";
-import { SEO } from "@/components/SEO";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { useUserTracker, subscribeToBanStatus } from "@/hooks/useUserTracker";
-import { BannedScreen } from "@/components/BannedScreen";
+"use client";
 
-const Home           = lazy(() => import("@/pages/Home"));
-const Portfolio      = lazy(() => import("@/pages/Portfolio"));
-const Games          = lazy(() => import("@/pages/Games"));
-const Pricing        = lazy(() => import("@/pages/Pricing"));
-const Reviews        = lazy(() => import("@/pages/Reviews"));
-const Policies       = lazy(() => import("@/pages/Policies"));
-const Admin          = lazy(() => import("@/pages/Admin"));
-const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
-const AdminCallback  = lazy(() => import("@/pages/admin/callback"));
-const NotFound       = lazy(() => import("@/pages/not-found"));
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
+import { supabase } from "@/lib/supabaseClient";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 5 * 60 * 1000,
-    },
-  },
-});
+// Components
+import BannedScreen, {
+  UnbanToast,
+  AdminBroadcastBanner,
+} from "@/components/BannedScreen";
+import Navbar from "@/components/Navbar";
+// ... import your page router / layout components here
 
-const PAGE_TRANSITION = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  exit:    { opacity: 0, y: 4 },
-  transition: { duration: 0.18, ease: "easeOut" },
-};
-
-function PageWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    <motion.div
-      {...PAGE_TRANSITION}
-      style={{ willChange: "opacity, transform" }}
-    >
-      <ErrorBoundary>{children}</ErrorBoundary>
-    </motion.div>
-  );
+// ─── Session-token helper (must match useUserTracker) ────────────────────────
+function getSessionToken(): string | null {
+  try {
+    return sessionStorage.getItem("youssef_session_token");
+  } catch {
+    return null;
+  }
 }
 
-const PageLoader = (
-  <div className="min-h-[50vh] flex items-center justify-center">
-    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
-  </div>
-);
-
-function AppRoutes() {
-  const [location] = useLocation();
-
-  return (
-    <AnimatePresence mode="wait" initial={false}>
-      <Switch key={location} location={location}>
-        <Route path="/">
-          <PageWrapper><Suspense fallback={PageLoader}><Home /></Suspense></PageWrapper>
-        </Route>
-        <Route path="/portfolio">
-          <PageWrapper><Suspense fallback={PageLoader}><Portfolio /></Suspense></PageWrapper>
-        </Route>
-        <Route path="/games">
-          <PageWrapper><Suspense fallback={PageLoader}><Games /></Suspense></PageWrapper>
-        </Route>
-        <Route path="/pricing">
-          <PageWrapper><Suspense fallback={PageLoader}><Pricing /></Suspense></PageWrapper>
-        </Route>
-        <Route path="/reviews">
-          <PageWrapper><Suspense fallback={PageLoader}><Reviews /></Suspense></PageWrapper>
-        </Route>
-        <Route path="/policies">
-          <PageWrapper><Suspense fallback={PageLoader}><Policies /></Suspense></PageWrapper>
-        </Route>
-        <Route path="/admin">
-          <PageWrapper><Suspense fallback={PageLoader}><Admin /></Suspense></PageWrapper>
-        </Route>
-        <Route path="/admin/callback">
-          <PageWrapper><Suspense fallback={PageLoader}><AdminCallback /></Suspense></PageWrapper>
-        </Route>
-        <Route path="/admin/dashboard">
-          <PageWrapper>
-            <Suspense fallback={PageLoader}>
-              <ProtectedRoute><AdminDashboard /></ProtectedRoute>
-            </Suspense>
-          </PageWrapper>
-        </Route>
-        <Route>
-          <PageWrapper><Suspense fallback={PageLoader}><NotFound /></Suspense></PageWrapper>
-        </Route>
-      </Switch>
-    </AnimatePresence>
-  );
-}
-
-function AppContent() {
-  const { sessionToken } = useUserTracker();
+// ─── App Root ─────────────────────────────────────────────────────────────────
+export default function App() {
+  // ── State ────────────────────────────────────────────────────────────────
   const [isBanned, setIsBanned] = useState(false);
+  const [banReason, setBanReason] = useState<string | null>(null);
+  const [unbanMessage, setUnbanMessage] = useState<string | null>(null);
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Subscribe to realtime ban-status changes from the admin panel
+  // ── Resolve session token on mount ──────────────────────────────────────
+  useEffect(() => {
+    // The token may not exist yet if useUserTracker hasn't run. Poll briefly.
+    let attempts = 0;
+    const poll = setInterval(() => {
+      const tok = getSessionToken();
+      if (tok) {
+        setSessionToken(tok);
+        clearInterval(poll);
+      }
+      if (++attempts > 20) clearInterval(poll); // give up after 2 s
+    }, 100);
+    return () => clearInterval(poll);
+  }, []);
+
+  // ── Bootstrap: fetch initial ban state ──────────────────────────────────
   useEffect(() => {
     if (!sessionToken) return;
-    const unsub = subscribeToBanStatus(sessionToken, () => setIsBanned(true));
-    return unsub;
+
+    async function fetchSession() {
+      const { data } = await supabase
+        .from("user_sessions")
+        .select("is_banned, ban_reason, admin_message")
+        .eq("session_token", sessionToken)
+        .maybeSingle();
+
+      if (data) {
+        setIsBanned(!!data.is_banned);
+        setBanReason(data.ban_reason ?? null);
+        setAdminMessage(data.admin_message ?? null);
+      }
+    }
+
+    fetchSession();
   }, [sessionToken]);
 
-  if (isBanned) return <BannedScreen sessionToken={sessionToken} />;
+  // ── Realtime subscription ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!sessionToken) return;
 
-  return (
-    <Layout>
-      <SEO />
-      <AppRoutes />
-    </Layout>
-  );
-}
+    const channel = supabase
+      .channel(`app-session-${sessionToken}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "user_sessions",
+          filter: `session_token=eq.${sessionToken}`,
+        },
+        (payload: { new: Record<string, unknown> }) => {
+          const row = payload.new;
 
-export default function App() {
+          // ── State A: Ban ─────────────────────────────────────────────
+          if (row.is_banned === true) {
+            setBanReason((row.ban_reason as string | null) ?? null);
+            setIsBanned(true);
+            return;
+          }
+
+          // ── State B: Unban ───────────────────────────────────────────
+          if (row.is_banned === false && isBanned) {
+            setIsBanned(false);
+            const msg = (row.unban_message as string | null) ?? null;
+            setUnbanMessage(msg);
+            return;
+          }
+
+          // ── State C: Live admin message ──────────────────────────────
+          const newMsg = (row.admin_message as string | null) ?? null;
+          setAdminMessage(newMsg);
+        }
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionToken]);
+
+  // ── Callbacks ────────────────────────────────────────────────────────────
+  const handleUnban = useCallback((msg: string | null) => {
+    setIsBanned(false);
+    setUnbanMessage(msg);
+  }, []);
+
+  const dismissUnbanToast = useCallback(() => setUnbanMessage(null), []);
+  const dismissAdminBanner = useCallback(() => setAdminMessage(null), []);
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-        <LanguageProvider defaultLanguage="en" storageKey="yd_language">
-          <TooltipProvider delayDuration={0}>
-            <Suspense
-              fallback={
-                <div className="min-h-screen flex items-center justify-center bg-background">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-                    <p className="text-muted-foreground text-sm">Loading...</p>
-                  </div>
-                </div>
-              }
-            >
-              <AppContent />
-            </Suspense>
-            <Toaster />
-          </TooltipProvider>
-        </LanguageProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <>
+      {/* ── Global Overlays ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {unbanMessage && (
+          <UnbanToast
+            key="unban-toast"
+            message={unbanMessage}
+            onDismiss={dismissUnbanToast}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Banned Screen (full-page takeover) ───────────────────────── */}
+      <AnimatePresence>
+        {isBanned && sessionToken && (
+          <BannedScreen
+            key="banned"
+            sessionToken={sessionToken}
+            initialBanReason={banReason}
+            onUnban={handleUnban}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Normal Site Layout ────────────────────────────────────────── */}
+      {!isBanned && (
+        <div className="flex flex-col min-h-screen">
+          {/* Admin broadcast banner sits ABOVE the navbar */}
+          <AnimatePresence>
+            {adminMessage && (
+              <AdminBroadcastBanner
+                key="admin-banner"
+                message={adminMessage}
+                onDismiss={dismissAdminBanner}
+              />
+            )}
+          </AnimatePresence>
+
+          <Navbar />
+
+          {/* ↓ Your router / page content goes here */}
+          <main className="flex-1">
+            {/* <RouterOutlet /> or <PageContent /> */}
+          </main>
+        </div>
+      )}
+    </>
   );
 }
