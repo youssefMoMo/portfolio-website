@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -10,6 +10,8 @@ import { Layout } from "@/components/layout/Layout";
 import { SEO } from "@/components/SEO";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useUserTracker, subscribeToBanStatus } from "@/hooks/useUserTracker";
+import { BannedScreen } from "@/components/BannedScreen";
 
 const Home           = lazy(() => import("@/pages/Home"));
 const Portfolio      = lazy(() => import("@/pages/Portfolio"));
@@ -102,6 +104,18 @@ function AppRoutes() {
 }
 
 function AppContent() {
+  const { sessionToken } = useUserTracker();
+  const [isBanned, setIsBanned] = useState(false);
+
+  // Subscribe to realtime ban-status changes from the admin panel
+  useEffect(() => {
+    if (!sessionToken) return;
+    const unsub = subscribeToBanStatus(sessionToken, () => setIsBanned(true));
+    return unsub;
+  }, [sessionToken]);
+
+  if (isBanned) return <BannedScreen sessionToken={sessionToken} />;
+
   return (
     <Layout>
       <SEO />

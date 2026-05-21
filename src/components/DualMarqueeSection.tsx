@@ -3,6 +3,16 @@
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  MARQUEE ANIMATION ARCHITECTURE — 2026 OVERHAUL                        ║
 // ║                                                                          ║
+// ║  3-WAY ALTERNATING DIRECTION MATRIX (language-guarded):                 ║
+// ║    Row 1 · Reviews  → LEFT  (←  Westbound)                             ║
+// ║    Row 2 · Stats    → RIGHT (→  Eastbound)                             ║
+// ║    Row 3 · Tools    → LEFT  (←  Westbound)                             ║
+// ║                                                                          ║
+// ║  LANGUAGE GUARD: dir="ltr" is applied to every row wrapper. The CSS     ║
+// ║  translate3d keyframes are absolute coordinate transforms — they are     ║
+// ║  NOT relative to the document writing direction, so switching the HTML   ║
+// ║  root to dir="rtl" for Arabic locale can never flip these animations.   ║
+// ║                                                                          ║
 // ║  SINGLE ENGINE: Pure CSS @keyframes only. Zero Framer Motion on scroll  ║
 // ║  tracks. FM's repeat:Infinity desynchronises on first paint; CSS        ║
 // ║  animations start on the compositing thread with no JS tick delay.      ║
@@ -13,12 +23,6 @@
 // ║    3. Compute duration = oneSetWidth / PX_PER_SECOND.                   ║
 // ║    This locks every row to a constant pixel-per-second crawl regardless ║
 // ║    of how many reviews Supabase returns, screen DPI, or card sizes.     ║
-// ║                                                                          ║
-// ║  NO .marquee-item / float3D: those CSS classes are removed. They        ║
-// ║  applied a competing transform animation on child elements.             ║
-// ║                                                                          ║
-// ║  RAF MOUNT GUARD: setReady fires only after double-rAF → guaranteed     ║
-// ║  to land after the browser's first composited frame.                    ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 
 import { useEffect, useRef, useState } from "react";
@@ -44,6 +48,9 @@ const STATS_ICONS: Record<string, React.ElementType> = {
   gamepad: Gamepad, zap: Zap, refresh: RefreshCw, repeat: Repeat,
 };
 
+// Three core tools. The MarqueeRow component measures the actual rendered
+// scrollWidth after mount and computes duration = oneSetWidth / TOOLS_PX_PER_SEC,
+// so removing items here automatically produces the correct crawl speed.
 const TOOLS = [
   { id: 1, name: "Photoshop",     logo: "/images/global/photoshop.png",     emoji: "🖼️" },
   { id: 2, name: "Figma",         logo: "/images/global/figma.png",         emoji: "🎨" },
@@ -231,11 +238,11 @@ export function DualMarqueeSection() {
         </div>
       )}
 
-      {/* ── Slider 2: Stats / Key Achievements loop ───────────────────────── */}
+      {/* ── Slider 2: Stats / Key Achievements loop — RIGHT (Eastbound) ──── */}
       <div className="mb-6 sm:mb-8">
         <MarqueeRow
           items={statsData}
-          direction="left"
+          direction="right"
           pxPerSec={STATS_PX_PER_SEC}
           ready={ready}
           renderItem={(stat, idx) => {

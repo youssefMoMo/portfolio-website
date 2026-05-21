@@ -36,6 +36,21 @@ export interface SiteUser {
   created_at: string;
 }
 
+export interface UserSession {
+  id: string;
+  session_token: string;
+  ip_hashed: string | null;
+  country: string | null;
+  joined_at: string;
+  current_page: string | null;
+  clickstream_path: string[];
+  threat_level: "low" | "medium" | "high";
+  is_banned: boolean;
+  malicious_attempts: string[];
+  last_seen: string;
+  updated_at: string;
+}
+
 export interface AnalyticsData {
   reviews: { total: number; pending: number; approved: number; avg_rating: number };
   games:   { total: number; active: number; top: { name: string; visits: number; icon_url: string }[] };
@@ -252,6 +267,82 @@ export const usersApi = {
     const { error } = await assertSupabase().from("site_visitors").update({
       is_banned: false, banned_at: null, updated_at: new Date().toISOString(),
     }).eq("id", id);
+    if (error) throw error;
+  },
+};
+
+// ── Sessions (live tracking) ───────────────────────────────────────────────
+export const sessionsApi = {
+  /** Paginated session list with optional filters. */
+  list: async (
+    page    = 1,
+    filters: { search?: string; threat?: string; banned?: boolean } = {},
+  ): Promise<{ sessions: UserSession[]; total: number }> => {
+    const db    = assertSupabase();
+    const LIMIT = 30;
+    let q = db
+      .from("user_sessions")
+      .select("*", { count: "exact" })
+      .order("last_seen", { ascending: false })
+      .range((page - 1) * LIMIT, page * LIMIT - 1);
+
+    if (filters.search?.trim()) {
+      q = q.ilike("country", `%${filters.search.trim()}%`);
+    }
+    if (filters.threat && filters.threat !== "all") {
+      q = q.eq("threat_level", filters.threat);
+    }
+    if (filters.banned !== undefined) {
+      q = q.eq("is_banned", filters.banned);
+    }
+
+    const { data, count, error } = await q;
+    if (error) throw error;
+    return { sessions: (data ?? []) as UserSession[], total: count ?? 0 };
+  },
+
+  /** Country breakdown: how many sessions per country. */
+  countryStats: async (): Promise<{ country: string; count: number }[]> => {
+    const db = assertSupabase();
+    const { data, error } = await db
+      .from("user_sessions")
+      .select("country");
+    if (error) throw error;
+    const map: Record<string, number> = {};
+    for (const row of data ?? []) {
+      const c = (row as { country?: string }).country ?? "Unknown";
+      map[c] = (map[c] ?? 0) + 1;
+    }
+    return Object.entries(map)
+      .map(([country, count]) => ({ country, count }))
+      .sort((a, b) => b.count - a.count);
+  },
+
+  /** All sessions with threat_level='high' or malicious_attempts not empty. */
+  attackLog: async (): Promise<UserSession[]> => {
+    const { data, error } = await assertSupabase()
+      .from("user_sessions")
+      .select("*")
+      .or("threat_level.eq.high,threat_level.eq.medium")
+      .order("last_seen", { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    return (data ?? []) as UserSession[];
+  },
+
+  ban: async (id: string): Promise<void> => {
+    const { error } = await assertSupabase()
+      .from("user_sessions")
+      .update({ is_banned: true, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  unban: async (id: string): Promise<void> => {
+    const { error } = await assertSupabase()
+      .from("user_sessions")
+      .update({ is_banned: false, updated_at: new Date().toISOString() })
+      .eq("id", id);
     if (error) throw error;
   },
 };
