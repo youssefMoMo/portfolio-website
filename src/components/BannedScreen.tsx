@@ -137,8 +137,11 @@ export default function BannedScreen({
           table: "user_sessions",
           filter: `session_token=eq.${sessionToken}`,
         },
-        (payload: { new: Record<string, unknown> }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
+          // supabase-js v2: mutations land on payload.new, not payload.payload
           const row = payload.new;
+          if (!row) return;
 
           // is_banned toggled off → restore access
           if (row.is_banned === false) {

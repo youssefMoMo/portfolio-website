@@ -347,7 +347,7 @@ export default function Reviews() {
           </div>
         ) : (
           <div className="columns-1 sm:columns-2 lg:columns-3 gap-5 space-y-5">
-            {reviews.map((review, i) => (
+            {reviews.map((review: Review, i: number) => (
               <motion.div
                 key={review.id}
                 initial={{ opacity: 0, y: 24 }}

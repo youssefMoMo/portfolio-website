@@ -364,7 +364,7 @@ export default function Pricing() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {plans.map((plan, i) => {
+            {plans.map((plan: PricingPlan, i: number) => {
               const Icon = iconMap[plan.icon || ""] || Zap;
               return (
                 <motion.div
@@ -438,7 +438,7 @@ export default function Pricing() {
 
                     {/* Features */}
                     <div className="flex flex-col gap-2.5 flex-1">
-                      {plan.features?.map((feature, fi) => (
+                      {plan.features?.map((feature: string, fi: number) => (
                         <div key={fi} className="flex items-center gap-2.5 text-sm">
                           <Check className="w-4 h-4 text-primary/70 shrink-0" strokeWidth={2.5} />
                           <span className="text-white/70">{feature}</span>
@@ -486,7 +486,7 @@ export default function Pricing() {
               </h2>
             </div>
             <div className="space-y-3">
-              {faqs.map((faq, i) => (
+              {faqs.map((faq: FaqItem, i: number) => (
                 <motion.div
                   key={faq.id}
                   initial={{ opacity: 0, y: 10 }}

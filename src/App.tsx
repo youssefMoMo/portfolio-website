@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase";
 
 // Components
 import BannedScreen, {
@@ -81,8 +81,11 @@ export default function App() {
           table: "user_sessions",
           filter: `session_token=eq.${sessionToken}`,
         },
-        (payload: { new: Record<string, unknown> }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
+          // supabase-js v2: mutations land on payload.new, not payload.payload
           const row = payload.new;
+          if (!row) return;
 
           // ── State A: Ban ─────────────────────────────────────────────
           if (row.is_banned === true) {
