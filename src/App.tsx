@@ -1,4 +1,17 @@
-"use client";
+// src/App.tsx
+//
+// ╔═══════════════════════════════════════════════════════════════════╗
+// ║  PROVIDER HIERARCHY (outermost → innermost)                      ║
+// ║                                                                   ║
+// ║  ThemeProvider      — must wrap everything; Navbar calls         ║
+// ║    LanguageProvider   useTheme() on first render                 ║
+// ║      [moderation state + realtime subscriptions]                 ║
+// ║        RouterContent → Layout → Navbar (safe to call hooks)      ║
+// ║                                                                   ║
+// ║  Rule: any component that calls useTheme() or useLanguage()      ║
+// ║  MUST be rendered below both providers. Nothing is rendered      ║
+// ║  outside this tree.                                               ║
+// ╚═══════════════════════════════════════════════════════════════════╝
 
 import React, {
   useCallback,
@@ -11,22 +24,28 @@ import React, {
 import { Switch, Route, useLocation } from "wouter";
 import { AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import { useUserTracker } from "@/hooks/useUserTracker";
+
+// ─── Context providers (MUST be at absolute root) ────────────────────────────
+import { ThemeProvider }    from "@/hooks/use-theme";
+import { LanguageProvider } from "@/hooks/use-language";
+
+// ─── Supabase + tracker ───────────────────────────────────────────────────────
+import { supabase }         from "@/lib/supabase";
+import { useUserTracker }   from "@/hooks/useUserTracker";
 
 // ─── Layout wrapper (public pages) ───────────────────────────────────────────
-import { Layout } from "@/components/layout/Layout";
+import { Layout }           from "@/components/layout/Layout";
 
-// ─── Moderation overlays ─────────────────────────────────────────────────────
+// ─── Moderation overlays ──────────────────────────────────────────────────────
 import BannedScreen, {
   UnbanToast,
   AdminBroadcastBanner,
 } from "@/components/BannedScreen";
 
 // ─── Eager-loaded pages (critical path) ──────────────────────────────────────
-import Home          from "@/pages/Home";
-import AdminLogin    from "@/pages/AdminLogin";
-import NotFound      from "@/pages/not-found";
+import Home       from "@/pages/Home";
+import AdminLogin from "@/pages/AdminLogin";
+import NotFound   from "@/pages/not-found";
 
 // ─── Lazy-loaded pages (deferred until navigated to) ─────────────────────────
 const Portfolio      = lazy(() => import("@/pages/Portfolio"));
@@ -38,7 +57,7 @@ const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
 const AdminCallback  = lazy(() => import("@/pages/admin/callback"));
 
 // ─── ProtectedRoute ───────────────────────────────────────────────────────────
-import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ProtectedRoute }   from "@/components/ProtectedRoute";
 
 // ─── Shared page-loading fallback ─────────────────────────────────────────────
 function PageLoader() {
@@ -49,7 +68,8 @@ function PageLoader() {
   );
 }
 
-// ─── Session-token reader (must match useUserTracker's SESSION_KEY) ───────────
+// ─── Session-token reader ─────────────────────────────────────────────────────
+// Key must match SESSION_KEY in useUserTracker.ts
 function getSessionToken(): string | null {
   try {
     return sessionStorage.getItem("youssef_session_token");
@@ -58,11 +78,9 @@ function getSessionToken(): string | null {
   }
 }
 
-// ─── Inner router — receives currentPage so useUserTracker stays up-to-date ──
-/**
- * RouterContent sits INSIDE App so it can consume the location from wouter's
- * context and forward it to useUserTracker without having to prop-drill.
- */
+// ─── RouterContent ────────────────────────────────────────────────────────────
+// Sits INSIDE the provider tree so useLocation(), useTheme(), useLanguage()
+// are all safe to call in Layout → Navbar → any page component.
 function RouterContent({
   isBanned,
   adminMessage,
@@ -74,16 +92,16 @@ function RouterContent({
 }) {
   const [location] = useLocation();
 
-  // ── Track the visitor's session (Geo-IP + heartbeat) ───────────────────
+  // Silently track the visitor's session (Geo-IP + page heartbeat)
   useUserTracker(location);
 
-  // Don't render any routes if the user is banned — BannedScreen is shown
-  // by the parent App component instead.
+  // When banned, render nothing here — the BannedScreen overlay is
+  // shown by the parent AppShell above us in the tree.
   if (isBanned) return null;
 
   return (
     <>
-      {/* Admin broadcast banner — sits above all page content */}
+      {/* Admin broadcast banner — floats above all page content */}
       <AnimatePresence>
         {adminMessage && (
           <AdminBroadcastBanner
@@ -94,73 +112,59 @@ function RouterContent({
         )}
       </AnimatePresence>
 
-      {/* ── Route table ─────────────────────────────────────────────────── */}
+      {/* ── Route table ─────────────────────────────────────────────── */}
       <Switch>
-        {/* ── Public pages (wrapped in shared Layout) ── */}
+        {/* Public pages — wrapped in shared Layout (Navbar + Footer) */}
         <Route path="/">
           <Layout><Home /></Layout>
         </Route>
 
         <Route path="/portfolio">
           <Layout>
-            <Suspense fallback={<PageLoader />}>
-              <Portfolio />
-            </Suspense>
+            <Suspense fallback={<PageLoader />}><Portfolio /></Suspense>
           </Layout>
         </Route>
 
         <Route path="/games">
           <Layout>
-            <Suspense fallback={<PageLoader />}>
-              <Games />
-            </Suspense>
+            <Suspense fallback={<PageLoader />}><Games /></Suspense>
           </Layout>
         </Route>
 
         <Route path="/pricing">
           <Layout>
-            <Suspense fallback={<PageLoader />}>
-              <Pricing />
-            </Suspense>
+            <Suspense fallback={<PageLoader />}><Pricing /></Suspense>
           </Layout>
         </Route>
 
         <Route path="/reviews">
           <Layout>
-            <Suspense fallback={<PageLoader />}>
-              <Reviews />
-            </Suspense>
+            <Suspense fallback={<PageLoader />}><Reviews /></Suspense>
           </Layout>
         </Route>
 
         <Route path="/policies">
           <Layout>
-            <Suspense fallback={<PageLoader />}>
-              <Policies />
-            </Suspense>
+            <Suspense fallback={<PageLoader />}><Policies /></Suspense>
           </Layout>
         </Route>
 
-        {/* ── Admin pages (no Layout wrapper) ── */}
+        {/* Admin pages — no Layout wrapper */}
         <Route path="/admin">
           <AdminLogin />
         </Route>
 
         <Route path="/admin/callback">
-          <Suspense fallback={<PageLoader />}>
-            <AdminCallback />
-          </Suspense>
+          <Suspense fallback={<PageLoader />}><AdminCallback /></Suspense>
         </Route>
 
         <Route path="/admin/dashboard">
           <ProtectedRoute>
-            <Suspense fallback={<PageLoader />}>
-              <AdminDashboard />
-            </Suspense>
+            <Suspense fallback={<PageLoader />}><AdminDashboard /></Suspense>
           </ProtectedRoute>
         </Route>
 
-        {/* ── 404 catch-all ── */}
+        {/* 404 catch-all */}
         <Route>
           <Layout><NotFound /></Layout>
         </Route>
@@ -169,27 +173,25 @@ function RouterContent({
   );
 }
 
-// ─── App Root ──────────────────────────────────────────────────────────────────
-export default function App() {
-  // ── Moderation state ────────────────────────────────────────────────────
+// ─── AppShell ─────────────────────────────────────────────────────────────────
+// Handles all moderation state and realtime subscriptions.
+// Rendered INSIDE ThemeProvider + LanguageProvider so every hook in every
+// child component can safely call useTheme() / useLanguage().
+function AppShell() {
+  // ── Moderation state ──────────────────────────────────────────────────
   const [isBanned,     setIsBanned]     = useState(false);
   const [banReason,    setBanReason]    = useState<string | null>(null);
   const [unbanMessage, setUnbanMessage] = useState<string | null>(null);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
-  /**
-   * Ref mirror of isBanned so the realtime callback always reads the live
-   * value — not the stale closure captured when the channel was subscribed.
-   * Without this, the State-B (unban) branch can never fire.
-   */
+  // Ref mirror so the realtime callback always reads the current value,
+  // not the stale closure value captured at channel-subscribe time.
   const isBannedRef = useRef(false);
   useEffect(() => { isBannedRef.current = isBanned; }, [isBanned]);
 
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  // ── Resolve session token ────────────────────────────────────────────────
-  // useUserTracker writes the token to sessionStorage; we poll briefly until
+  // ── Resolve session token ─────────────────────────────────────────────
+  // useUserTracker writes it to sessionStorage on mount; we poll until
   // it appears so we can attach the realtime subscription to the right row.
   useEffect(() => {
     let attempts = 0;
@@ -199,24 +201,22 @@ export default function App() {
         setSessionToken(tok);
         clearInterval(poll);
       }
-      // Give up after ~3 s (30 × 100 ms) to avoid polling forever if
-      // Supabase is disabled or the user is in a private-browsing environment.
+      // Give up after ~3 s to avoid an infinite poll in private-browsing
+      // environments or when Supabase is not configured.
       if (++attempts > 30) clearInterval(poll);
     }, 100);
     return () => clearInterval(poll);
   }, []);
 
-  // ── Bootstrap: load current ban / admin-message state ───────────────────
+  // ── Bootstrap: hydrate ban + admin-message from current DB row ────────
   useEffect(() => {
     if (!sessionToken) return;
-
     (async () => {
       const { data } = await supabase
         .from("user_sessions")
         .select("is_banned, ban_reason, admin_message")
         .eq("session_token", sessionToken)
         .maybeSingle();
-
       if (data) {
         setIsBanned(!!data.is_banned);
         setBanReason(data.ban_reason ?? null);
@@ -225,7 +225,7 @@ export default function App() {
     })();
   }, [sessionToken]);
 
-  // ── Realtime subscription ────────────────────────────────────────────────
+  // ── Realtime subscription ──────────────────────────────────────────────
   useEffect(() => {
     if (!sessionToken) return;
 
@@ -234,9 +234,9 @@ export default function App() {
       .on(
         "postgres_changes",
         {
-          event: "UPDATE",
+          event:  "UPDATE",
           schema: "public",
-          table: "user_sessions",
+          table:  "user_sessions",
           filter: `session_token=eq.${sessionToken}`,
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -244,44 +244,41 @@ export default function App() {
           const row = payload?.new;
           if (!row) return;
 
-          // ── State A: Ban ──────────────────────────────────────────────
+          // State A — Ban
           if (row.is_banned === true) {
             setBanReason((row.ban_reason as string | null) ?? null);
             setIsBanned(true);
             return;
           }
 
-          // ── State B: Unban ────────────────────────────────────────────
-          // Read from the ref — the closure value of `isBanned` is stale.
+          // State B — Unban (read ref to avoid stale closure)
           if (row.is_banned === false && isBannedRef.current) {
             setIsBanned(false);
             setUnbanMessage((row.unban_message as string | null) ?? null);
             return;
           }
 
-          // ── State C: Live admin broadcast message ─────────────────────
+          // State C — Live admin broadcast message
           setAdminMessage((row.admin_message as string | null) ?? null);
-        }
+        },
       )
       .subscribe();
 
-    channelRef.current = channel;
     return () => { supabase.removeChannel(channel); };
   }, [sessionToken]);
 
-  // ── Callbacks ─────────────────────────────────────────────────────────────
-  const handleUnban = useCallback((msg: string | null) => {
+  // ── Callbacks ─────────────────────────────────────────────────────────
+  const handleUnban        = useCallback((msg: string | null) => {
     setIsBanned(false);
     setUnbanMessage(msg);
   }, []);
+  const dismissUnbanToast  = useCallback(() => setUnbanMessage(null), []);
+  const dismissAdminBanner = useCallback(() => setAdminMessage(null), []);
 
-  const dismissUnbanToast    = useCallback(() => setUnbanMessage(null), []);
-  const dismissAdminBanner   = useCallback(() => setAdminMessage(null), []);
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <>
-      {/* ── Unban toast (slides in from top after ban is lifted) ──────── */}
+      {/* Unban toast — slides in from top after ban is lifted */}
       <AnimatePresence>
         {unbanMessage && (
           <UnbanToast
@@ -292,7 +289,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* ── Full-page banned screen ───────────────────────────────────── */}
+      {/* Full-page banned screen */}
       <AnimatePresence>
         {isBanned && sessionToken && (
           <BannedScreen
@@ -305,15 +302,8 @@ export default function App() {
       </AnimatePresence>
 
       {/*
-       * ── Main app shell ──────────────────────────────────────────────
-       *
-       * RouterContent is always mounted. When the user is banned it renders
-       * null (no routes), so only the BannedScreen above is visible.
-       * When unbanned, routes and the admin-message banner re-appear.
-       *
-       * The wouter <Router> context is provided by RouterContent via the
-       * wouter package's default browser history provider — no explicit
-       * <Router> wrapper needed for browser environments.
+       * Main app shell — always mounted.
+       * Renders null when banned so only BannedScreen is visible.
        */}
       <RouterContent
         isBanned={isBanned}
@@ -321,5 +311,20 @@ export default function App() {
         onDismissAdminBanner={dismissAdminBanner}
       />
     </>
+  );
+}
+
+// ─── App (root export) ────────────────────────────────────────────────────────
+// ThemeProvider and LanguageProvider are the outermost wrappers so that
+// every component in the entire tree — including Navbar, Layout, all pages,
+// all admin components, and all moderation overlays — can safely call
+// useTheme() and useLanguage() without a context-missing runtime error.
+export default function App() {
+  return (
+    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+      <LanguageProvider defaultLanguage="en" storageKey="yd_language">
+        <AppShell />
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }
