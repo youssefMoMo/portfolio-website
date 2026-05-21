@@ -1,5 +1,8 @@
 import { ReactNode } from "react";
-import { Navbar } from "./Navbar";
+// FIX: Was `import { Navbar } from "./Navbar"` (named import) but Navbar.tsx
+// only has a default export — the named binding resolved to `undefined`,
+// crashing silently on every public page render.
+import Navbar from "./Navbar";
 import { Footer } from "./Footer";
 import { useLocation } from "wouter";
 import { useEffect, useRef } from "react";
