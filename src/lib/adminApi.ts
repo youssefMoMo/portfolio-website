@@ -279,7 +279,7 @@ export const analyticsApi = {
       safeQuery<AnyRow>(() =>
         supabase
           .from("games")
-          .select("id, name, visits, is_active") as any
+          .select("id, name, visits, is_published") as any
       ),
     ]);
 
@@ -319,7 +319,7 @@ export const analyticsApi = {
       generated_at: now,
       games: {
         total: gamesRows.length,
-        active: gamesRows.filter((g) => g.is_active).length,
+        active: gamesRows.filter((g) => g.is_published).length,
         top: topGames,
       },
       reviews: {

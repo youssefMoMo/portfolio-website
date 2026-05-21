@@ -125,9 +125,21 @@ export default function Navbar() {
           href="/"
           className="flex items-center gap-2.5 font-bold text-white hover:opacity-80 transition-opacity"
         >
-          {/* Replace with your actual logo component / SVG */}
-          <div className="h-7 w-7 rounded-full bg-primary/30 ring-1 ring-primary/50 flex items-center justify-center text-primary text-xs font-black">
-            Y
+          <div className="h-7 w-7 rounded-full ring-1 ring-primary/50 overflow-hidden flex-shrink-0 bg-primary/20">
+            <img
+              src="/images/global/profile.png"
+              alt="youssef_design"
+              className="h-full w-full object-cover"
+              onError={(e) => {
+                const img = e.currentTarget;
+                img.style.display = "none";
+                const fb = img.parentElement;
+                if (fb) {
+                  fb.classList.add("flex", "items-center", "justify-center", "text-primary", "text-xs", "font-black");
+                  fb.textContent = "Y";
+                }
+              }}
+            />
           </div>
           <span className="text-sm md:text-base tracking-tight">
             youssef_design
