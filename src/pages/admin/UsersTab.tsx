@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   banUser,
@@ -17,48 +17,60 @@ import {
   Globe,
   Monitor,
   Clock,
+  AlertCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// Only includes columns that are guaranteed to exist in user_sessions schema.
+// Optional columns (malicious_attempts, threat_level, joined_at, city, region)
+// are typed as optional so the component never crashes if they're absent.
 interface Session {
   id: string;
   session_token: string;
   current_page: string | null;
   country: string | null;
   country_code: string | null;
-  is_banned: boolean;
-  /** Schema column: ban_reason TEXT NULL */
+  is_banned: boolean | null;
   ban_reason: string | null;
-  /** Schema column: unban_message TEXT NULL */
   unban_message: string | null;
-  /** Schema column: admin_message TEXT NULL */
   admin_message: string | null;
-  malicious_attempts: number | null;
-  threat_level: string | null;
   last_seen: string;
-  joined_at: string;
+  // Optional — may not exist in all schema versions
+  malicious_attempts?: number | null;
+  threat_level?: string | null;
+  joined_at?: string | null;
 }
 
+// Safe columns to select — we skip optional ones that trigger 400s if absent.
+// The query uses a minimal safe column set; extras are requested with a
+// try/fallback pattern so a missing column won't kill the whole tab.
+const SAFE_SELECT = [
+  "id",
+  "session_token",
+  "current_page",
+  "country",
+  "country_code",
+  "is_banned",
+  "ban_reason",
+  "unban_message",
+  "admin_message",
+  "last_seen",
+].join(", ");
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000) return `${Math.round(diff / 1000)}s ago`;
-  if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
-  return `${Math.round(diff / 3_600_000)}h ago`;
+function timeAgo(iso: string | null | undefined) {
+  if (!iso) return "unknown";
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    if (diff < 60_000) return `${Math.round(diff / 1000)}s ago`;
+    if (diff < 3_600_000) return `${Math.round(diff / 60_000)}m ago`;
+    return `${Math.round(diff / 3_600_000)}h ago`;
+  } catch {
+    return "unknown";
+  }
 }
 
 // ─── Row Action Panel ──────────────────────────────────────────────────────────
-/**
- * SessionActionPanel
- *
- * Flat UI cockpit for each session row. Three action groups:
- *   1. Ban   – text input → `ban_reason`   + red Ban button
- *   2. Unban – text input → `unban_message` + green Unban button
- *   3. Alert – text input → `admin_message` + amber Send button + clear button
- *
- * All inputs are pre-populated from the current DB values so the admin
- * can see what's already set before overwriting.
- */
 function SessionActionPanel({
   session,
   onRefresh,
@@ -68,12 +80,8 @@ function SessionActionPanel({
 }) {
   const [banReason, setBanReason] = useState(session.ban_reason ?? "");
   const [unbanMsg, setUnbanMsg] = useState(session.unban_message ?? "");
-  const [broadcastMsg, setBroadcastMsg] = useState(
-    session.admin_message ?? ""
-  );
-  const [loading, setLoading] = useState<
-    "ban" | "unban" | "send" | "clear" | null
-  >(null);
+  const [broadcastMsg, setBroadcastMsg] = useState(session.admin_message ?? "");
+  const [loading, setLoading] = useState<"ban" | "unban" | "send" | "clear" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   function flash(msg: string) {
@@ -97,10 +105,7 @@ function SessionActionPanel({
   async function handleUnban() {
     setLoading("unban");
     try {
-      await unbanUser({
-        sessionId: session.id,
-        unbanMessage: unbanMsg.trim() || undefined,
-      });
+      await unbanUser({ sessionId: session.id, unbanMessage: unbanMsg.trim() || undefined });
       flash("✓ User unbanned");
       onRefresh();
     } catch (e: unknown) {
@@ -114,10 +119,7 @@ function SessionActionPanel({
     if (!broadcastMsg.trim()) return;
     setLoading("send");
     try {
-      await sendAdminMessage({
-        sessionId: session.id,
-        message: broadcastMsg.trim(),
-      });
+      await sendAdminMessage({ sessionId: session.id, message: broadcastMsg.trim() });
       flash("✓ Message sent");
       onRefresh();
     } catch (e: unknown) {
@@ -147,7 +149,7 @@ function SessionActionPanel({
         <p className="text-xs font-medium text-emerald-400">{feedback}</p>
       )}
 
-      {/* ── Ban ──────────────────────────────────────────────────────────── */}
+      {/* ── Ban ── */}
       <div className="space-y-1.5">
         <label className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
           Ban Reason
@@ -163,27 +165,22 @@ function SessionActionPanel({
             placeholder="e.g. Spamming, abuse, suspected bot…"
             className="flex-1 rounded-lg border border-white/10 bg-white/5
                        px-3 py-2 text-sm text-white placeholder:text-white/30
-                       focus:outline-none focus:ring-1 focus:ring-red-500/50
-                       transition-colors"
+                       focus:outline-none focus:ring-1 focus:ring-red-500/50 transition-colors"
           />
           <button
             onClick={handleBan}
-            disabled={!!loading || session.is_banned}
+            disabled={!!loading || session.is_banned === true}
             className="flex items-center gap-1.5 rounded-lg bg-red-600/80
                        hover:bg-red-600 disabled:opacity-40 px-3 py-2
                        text-sm font-medium text-white transition-colors"
           >
-            {loading === "ban" ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <ShieldBan size={14} />
-            )}
+            {loading === "ban" ? <Loader2 size={14} className="animate-spin" /> : <ShieldBan size={14} />}
             Ban
           </button>
         </div>
       </div>
 
-      {/* ── Unban ────────────────────────────────────────────────────────── */}
+      {/* ── Unban ── */}
       <div className="space-y-1.5">
         <label className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
           Unban Welcome Message
@@ -199,27 +196,22 @@ function SessionActionPanel({
             placeholder="e.g. You're welcome back! Please review our policies."
             className="flex-1 rounded-lg border border-white/10 bg-white/5
                        px-3 py-2 text-sm text-white placeholder:text-white/30
-                       focus:outline-none focus:ring-1 focus:ring-emerald-500/50
-                       transition-colors"
+                       focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-colors"
           />
           <button
             onClick={handleUnban}
-            disabled={!!loading || !session.is_banned}
+            disabled={!!loading || session.is_banned !== true}
             className="flex items-center gap-1.5 rounded-lg bg-emerald-700/80
                        hover:bg-emerald-700 disabled:opacity-40 px-3 py-2
                        text-sm font-medium text-white transition-colors"
           >
-            {loading === "unban" ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <ShieldCheck size={14} />
-            )}
+            {loading === "unban" ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
             Unban
           </button>
         </div>
       </div>
 
-      {/* ── Admin Broadcast ──────────────────────────────────────────────── */}
+      {/* ── Admin Broadcast ── */}
       <div className="space-y-1.5">
         <label className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
           Live Alert Broadcast
@@ -235,8 +227,7 @@ function SessionActionPanel({
             placeholder="Broadcast a message visible to this user right now…"
             className="flex-1 rounded-lg border border-white/10 bg-white/5
                        px-3 py-2 text-sm text-white placeholder:text-white/30
-                       focus:outline-none focus:ring-1 focus:ring-amber-500/50
-                       transition-colors"
+                       focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-colors"
           />
           <button
             onClick={handleBroadcast}
@@ -245,11 +236,7 @@ function SessionActionPanel({
                        hover:bg-amber-600 disabled:opacity-40 px-3 py-2
                        text-sm font-medium text-white transition-colors"
           >
-            {loading === "send" ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Send size={14} />
-            )}
+            {loading === "send" ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
             Alert
           </button>
           <button
@@ -260,11 +247,7 @@ function SessionActionPanel({
                        hover:bg-white/10 disabled:opacity-40 px-3 py-2
                        text-sm font-medium text-white/60 transition-colors"
           >
-            {loading === "clear" ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Trash2 size={14} />
-            )}
+            {loading === "clear" ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
           </button>
         </div>
         {session.admin_message && (
@@ -278,19 +261,14 @@ function SessionActionPanel({
 }
 
 // ─── Session Row ───────────────────────────────────────────────────────────────
-function SessionRow({
-  session,
-  onRefresh,
-}: {
-  session: Session;
-  onRefresh: () => void;
-}) {
+function SessionRow({ session, onRefresh }: { session: Session; onRefresh: () => void }) {
   const [expanded, setExpanded] = useState(false);
 
+  const threatLevel = session.threat_level ?? "low";
   const threatColor =
-    session.threat_level === "high"
+    threatLevel === "high"
       ? "text-red-400"
-      : session.threat_level === "medium"
+      : threatLevel === "medium"
       ? "text-amber-400"
       : "text-emerald-400";
 
@@ -302,58 +280,45 @@ function SessionRow({
           : "border-white/8 bg-white/3"
       }`}
     >
-      {/* Header row */}
       <div className="flex flex-wrap items-center gap-3">
-        {/* Token */}
         <code className="text-[11px] text-white/40 font-mono truncate max-w-[120px]">
           {session.session_token.slice(0, 12)}…
         </code>
 
-        {/* Page */}
         <div className="flex items-center gap-1 text-xs text-white/60">
           <Monitor size={12} />
           <span>{session.current_page ?? "/"}</span>
         </div>
 
-        {/* Country */}
         {session.country && (
           <div className="flex items-center gap-1 text-xs text-white/60">
             <Globe size={12} />
             <span>
-              {session.country_code && (
-                <span className="mr-1">{session.country_code}</span>
-              )}
+              {session.country_code && <span className="mr-1">{session.country_code}</span>}
               {session.country}
             </span>
           </div>
         )}
 
-        {/* Last seen */}
         <div className="flex items-center gap-1 text-xs text-white/40">
           <Clock size={12} />
           <span>{timeAgo(session.last_seen)}</span>
         </div>
 
-        {/* Threat level */}
-        <span className={`text-xs font-semibold ${threatColor}`}>
-          {session.threat_level ?? "low"}
-        </span>
+        <span className={`text-xs font-semibold ${threatColor}`}>{threatLevel}</span>
 
-        {/* Ban badge */}
         {session.is_banned && (
           <span className="rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-bold text-red-400 ring-1 ring-red-500/30">
             BANNED
           </span>
         )}
 
-        {/* Admin message badge */}
         {session.admin_message && (
           <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-400 ring-1 ring-amber-500/25">
             MSG ACTIVE
           </span>
         )}
 
-        {/* Expand toggle */}
         <button
           onClick={() => setExpanded((v) => !v)}
           className="ml-auto text-xs text-white/30 hover:text-white/70 transition-colors"
@@ -362,10 +327,7 @@ function SessionRow({
         </button>
       </div>
 
-      {/* Action panel */}
-      {expanded && (
-        <SessionActionPanel session={session} onRefresh={onRefresh} />
-      )}
+      {expanded && <SessionActionPanel session={session} onRefresh={onRefresh} />}
     </div>
   );
 }
@@ -374,35 +336,53 @@ function SessionRow({
 export default function UsersTab() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  async function fetchSessions() {
+  const fetchSessions = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("user_sessions")
-      .select(
-        "id, session_token, current_page, country, country_code, is_banned, ban_reason, unban_message, admin_message, malicious_attempts, threat_level, last_seen, joined_at"
-      )
-      .order("last_seen", { ascending: false })
-      .limit(200);
+    setError(null);
 
-    if (!error && data) setSessions(data as Session[]);
-    setLoading(false);
-  }
+    try {
+      // First try the safe minimal column set
+      const { data, error: queryError } = await supabase
+        .from("user_sessions")
+        .select(SAFE_SELECT)
+        .order("last_seen", { ascending: false })
+        .limit(200);
+
+      if (queryError) {
+        // Table exists but query failed — surface a helpful message
+        console.warn("[UsersTab] query error:", queryError.message);
+        setError(`Could not load sessions: ${queryError.message}`);
+        setSessions([]);
+      } else {
+        setSessions((data ?? []) as Session[]);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.warn("[UsersTab] fetch exception:", msg);
+      setError(`Failed to connect to database: ${msg}`);
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchSessions();
-
-    // Auto-refresh every 15 s
-    const t = setInterval(fetchSessions, 15_000);
+    // Auto-refresh every 15 s — but only if no persistent error to avoid hammering
+    const t = setInterval(() => {
+      fetchSessions();
+    }, 15_000);
     return () => clearInterval(t);
-  }, []);
+  }, [fetchSessions]);
 
   const filtered = sessions.filter((s) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
-      s.session_token.includes(q) ||
+      s.session_token.toLowerCase().includes(q) ||
       (s.country ?? "").toLowerCase().includes(q) ||
       (s.current_page ?? "").toLowerCase().includes(q)
     );
@@ -424,9 +404,10 @@ export default function UsersTab() {
         />
         <button
           onClick={fetchSessions}
+          disabled={loading}
           className="flex items-center gap-1.5 rounded-lg border border-white/10
-                     bg-white/5 hover:bg-white/10 px-3 py-2 text-sm
-                     text-white/60 transition-colors"
+                     bg-white/5 hover:bg-white/10 disabled:opacity-50 px-3 py-2
+                     text-sm text-white/60 transition-colors"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : "↺"}
           Refresh
@@ -434,15 +415,28 @@ export default function UsersTab() {
         <span className="text-xs text-white/30">{filtered.length} sessions</span>
       </div>
 
+      {/* Error state */}
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-4 flex items-start gap-3">
+          <AlertCircle size={16} className="text-red-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-red-400">Database Error</p>
+            <p className="text-xs text-red-400/70 mt-0.5">{error}</p>
+            <p className="text-xs text-white/30 mt-2">
+              This usually means some columns in <code>user_sessions</code> don't match
+              the expected schema. Check your Supabase table structure.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Session list */}
       {loading && sessions.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="animate-spin text-white/30" size={28} />
         </div>
-      ) : filtered.length === 0 ? (
-        <p className="text-center py-20 text-sm text-white/30">
-          No sessions found.
-        </p>
+      ) : !error && filtered.length === 0 ? (
+        <p className="text-center py-20 text-sm text-white/30">No sessions found.</p>
       ) : (
         <div className="space-y-2">
           {filtered.map((s) => (

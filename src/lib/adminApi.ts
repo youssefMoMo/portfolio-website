@@ -17,7 +17,7 @@ export interface BroadcastPayload {
   message: string | null; // null clears the message
 }
 
-// ─── Review type (superset of contentManager.Review — adds DB boolean cols) ──
+// ─── Review type ──────────────────────────────────────────────────────────────
 export interface Review {
   id: string;
   name: string;
@@ -26,7 +26,6 @@ export interface Review {
   project_type: string;
   date: string;
   status?: "pending" | "approved" | "rejected";
-  /** Legacy boolean columns some DB schemas store alongside `status` */
   approved?: boolean;
   rejected?: boolean;
   featured?: boolean;
@@ -39,8 +38,7 @@ export interface Review {
   updated_at?: string;
 }
 
-// ─── Analytics data shape (used by AnalyticsTab) ─────────────────────────────
-
+// ─── Analytics data shape ─────────────────────────────────────────────────────
 export interface AnalyticsData {
   generated_at: string;
   games: {
@@ -72,9 +70,29 @@ export interface AnalyticsData {
   }>;
 }
 
-// ─── Helper: safe cast unknown row ───────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRow = Record<string, any>;
+
+// ─── Safe query helper ────────────────────────────────────────────────────────
+/**
+ * Wraps a Supabase query in a try/catch so any 400 / missing-column error
+ * returns an empty array instead of crashing the caller.
+ */
+async function safeQuery<T>(
+  queryFn: () => Promise<{ data: T[] | null; error: { message: string } | null }>
+): Promise<T[]> {
+  try {
+    const { data, error } = await queryFn();
+    if (error) {
+      console.warn("[adminApi] query warning:", error.message);
+      return [];
+    }
+    return data ?? [];
+  } catch (err) {
+    console.warn("[adminApi] query exception (suppressed):", err);
+    return [];
+  }
+}
 
 // ─── Ban / Unban / Broadcast ──────────────────────────────────────────────────
 
@@ -142,27 +160,31 @@ interface ReviewCreatePayload {
 }
 
 export const reviewsApi = {
-  /** Paginated list filtered by status. */
   list: async (filter: ReviewFilter = "all", page = 1): Promise<Review[]> => {
     const PAGE_SIZE = 20;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q: any = supabase
-      .from("reviews")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q: any = supabase
+        .from("reviews")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
-    if (filter === "pending") {
-      q = q.eq("status", "pending");
-    } else if (filter === "approved") {
-      q = q.or("status.eq.approved,approved.eq.true");
-    } else if (filter === "rejected") {
-      q = q.or("status.eq.rejected,rejected.eq.true");
+      if (filter === "pending") {
+        q = q.eq("status", "pending");
+      } else if (filter === "approved") {
+        q = q.or("status.eq.approved,approved.eq.true");
+      } else if (filter === "rejected") {
+        q = q.or("status.eq.rejected,rejected.eq.true");
+      }
+
+      const { data, error } = await q;
+      if (error) throw new Error(`reviewsApi.list: ${error.message}`);
+      return (data ?? []) as Review[];
+    } catch (err) {
+      console.warn("[reviewsApi.list] error (suppressed):", err);
+      return [];
     }
-
-    const { data, error } = await q;
-    if (error) throw new Error(`reviewsApi.list: ${error.message}`);
-    return (data ?? []) as Review[];
   },
 
   approve: async (id: string): Promise<void> => {
@@ -206,7 +228,7 @@ export const reviewsApi = {
 
   update: async (
     id: string,
-    data: Partial<Pick<Review, "name" | "text" | "rating" | "project_type">>,
+    data: Partial<Pick<Review, "name" | "text" | "rating" | "project_type">>
   ): Promise<void> => {
     const { error } = await supabase
       .from("reviews")
@@ -232,58 +254,58 @@ export const reviewsApi = {
 export const analyticsApi = {
   /**
    * Aggregates data from reviews, site_content, and games tables.
-   * Each query is run in parallel; failures are handled gracefully so a
-   * missing table never crashes the analytics view entirely.
+   * Every query is independently guarded — a missing table or column NEVER
+   * crashes the analytics view. Instead it gracefully returns zeros/empty arrays.
    */
   get: async (): Promise<AnalyticsData> => {
     const now = new Date().toISOString();
 
-    const [reviewsRes, contentRes, gamesRes] = await Promise.allSettled([
-      supabase
-        .from("reviews")
-        .select("id, name, project_type, rating, text, status, approved, rejected, created_at")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("site_content")
-        .select("content_type, updated_at")
-        .order("updated_at", { ascending: false }),
-      supabase
-        .from("games")
-        .select("id, name, icon_url, visits, is_active"),
+    // Run all queries in parallel, each individually safe
+    const [rawReviews, contentRows, gamesRows] = await Promise.all([
+      safeQuery<AnyRow>(() =>
+        supabase
+          .from("reviews")
+          .select("id, name, project_type, rating, text, status, approved, rejected, created_at")
+          .order("created_at", { ascending: false }) as any
+      ),
+      safeQuery<AnyRow>(() =>
+        supabase
+          .from("site_content")
+          .select("content_type, updated_at")
+          .order("updated_at", { ascending: false }) as any
+      ),
+      // Games query: use only the minimal safe columns.
+      // If the games table doesn't exist, safeQuery returns [].
+      safeQuery<AnyRow>(() =>
+        supabase
+          .from("games")
+          .select("id, name, visits, is_active") as any
+      ),
     ]);
 
     // ── Reviews ───────────────────────────────────────────────────────────
-    const rawReviews: AnyRow[] =
-      reviewsRes.status === "fulfilled" ? (reviewsRes.value.data ?? []) : [];
-
     const isApproved = (r: AnyRow) =>
       r.status === "approved" || r.approved === true;
     const isPending = (r: AnyRow) =>
       !isApproved(r) && !(r.status === "rejected" || r.rejected === true);
 
     const approvedReviews = rawReviews.filter(isApproved);
-    const pendingReviews  = rawReviews.filter(isPending);
+    const pendingReviews = rawReviews.filter(isPending);
     const avgRating =
       approvedReviews.length > 0
         ? Math.round(
-            (approvedReviews.reduce(
-              (sum, r) => sum + (Number(r.rating) || 0),
-              0,
-            ) /
+            (approvedReviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) /
               approvedReviews.length) *
-              10,
+              10
           ) / 10
         : 0;
 
     // ── Content ───────────────────────────────────────────────────────────
-    const contentRows: AnyRow[] =
-      contentRes.status === "fulfilled" ? (contentRes.value.data ?? []) : [];
     const contentSections = new Set(contentRows.map((c) => c.content_type as string)).size;
-    const lastUpdated      = (contentRows[0]?.updated_at as string) ?? null;
+    const lastUpdated = (contentRows[0]?.updated_at as string) ?? null;
 
-    // ── Games ──────────────────────────────────────────────────────────────
-    const gamesRows: AnyRow[] =
-      gamesRes.status === "fulfilled" ? (gamesRes.value.data ?? []) : [];
+    // ── Games ─────────────────────────────────────────────────────────────
+    // icon_url is optional — games may not have it; default to null
     const topGames = [...gamesRows]
       .sort((a, b) => (Number(b.visits) || 0) - (Number(a.visits) || 0))
       .slice(0, 5)
@@ -296,31 +318,31 @@ export const analyticsApi = {
     return {
       generated_at: now,
       games: {
-        total:  gamesRows.length,
+        total: gamesRows.length,
         active: gamesRows.filter((g) => g.is_active).length,
-        top:    topGames,
+        top: topGames,
       },
       reviews: {
-        total:      rawReviews.length,
-        pending:    pendingReviews.length,
-        approved:   approvedReviews.length,
+        total: rawReviews.length,
+        pending: pendingReviews.length,
+        approved: approvedReviews.length,
         avg_rating: avgRating,
       },
       portfolio: {
         items: contentRows.filter((c) => c.content_type === "portfolio").length,
       },
       content: {
-        sections:     contentSections,
+        sections: contentSections,
         last_updated: lastUpdated,
       },
       recent_reviews: rawReviews.slice(0, 5).map((r) => ({
-        id:           String(r.id ?? ""),
-        name:         String(r.name ?? ""),
+        id: String(r.id ?? ""),
+        name: String(r.name ?? ""),
         project_type: String(r.project_type ?? ""),
-        rating:       Number(r.rating) || 0,
-        text:         String(r.text ?? ""),
-        approved:     isApproved(r),
-        rejected:     r.status === "rejected" || r.rejected === true,
+        rating: Number(r.rating) || 0,
+        text: String(r.text ?? ""),
+        approved: isApproved(r),
+        rejected: r.status === "rejected" || r.rejected === true,
       })),
     };
   },

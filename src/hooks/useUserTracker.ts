@@ -5,18 +5,12 @@ import { supabase } from "@/lib/supabase";
 interface GeoData {
   country: string;
   country_code: string;
-  city?: string;
-  region?: string;
-  ip?: string;
 }
 
 interface SessionMeta {
   sessionToken: string;
   country: string;
   country_code: string;
-  city?: string;
-  region?: string;
-  ip?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -24,16 +18,8 @@ const SESSION_KEY = "youssef_session_token";
 const HEARTBEAT_INTERVAL_MS = 30_000; // 30 s
 
 /**
- * Ordered list of Geo-IP providers.
- * Each entry is tried in sequence; the first that returns a valid country wins.
- *
- * FIX: Previously only one provider was used. Cloud-proxy header translation
- * drops or rate-limits on that provider, leaving `country` as "Unknown". We
- * now walk through a failover chain of three independent APIs.
- *
- * Also fixed: removed the `uuid` package dependency (not in package.json).
- * We now use the native `crypto.randomUUID()` which is available in all
- * modern browsers and in Node ≥ 14.17 (Vercel's runtime).
+ * Ordered list of Geo-IP providers (country/country_code only — no city/region/ip
+ * since those columns do not exist in the user_sessions table schema).
  */
 const GEO_PROVIDERS: Array<{
   url: string;
@@ -46,31 +32,19 @@ const GEO_PROVIDERS: Array<{
       const country = String(data.country_name ?? "").trim();
       const code = String(data.country_code ?? "").trim();
       if (!country || country === "undefined") return null;
-      return {
-        country,
-        country_code: code,
-        city: String(data.city ?? ""),
-        region: String(data.region ?? ""),
-        ip: String(data.ip ?? ""),
-      };
+      return { country, country_code: code };
     },
   },
 
   // ── Provider 2: ip-api.com (free, no key required) ───────────────────────
   {
-    url: "http://ip-api.com/json/?fields=status,country,countryCode,city,regionName,query",
+    url: "http://ip-api.com/json/?fields=status,country,countryCode",
     extract(data) {
       if (String(data.status) !== "success") return null;
       const country = String(data.country ?? "").trim();
       const code = String(data.countryCode ?? "").trim();
       if (!country) return null;
-      return {
-        country,
-        country_code: code,
-        city: String(data.city ?? ""),
-        region: String(data.regionName ?? ""),
-        ip: String(data.query ?? ""),
-      };
+      return { country, country_code: code };
     },
   },
 
@@ -82,32 +56,22 @@ const GEO_PROVIDERS: Array<{
       const country = String(data.country ?? "").trim();
       const code = String(data.country_code ?? "").trim();
       if (!country) return null;
-      return {
-        country,
-        country_code: code,
-        city: String(data.city ?? ""),
-        region: String(data.region ?? ""),
-        ip: String(data.ip ?? ""),
-      };
+      return { country, country_code: code };
     },
   },
 ];
 
 // ─── Geo Lookup with Failover ────────────────────────────────────────────────
 async function resolveGeoData(): Promise<GeoData> {
-  const fallback: GeoData = {
-    country: "Unknown",
-    country_code: "XX",
-  };
+  const fallback: GeoData = { country: "Unknown", country_code: "XX" };
 
   for (const provider of GEO_PROVIDERS) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4_000); // 4 s hard timeout
+      const timeout = setTimeout(() => controller.abort(), 4_000);
 
       const res = await fetch(provider.url, {
         signal: controller.signal,
-        // Force no-cache so stale CDN responses don't re-deliver a prior error
         cache: "no-store",
       });
 
@@ -119,30 +83,21 @@ async function resolveGeoData(): Promise<GeoData> {
       const geo = provider.extract(json);
 
       if (geo && geo.country && geo.country !== "Unknown") {
-        console.debug(`[useUserTracker] Geo resolved via ${provider.url}:`, geo);
         return geo;
       }
-    } catch (err) {
-      // AbortError (timeout) or network failure – try next provider
-      console.warn(`[useUserTracker] Provider ${provider.url} failed:`, err);
+    } catch {
+      // Timeout or network failure – try next provider silently
     }
   }
 
-  console.warn("[useUserTracker] All geo providers failed – using fallback.");
   return fallback;
 }
 
 // ─── Session Token Helpers ────────────────────────────────────────────────────
-/**
- * FIX: Replaced `import { v4 as uuidv4 } from "uuid"` (not in package.json)
- * with the native `crypto.randomUUID()`. This API is available in all modern
- * browsers (Chrome 92+, Firefox 95+, Safari 15.4+) and Vercel's Node runtime.
- */
 function generateUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  // Polyfill for older environments — RFC 4122 v4 UUID
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
@@ -158,24 +113,7 @@ function getOrCreateSessionToken(): string {
     sessionStorage.setItem(SESSION_KEY, fresh);
     return fresh;
   } catch {
-    // SSR / private-mode environments
     return generateUUID();
-  }
-}
-
-// ─── Hash helper (for IP anonymisation) ──────────────────────────────────────
-async function sha256Short(value: string): Promise<string> {
-  try {
-    const buf = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(value)
-    );
-    return Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-      .slice(0, 16);
-  } catch {
-    return "anon";
   }
 }
 
@@ -184,9 +122,10 @@ async function sha256Short(value: string): Promise<string> {
  * useUserTracker
  *
  * Tracks the active user session in Supabase `user_sessions`.
- * - Upserts on mount with resolved country (Geo-IP failover chain).
- * - Sends a heartbeat every 30 s so `last_seen` stays current.
- * - Removes the session row on page unload.
+ * Only writes columns that are guaranteed to exist in the schema:
+ *   session_token, current_page, country, country_code, last_seen, updated_at
+ *
+ * All DB calls are wrapped in try/catch so they NEVER crash the client UI.
  */
 export function useUserTracker(currentPage: string) {
   const sessionToken = useRef<string>(getOrCreateSessionToken());
@@ -197,21 +136,25 @@ export function useUserTracker(currentPage: string) {
   async function upsertSession(page: string) {
     if (!metaRef.current) return;
 
-    const { sessionToken: token, ...geo } = metaRef.current;
+    try {
+      const { error } = await supabase.from("user_sessions").upsert(
+        {
+          session_token: metaRef.current.sessionToken,
+          current_page: page,
+          country: metaRef.current.country,
+          country_code: metaRef.current.country_code,
+          last_seen: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "session_token" }
+      );
 
-    const { error } = await supabase.from("user_sessions").upsert(
-      {
-        session_token: token,
-        current_page: page,
-        ...geo,
-        last_seen: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "session_token" }
-    );
-
-    if (error) {
-      console.error("[useUserTracker] upsert error:", error.message);
+      if (error) {
+        // Log silently — never throw, never crash the UI
+        console.warn("[useUserTracker] upsert warning:", error.message);
+      }
+    } catch (err) {
+      console.warn("[useUserTracker] upsert exception (suppressed):", err);
     }
   }
 
@@ -220,39 +163,43 @@ export function useUserTracker(currentPage: string) {
     let cancelled = false;
 
     async function init() {
-      const geo = await resolveGeoData();
-      const hashedIp = geo.ip ? await sha256Short(geo.ip) : "anon";
+      try {
+        const geo = await resolveGeoData();
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      metaRef.current = {
-        sessionToken: sessionToken.current,
-        ...geo,
-        ip: hashedIp, // Store hashed IP for privacy
-      };
+        metaRef.current = {
+          sessionToken: sessionToken.current,
+          country: geo.country,
+          country_code: geo.country_code,
+        };
 
-      // Initial upsert
-      await upsertSession(currentPage);
+        await upsertSession(currentPage);
 
-      // Start heartbeat
-      heartbeatTimer.current = setInterval(() => {
-        upsertSession(currentPage);
-      }, HEARTBEAT_INTERVAL_MS);
+        heartbeatTimer.current = setInterval(() => {
+          upsertSession(currentPage);
+        }, HEARTBEAT_INTERVAL_MS);
+      } catch (err) {
+        console.warn("[useUserTracker] init exception (suppressed):", err);
+      }
     }
 
     init();
 
-    // Cleanup on unmount / page close
     const handleUnload = () => {
       if (!metaRef.current) return;
-      // Use sendBeacon for reliable fire-and-forget on unload
-      navigator.sendBeacon(
-        `/api/session-end?token=${metaRef.current.sessionToken}`
-      );
-      supabase
-        .from("user_sessions")
-        .delete()
-        .eq("session_token", metaRef.current.sessionToken);
+      try {
+        navigator.sendBeacon(
+          `/api/session-end?token=${metaRef.current.sessionToken}`
+        );
+        supabase
+          .from("user_sessions")
+          .delete()
+          .eq("session_token", metaRef.current.sessionToken)
+          .then(() => {/* fire-and-forget */});
+      } catch {
+        // Suppress unload errors
+      }
     };
 
     window.addEventListener("beforeunload", handleUnload);
