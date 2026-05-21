@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { v4 as uuidv4 } from "uuid";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface GeoData {
@@ -29,8 +28,12 @@ const HEARTBEAT_INTERVAL_MS = 30_000; // 30 s
  * Each entry is tried in sequence; the first that returns a valid country wins.
  *
  * FIX: Previously only one provider was used. Cloud-proxy header translation
- * drops or rate-limits on that provider left `country` as "Unknown". We now
- * walk through a failover chain of three independent APIs.
+ * drops or rate-limits on that provider, leaving `country` as "Unknown". We
+ * now walk through a failover chain of three independent APIs.
+ *
+ * Also fixed: removed the `uuid` package dependency (not in package.json).
+ * We now use the native `crypto.randomUUID()` which is available in all
+ * modern browsers and in Node ≥ 14.17 (Vercel's runtime).
  */
 const GEO_PROVIDERS: Array<{
   url: string;
@@ -104,7 +107,7 @@ async function resolveGeoData(): Promise<GeoData> {
 
       const res = await fetch(provider.url, {
         signal: controller.signal,
-        // Force no cache so stale CDN responses don't re-deliver a prior error
+        // Force no-cache so stale CDN responses don't re-deliver a prior error
         cache: "no-store",
       });
 
@@ -129,21 +132,38 @@ async function resolveGeoData(): Promise<GeoData> {
   return fallback;
 }
 
-// ─── Session Token Helpers ───────────────────────────────────────────────────
+// ─── Session Token Helpers ────────────────────────────────────────────────────
+/**
+ * FIX: Replaced `import { v4 as uuidv4 } from "uuid"` (not in package.json)
+ * with the native `crypto.randomUUID()`. This API is available in all modern
+ * browsers (Chrome 92+, Firefox 95+, Safari 15.4+) and Vercel's Node runtime.
+ */
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Polyfill for older environments — RFC 4122 v4 UUID
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function getOrCreateSessionToken(): string {
   try {
     const existing = sessionStorage.getItem(SESSION_KEY);
     if (existing) return existing;
-    const fresh = uuidv4();
+    const fresh = generateUUID();
     sessionStorage.setItem(SESSION_KEY, fresh);
     return fresh;
   } catch {
     // SSR / private-mode environments
-    return uuidv4();
+    return generateUUID();
   }
 }
 
-// ─── Hash helper (for IP anonymisation) ─────────────────────────────────────
+// ─── Hash helper (for IP anonymisation) ──────────────────────────────────────
 async function sha256Short(value: string): Promise<string> {
   try {
     const buf = await crypto.subtle.digest(
@@ -163,7 +183,7 @@ async function sha256Short(value: string): Promise<string> {
 /**
  * useUserTracker
  *
- * Tracks the active user session in Supabase `active_sessions`.
+ * Tracks the active user session in Supabase `user_sessions`.
  * - Upserts on mount with resolved country (Geo-IP failover chain).
  * - Sends a heartbeat every 30 s so `last_seen` stays current.
  * - Removes the session row on page unload.
@@ -173,13 +193,13 @@ export function useUserTracker(currentPage: string) {
   const metaRef = useRef<SessionMeta | null>(null);
   const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Upsert session row ───────────────────────────────────────────────────
+  // ── Upsert session row ────────────────────────────────────────────────────
   async function upsertSession(page: string) {
     if (!metaRef.current) return;
 
     const { sessionToken: token, ...geo } = metaRef.current;
 
-    const { error } = await supabase.from("active_sessions").upsert(
+    const { error } = await supabase.from("user_sessions").upsert(
       {
         session_token: token,
         current_page: page,
@@ -195,7 +215,7 @@ export function useUserTracker(currentPage: string) {
     }
   }
 
-  // ── Mount: resolve geo then upsert ──────────────────────────────────────
+  // ── Mount: resolve geo then upsert ───────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -230,7 +250,7 @@ export function useUserTracker(currentPage: string) {
         `/api/session-end?token=${metaRef.current.sessionToken}`
       );
       supabase
-        .from("active_sessions")
+        .from("user_sessions")
         .delete()
         .eq("session_token", metaRef.current.sessionToken);
     };
@@ -245,7 +265,7 @@ export function useUserTracker(currentPage: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Update current_page on navigation ───────────────────────────────────
+  // ── Update current_page on navigation ────────────────────────────────────
   useEffect(() => {
     if (!metaRef.current) return;
     upsertSession(currentPage);

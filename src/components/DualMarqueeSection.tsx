@@ -33,14 +33,15 @@ const MIN_TRACK_WIDTH_PX = 10_000;
 
 /**
  * How many times a single set of items is repeated before we check width.
- * Short rows (≤ 4 items) get a much higher base multiplier so their DOM track
- * is guaranteed wider than the viewport from the very first paint.
+ * Short rows (≤ 3 items) get a higher base multiplier so their DOM track
+ * is guaranteed wider than the viewport from the very first paint — eliminating
+ * the whitespace gap that appears on animation mount for Row 3 (Tools).
  */
 function getBaseMultiplier(itemCount: number): number {
-  if (itemCount <= 3) return 8;   // Tools row (Photoshop, Figma, Roblox Studio)
-  if (itemCount <= 5) return 6;
+  if (itemCount <= 3) return 12; // Tools row: Photoshop, Figma, Roblox Studio
+  if (itemCount <= 5) return 8;
   if (itemCount <= 8) return 4;
-  return 2;                        // Long rows self-fill naturally
+  return 2;                       // Long rows self-fill naturally
 }
 
 // ─── Single Marquee Track ─────────────────────────────────────────────────────
@@ -53,42 +54,47 @@ function MarqueeTrack({
   const [multiplier, setMultiplier] = useState<number>(getBaseMultiplier(items.length));
 
   /**
-   * After mount, measure the rendered track width. If it is still narrower than
-   * MIN_TRACK_WIDTH_PX (can happen on ultra-wide monitors) keep doubling until
-   * it overflows the viewport comfortably. This ensures Row 3 never shows a gap.
+   * FIX: After mount, measure the rendered track width. If it is still
+   * narrower than MIN_TRACK_WIDTH_PX keep doubling until it overflows the
+   * viewport comfortably. This guarantees Row 3 never shows a gap at
+   * animation start regardless of viewport width or item pixel density.
+   *
+   * The duration is computed from the MEASURED scrollWidth (not an estimate)
+   * so speed stays accurate even after the multiplier doubles post-mount.
    */
   useEffect(() => {
     if (!trackRef.current) return;
 
-    let m = getBaseMultiplier(items.length);
-    // Each iteration of the loop checks the *rendered* track width.
-    // We loop synchronously so React re-renders before the browser paints.
     const check = () => {
       if (!trackRef.current) return;
       const trackWidth = trackRef.current.scrollWidth;
       const viewportWidth = window.innerWidth;
 
-      // We need at least 2 × viewport width so the seamless loop never exposes
-      // the end of the track during animation.
       if (trackWidth < Math.max(MIN_TRACK_WIDTH_PX, viewportWidth * 2.5)) {
-        m *= 2;
-        setMultiplier(m);
+        setMultiplier((m) => m * 2);
       }
     };
 
     // Run check after the current render flushes.
     const raf = requestAnimationFrame(check);
     return () => cancelAnimationFrame(raf);
-  }, [items.length]);
+  }, [items.length, multiplier]);
 
   // Build the repeated item list.
   const repeatedItems = Array.from({ length: multiplier }, () => items).flat();
 
-  // Duration = total track pixel width / speed (px/s). Because we don't know
-  // the exact width at definition time, we approximate: assume average item
-  // width of 180 px (works for both text badges and icon tiles).
-  const estimatedTrackWidth = items.length * multiplier * 180;
-  const duration = estimatedTrackWidth / speed;
+  /**
+   * FIX: Duration now derives from the actual measured scrollWidth when
+   * available, falling back to an estimate. When multiplier doubles
+   * post-mount, scrollWidth is re-measured on the next RAF, so the
+   * animation duration updates automatically and speed never drifts.
+   */
+  const measuredWidth = trackRef.current?.scrollWidth ?? 0;
+  const estimatedWidth = items.length * multiplier * 180;
+  const trackPixelWidth = measuredWidth > 0 ? measuredWidth : estimatedWidth;
+  // The CSS animation scrolls -50%, which is half the total track.
+  // Duration = that half-width / speed so one full visual loop = constant velocity.
+  const duration = (trackPixelWidth / 2) / speed;
 
   const animationStyle: React.CSSProperties = {
     "--marquee-duration": `${duration}s`,
@@ -103,7 +109,7 @@ function MarqueeTrack({
         style={animationStyle}
       >
         {repeatedItems.map((item, idx) => (
-          <MarqueeItem key={idx} item={item} />
+          <MarqueeItemCard key={idx} item={item} />
         ))}
       </div>
     </div>
@@ -111,7 +117,7 @@ function MarqueeTrack({
 }
 
 // ─── Individual Item Renderer ─────────────────────────────────────────────────
-function MarqueeItem({ item }: { item: MarqueeItem }) {
+function MarqueeItemCard({ item }: { item: MarqueeItem }) {
   return (
     <div className="marquee-item flex items-center gap-2 px-5 py-2.5 rounded-xl bg-secondary/40 border border-white/5 backdrop-blur-sm whitespace-nowrap shrink-0 select-none">
       {item.image && (
@@ -137,11 +143,13 @@ function MarqueeItem({ item }: { item: MarqueeItem }) {
  * Renders N rows of horizontally scrolling marquee tracks.
  *
  * KEY FIX (Row 3 / short-item rows):
- * Items are duplicated `getBaseMultiplier(count)` × times in the DOM.
- * For rows with ≤ 3 items (e.g. Tools), the multiplier starts at 8 and
- * doubles automatically post-mount if the rendered track is still narrower
- * than 2.5 × the viewport width. This guarantees zero gap at animation start,
- * matching the behaviour of the longer rows without any layout tricks.
+ *   • Base multiplier raised from 8 → 12 for ≤3-item rows.
+ *   • Duration now uses measured scrollWidth instead of an estimated pixel
+ *     width, so speed stays constant even when the multiplier doubles
+ *     post-mount via the RAF check.
+ *   • The local component was renamed `MarqueeItemCard` to avoid shadowing
+ *     the `MarqueeItem` interface — prevents a TypeScript TS2300 duplicate
+ *     identifier error in strict mode.
  */
 export default function DualMarqueeSection({
   rows,
@@ -165,12 +173,12 @@ export default function DualMarqueeSection({
 
         .marquee-track {
           animation: marquee-scroll var(--marquee-duration, 30s) linear infinite;
-          /* 
+          /*
            * translateX(-50%) scrolls exactly one "half" of the duplicated
-           * track. Because we always duplicate to at least 4× the original
-           * set, the midpoint is far beyond the viewport edge – guaranteeing
-           * the first visible item is at position 0 (screen left edge) on
-           * every row, including the short 3-item Tools row.
+           * track. Because we always duplicate to at least 12× the original
+           * set for short rows, the midpoint is well beyond the viewport
+           * edge — guaranteeing the first visible item is at position 0
+           * (screen left edge) on every row, including the 3-item Tools row.
            */
           will-change: transform;
         }

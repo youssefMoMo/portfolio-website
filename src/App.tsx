@@ -31,7 +31,19 @@ export default function App() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // ── Resolve session token on mount ──────────────────────────────────────
+  /**
+   * FIX: Store `isBanned` in a ref so the realtime callback always reads
+   * the *current* value instead of a stale closure captured at subscription
+   * time. Without this, the `State B (unban)` branch — `row.is_banned ===
+   * false && isBanned` — would never fire because `isBanned` is frozen as
+   * `false` inside the closure.
+   */
+  const isBannedRef = useRef(false);
+  useEffect(() => {
+    isBannedRef.current = isBanned;
+  }, [isBanned]);
+
+  // ── Resolve session token on mount ───────────────────────────────────────
   useEffect(() => {
     // The token may not exist yet if useUserTracker hasn't run. Poll briefly.
     let attempts = 0;
@@ -46,7 +58,7 @@ export default function App() {
     return () => clearInterval(poll);
   }, []);
 
-  // ── Bootstrap: fetch initial ban state ──────────────────────────────────
+  // ── Bootstrap: fetch initial ban state ───────────────────────────────────
   useEffect(() => {
     if (!sessionToken) return;
 
@@ -67,7 +79,7 @@ export default function App() {
     fetchSession();
   }, [sessionToken]);
 
-  // ── Realtime subscription ────────────────────────────────────────────────
+  // ── Realtime subscription ─────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionToken) return;
 
@@ -83,28 +95,31 @@ export default function App() {
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (payload: any) => {
-          // supabase-js v2: mutations land on payload.new, not payload.payload
+          // supabase-js v2: new row values land on payload.new
           const row = payload.new;
           if (!row) return;
 
-          // ── State A: Ban ─────────────────────────────────────────────
+          // ── State A: Ban ──────────────────────────────────────────────────
           if (row.is_banned === true) {
             setBanReason((row.ban_reason as string | null) ?? null);
             setIsBanned(true);
             return;
           }
 
-          // ── State B: Unban ───────────────────────────────────────────
-          if (row.is_banned === false && isBanned) {
+          // ── State B: Unban ────────────────────────────────────────────────
+          // Use the ref so we always read the live value, not a stale closure.
+          if (row.is_banned === false && isBannedRef.current) {
             setIsBanned(false);
             const msg = (row.unban_message as string | null) ?? null;
             setUnbanMessage(msg);
             return;
           }
 
-          // ── State C: Live admin message ──────────────────────────────
+          // ── State C: Live admin message ───────────────────────────────────
           const newMsg = (row.admin_message as string | null) ?? null;
-          setAdminMessage(newMsg);
+          if (newMsg !== adminMessage) {
+            setAdminMessage(newMsg);
+          }
         }
       )
       .subscribe();
@@ -117,7 +132,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionToken]);
 
-  // ── Callbacks ────────────────────────────────────────────────────────────
+  // ── Callbacks ─────────────────────────────────────────────────────────────
   const handleUnban = useCallback((msg: string | null) => {
     setIsBanned(false);
     setUnbanMessage(msg);
@@ -126,7 +141,7 @@ export default function App() {
   const dismissUnbanToast = useCallback(() => setUnbanMessage(null), []);
   const dismissAdminBanner = useCallback(() => setAdminMessage(null), []);
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       {/* ── Global Overlays ──────────────────────────────────────────── */}

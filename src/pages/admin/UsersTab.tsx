@@ -27,8 +27,11 @@ interface Session {
   country: string | null;
   country_code: string | null;
   is_banned: boolean;
+  /** Schema column: ban_reason TEXT NULL */
   ban_reason: string | null;
+  /** Schema column: unban_message TEXT NULL */
   unban_message: string | null;
+  /** Schema column: admin_message TEXT NULL */
   admin_message: string | null;
   malicious_attempts: number | null;
   threat_level: string | null;
@@ -36,7 +39,7 @@ interface Session {
   joined_at: string;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   if (diff < 60_000) return `${Math.round(diff / 1000)}s ago`;
@@ -44,7 +47,18 @@ function timeAgo(iso: string) {
   return `${Math.round(diff / 3_600_000)}h ago`;
 }
 
-// ─── Row Action Panel ─────────────────────────────────────────────────────────
+// ─── Row Action Panel ──────────────────────────────────────────────────────────
+/**
+ * SessionActionPanel
+ *
+ * Flat UI cockpit for each session row. Three action groups:
+ *   1. Ban   – text input → `ban_reason`   + red Ban button
+ *   2. Unban – text input → `unban_message` + green Unban button
+ *   3. Alert – text input → `admin_message` + amber Send button + clear button
+ *
+ * All inputs are pre-populated from the current DB values so the admin
+ * can see what's already set before overwriting.
+ */
 function SessionActionPanel({
   session,
   onRefresh,
@@ -133,10 +147,13 @@ function SessionActionPanel({
         <p className="text-xs font-medium text-emerald-400">{feedback}</p>
       )}
 
-      {/* ── Ban ─────────────────────────────────────────────────────── */}
+      {/* ── Ban ──────────────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
         <label className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
           Ban Reason
+          <span className="ml-2 normal-case tracking-normal text-white/20 font-normal">
+            → sets <code className="text-white/30">ban_reason</code>
+          </span>
         </label>
         <div className="flex gap-2">
           <input
@@ -146,7 +163,8 @@ function SessionActionPanel({
             placeholder="e.g. Spamming, abuse, suspected bot…"
             className="flex-1 rounded-lg border border-white/10 bg-white/5
                        px-3 py-2 text-sm text-white placeholder:text-white/30
-                       focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                       focus:outline-none focus:ring-1 focus:ring-red-500/50
+                       transition-colors"
           />
           <button
             onClick={handleBan}
@@ -165,10 +183,13 @@ function SessionActionPanel({
         </div>
       </div>
 
-      {/* ── Unban ───────────────────────────────────────────────────── */}
+      {/* ── Unban ────────────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
         <label className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
           Unban Welcome Message
+          <span className="ml-2 normal-case tracking-normal text-white/20 font-normal">
+            → sets <code className="text-white/30">unban_message</code>
+          </span>
         </label>
         <div className="flex gap-2">
           <input
@@ -178,7 +199,8 @@ function SessionActionPanel({
             placeholder="e.g. You're welcome back! Please review our policies."
             className="flex-1 rounded-lg border border-white/10 bg-white/5
                        px-3 py-2 text-sm text-white placeholder:text-white/30
-                       focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                       focus:outline-none focus:ring-1 focus:ring-emerald-500/50
+                       transition-colors"
           />
           <button
             onClick={handleUnban}
@@ -197,10 +219,13 @@ function SessionActionPanel({
         </div>
       </div>
 
-      {/* ── Admin Broadcast ──────────────────────────────────────────── */}
+      {/* ── Admin Broadcast ──────────────────────────────────────────────── */}
       <div className="space-y-1.5">
         <label className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
-          Send Warning / Live Message
+          Live Alert Broadcast
+          <span className="ml-2 normal-case tracking-normal text-white/20 font-normal">
+            → sets <code className="text-white/30">admin_message</code>
+          </span>
         </label>
         <div className="flex gap-2">
           <input
@@ -210,7 +235,8 @@ function SessionActionPanel({
             placeholder="Broadcast a message visible to this user right now…"
             className="flex-1 rounded-lg border border-white/10 bg-white/5
                        px-3 py-2 text-sm text-white placeholder:text-white/30
-                       focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                       focus:outline-none focus:ring-1 focus:ring-amber-500/50
+                       transition-colors"
           />
           <button
             onClick={handleBroadcast}
@@ -224,7 +250,7 @@ function SessionActionPanel({
             ) : (
               <Send size={14} />
             )}
-            Send
+            Alert
           </button>
           <button
             onClick={handleClearBroadcast}
@@ -243,7 +269,7 @@ function SessionActionPanel({
         </div>
         {session.admin_message && (
           <p className="text-xs text-amber-400/80">
-            Active message: &ldquo;{session.admin_message}&rdquo;
+            Active: &ldquo;{session.admin_message}&rdquo;
           </p>
         )}
       </div>
@@ -251,7 +277,7 @@ function SessionActionPanel({
   );
 }
 
-// ─── Session Row ──────────────────────────────────────────────────────────────
+// ─── Session Row ───────────────────────────────────────────────────────────────
 function SessionRow({
   session,
   onRefresh,
@@ -320,6 +346,13 @@ function SessionRow({
           </span>
         )}
 
+        {/* Admin message badge */}
+        {session.admin_message && (
+          <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-400 ring-1 ring-amber-500/25">
+            MSG ACTIVE
+          </span>
+        )}
+
         {/* Expand toggle */}
         <button
           onClick={() => setExpanded((v) => !v)}
@@ -337,7 +370,7 @@ function SessionRow({
   );
 }
 
-// ─── Main UsersTab ────────────────────────────────────────────────────────────
+// ─── Main UsersTab ─────────────────────────────────────────────────────────────
 export default function UsersTab() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);

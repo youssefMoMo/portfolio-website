@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
+import { Link, useLocation } from "wouter";
 import { Settings, MessageSquare } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -35,10 +35,10 @@ function useClock() {
 /**
  * ClockBadge
  *
- * CHANGE: Upgraded from `text-sm font-normal` with muted colours to
- * `text-base md:text-md font-bold` with crisp, high-contrast tokens.
- * Both the time and GMT offset sit inside flat, solid-border pill frames
- * that read clearly on both dark and semi-transparent navbar backgrounds.
+ * FIX: Was importing `Link` from "next/link" — this project uses Vite + wouter.
+ * Switched to wouter `Link`. Clock typography upgraded:
+ *   text-base md:text-[15px] font-bold + crisp high-contrast bg-secondary/70
+ *   border tokens so it reads clearly on both dark and semi-transparent backgrounds.
  */
 function ClockBadge() {
   const now = useClock();
@@ -62,26 +62,31 @@ function ClockBadge() {
       : `GMT${sign}${offsetHours}`;
 
   return (
-    <div className="flex items-center gap-1.5" aria-label={`Current time: ${timeStr} ${gmtLabel}`}>
+    <div
+      className="flex items-center gap-1.5"
+      aria-label={`Current time: ${timeStr} ${gmtLabel}`}
+    >
       {/*
        * Time pill
-       * Before: text-sm text-white/50 bg-white/5
-       * After:  text-base font-bold text-white bg-secondary/70 border border-white/20
+       * Before: text-sm text-white/50 bg-white/5 — faint, hard to read
+       * After:  text-base font-bold text-white bg-zinc-900/90 solid border
        */}
       <div
         className="flex items-center rounded-lg border border-white/20
-                   bg-secondary/70 backdrop-blur-sm
-                   px-3 py-1"
+                   bg-zinc-900/90 backdrop-blur-sm px-3 py-1"
       >
-        <span className="font-mono text-base md:text-[15px] font-bold text-white tracking-wider leading-none tabular-nums">
+        <span
+          className="font-mono text-base md:text-[15px] font-bold
+                     text-white tracking-wider leading-none tabular-nums"
+        >
           {timeStr}
         </span>
       </div>
 
       {/*
        * GMT badge pill
-       * Before: text-xs text-white/40
-       * After:  text-sm font-bold text-primary border border-primary/30
+       * Before: text-xs text-white/40 — near-invisible
+       * After:  text-sm font-bold text-primary border-primary/40 bg-primary/10
        */}
       <div
         className="flex items-center rounded-md border border-primary/40
@@ -98,6 +103,7 @@ function ClockBadge() {
 // ─── Main Navbar ──────────────────────────────────────────────────────────────
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const [location] = useLocation();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -130,18 +136,23 @@ export default function Navbar() {
 
         {/* ── Nav Links (desktop) ──────────────────────────────────── */}
         <ul className="hidden md:flex items-center gap-1">
-          {NAV_LINKS.map((link) => (
-            <li key={link.href}>
-              <Link
-                href={link.href}
-                className="rounded-md px-3 py-1.5 text-sm font-medium
-                           text-white/70 hover:text-white hover:bg-white/8
-                           transition-colors"
-              >
-                {link.label}
-              </Link>
-            </li>
-          ))}
+          {NAV_LINKS.map((link) => {
+            const isActive = location === link.href;
+            return (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    isActive
+                      ? "text-white bg-white/10"
+                      : "text-white/70 hover:text-white hover:bg-white/8"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
 
         {/* ── Right Cluster ─────────────────────────────────────────── */}
