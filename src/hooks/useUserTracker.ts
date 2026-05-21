@@ -2,15 +2,19 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+/**
+ * NOTE: `country_code` has been fully removed.
+ * The live `user_sessions` table does NOT have a `country_code` column.
+ * Including it in any upsert payload causes Supabase to return 400 Bad Request,
+ * which breaks the real-time tracking pipeline and can cascade to client UI errors.
+ */
 interface GeoData {
   country: string;
-  country_code: string;
 }
 
 interface SessionMeta {
   sessionToken: string;
   country: string;
-  country_code: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -18,8 +22,9 @@ const SESSION_KEY = "youssef_session_token";
 const HEARTBEAT_INTERVAL_MS = 30_000; // 30 s
 
 /**
- * Ordered list of Geo-IP providers (country/country_code only — no city/region/ip
- * since those columns do not exist in the user_sessions table schema).
+ * Ordered list of Geo-IP providers (country name only).
+ * `country_code` and `city` columns do NOT exist in the live schema — we only
+ * read the human-readable country name here.
  */
 const GEO_PROVIDERS: Array<{
   url: string;
@@ -30,21 +35,19 @@ const GEO_PROVIDERS: Array<{
     url: "https://ipapi.co/json/",
     extract(data) {
       const country = String(data.country_name ?? "").trim();
-      const code = String(data.country_code ?? "").trim();
       if (!country || country === "undefined") return null;
-      return { country, country_code: code };
+      return { country };
     },
   },
 
   // ── Provider 2: ip-api.com (free, no key required) ───────────────────────
   {
-    url: "http://ip-api.com/json/?fields=status,country,countryCode",
+    url: "http://ip-api.com/json/?fields=status,country",
     extract(data) {
       if (String(data.status) !== "success") return null;
       const country = String(data.country ?? "").trim();
-      const code = String(data.countryCode ?? "").trim();
       if (!country) return null;
-      return { country, country_code: code };
+      return { country };
     },
   },
 
@@ -54,16 +57,15 @@ const GEO_PROVIDERS: Array<{
     extract(data) {
       if (!data.success) return null;
       const country = String(data.country ?? "").trim();
-      const code = String(data.country_code ?? "").trim();
       if (!country) return null;
-      return { country, country_code: code };
+      return { country };
     },
   },
 ];
 
 // ─── Geo Lookup with Failover ────────────────────────────────────────────────
 async function resolveGeoData(): Promise<GeoData> {
-  const fallback: GeoData = { country: "Unknown", country_code: "XX" };
+  const fallback: GeoData = { country: "Unknown" };
 
   for (const provider of GEO_PROVIDERS) {
     try {
@@ -122,8 +124,12 @@ function getOrCreateSessionToken(): string {
  * useUserTracker
  *
  * Tracks the active user session in Supabase `user_sessions`.
- * Only writes columns that are guaranteed to exist in the schema:
- *   session_token, current_page, country, country_code, last_seen, updated_at
+ * ONLY writes columns that are confirmed to exist in the live schema:
+ *   session_token, current_page, country, last_seen, updated_at
+ *
+ * Removed columns (DO NOT re-add without adding them to Supabase first):
+ *   ✗ country_code  — column does not exist → causes 400 Bad Request
+ *   ✗ city          — column does not exist → causes 400 Bad Request
  *
  * All DB calls are wrapped in try/catch so they NEVER crash the client UI.
  */
@@ -142,7 +148,7 @@ export function useUserTracker(currentPage: string) {
           session_token: metaRef.current.sessionToken,
           current_page: page,
           country: metaRef.current.country,
-          country_code: metaRef.current.country_code,
+          // ⚠️  country_code intentionally omitted — column does not exist in live DB
           last_seen: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -171,7 +177,6 @@ export function useUserTracker(currentPage: string) {
         metaRef.current = {
           sessionToken: sessionToken.current,
           country: geo.country,
-          country_code: geo.country_code,
         };
 
         await upsertSession(currentPage);

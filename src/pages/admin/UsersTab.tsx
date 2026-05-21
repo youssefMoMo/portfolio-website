@@ -21,15 +21,21 @@ import {
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-// Only includes columns that are guaranteed to exist in user_sessions schema.
-// Optional columns (malicious_attempts, threat_level, joined_at, city, region)
-// are typed as optional so the component never crashes if they're absent.
+/**
+ * Session shape — ONLY columns confirmed to exist in the live `user_sessions` table.
+ *
+ * Removed:
+ *   ✗ country_code  — column does not exist → was causing 400 Bad Request on every fetch
+ *   ✗ city          — column does not exist
+ *
+ * Optional columns below may or may not exist depending on schema version;
+ * they are typed optional so the component never crashes if they're absent.
+ */
 interface Session {
   id: string;
   session_token: string;
   current_page: string | null;
   country: string | null;
-  country_code: string | null;
   is_banned: boolean | null;
   ban_reason: string | null;
   unban_message: string | null;
@@ -41,15 +47,18 @@ interface Session {
   joined_at?: string | null;
 }
 
-// Safe columns to select — we skip optional ones that trigger 400s if absent.
-// The query uses a minimal safe column set; extras are requested with a
-// try/fallback pattern so a missing column won't kill the whole tab.
+/**
+ * SAFE_SELECT — only request columns that exist in the live database.
+ *
+ * ⚠️  `country_code` has been removed. Requesting a non-existent column causes
+ *     Supabase to return HTTP 400 which crashes the entire UsersTab and pollutes
+ *     the console with errors that also affect other components.
+ */
 const SAFE_SELECT = [
   "id",
   "session_token",
   "current_page",
   "country",
-  "country_code",
   "is_banned",
   "ban_reason",
   "unban_message",
@@ -293,10 +302,8 @@ function SessionRow({ session, onRefresh }: { session: Session; onRefresh: () =>
         {session.country && (
           <div className="flex items-center gap-1 text-xs text-white/60">
             <Globe size={12} />
-            <span>
-              {session.country_code && <span className="mr-1">{session.country_code}</span>}
-              {session.country}
-            </span>
+            {/* country_code column removed — display country name only */}
+            <span>{session.country}</span>
           </div>
         )}
 
@@ -344,7 +351,6 @@ export default function UsersTab() {
     setError(null);
 
     try {
-      // First try the safe minimal column set
       const { data, error: queryError } = await supabase
         .from("user_sessions")
         .select(SAFE_SELECT)
@@ -352,7 +358,6 @@ export default function UsersTab() {
         .limit(200);
 
       if (queryError) {
-        // Table exists but query failed — surface a helpful message
         console.warn("[UsersTab] query error:", queryError.message);
         setError(`Could not load sessions: ${queryError.message}`);
         setSessions([]);
@@ -371,7 +376,6 @@ export default function UsersTab() {
 
   useEffect(() => {
     fetchSessions();
-    // Auto-refresh every 15 s — but only if no persistent error to avoid hammering
     const t = setInterval(() => {
       fetchSessions();
     }, 15_000);
@@ -423,8 +427,8 @@ export default function UsersTab() {
             <p className="text-sm font-medium text-red-400">Database Error</p>
             <p className="text-xs text-red-400/70 mt-0.5">{error}</p>
             <p className="text-xs text-white/30 mt-2">
-              This usually means some columns in <code>user_sessions</code> don't match
-              the expected schema. Check your Supabase table structure.
+              Check your Supabase table structure or run the setup SQL to create
+              any missing tables/columns.
             </p>
           </div>
         </div>
