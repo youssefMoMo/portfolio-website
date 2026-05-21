@@ -29,18 +29,13 @@ export type ConfigError =
   | "key_invalid_shape";
 
 // ─── Sanitise the URL ────────────────────────────────────────────
-// Strips trailing slashes and accidental "/rest/v1", "/auth/v1", etc.
-// so the user's env var doesn't have to be perfect.
 function sanitiseUrl(raw: string): { clean: string; modified: boolean } {
   let url = raw.trim();
   if (!url) return { clean: "", modified: false };
 
-  // Drop trailing whitespace/slashes/quotes that sometimes sneak in
   url = url.replace(/[\s'"]+$/g, "");
   url = url.replace(/\/+$/g, "");
 
-  // Strip any of Supabase's auto-appended API paths
-  // e.g. ".../rest/v1", ".../auth/v1", ".../storage/v1", ".../realtime/v1"
   const apiPathRe = /\/(rest|auth|storage|realtime|functions)\/v\d+\/?$/i;
   let modified = false;
   while (apiPathRe.test(url)) {
@@ -48,7 +43,6 @@ function sanitiseUrl(raw: string): { clean: string; modified: boolean } {
     modified = true;
   }
 
-  // Drop trailing slashes again after stripping
   url = url.replace(/\/+$/g, "");
 
   return { clean: url, modified: modified || raw.trim() !== url };
@@ -65,10 +59,6 @@ function validate(rawUrl: string | undefined, rawKey: string | undefined): Confi
     return { ok: false, reason: "url_invalid_protocol", detail: clean };
   }
 
-  // The host should be a Supabase host: either "*.supabase.co",
-  // "*.supabase.in", or a local supabase URL (rare). If it's
-  // something completely different, the request will 404 — better to
-  // surface that early.
   let host = "";
   try {
     host = new URL(clean).host;
@@ -77,15 +67,12 @@ function validate(rawUrl: string | undefined, rawKey: string | undefined): Confi
   }
   if (!host) return { ok: false, reason: "url_invalid_host", detail: clean };
 
-  // JWT shape: three dot-separated base64url segments
   const key = rawKey.trim();
   if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(key)) {
     return { ok: false, reason: "key_invalid_shape" };
   }
 
-  // If we modified the URL, surface that as a warning (not a failure)
   if (modified) {
-    // Still ok, but let consumers know via console
     // eslint-disable-next-line no-console
     console.warn(
       `[supabase] VITE_SUPABASE_URL contained an API path (e.g. "/rest/v1"). ` +
@@ -115,25 +102,28 @@ if (!configStatus.ok && import.meta.env.DEV) {
 const browserStorage =
   typeof window !== "undefined" ? window.localStorage : undefined;
 
-export const supabase: SupabaseClient | null = configStatus.ok
-  ? createClient(configStatus.url, (rawKey as string).trim(), {
-      auth: {
-        autoRefreshToken:   true,
-        persistSession:     true,
-        detectSessionInUrl: true,
-        storage:            browserStorage,
-        storageKey:         "youssef-portfolio-auth",
-      },
-      global: {
-        headers: { "x-application-name": "youssef-portfolio" },
-      },
-      realtime: {
-        params: { eventsPerSecond: 10 },
-      },
-    })
-  : null;
+// الحل هنا: بنضمن دايماً تصدير كائن SupabaseClient صالح ومستقر لتجنب انهيار المشروع
+export const supabase: SupabaseClient = createClient(
+  configStatus.ok ? configStatus.url : "https://placeholder-project-url.supabase.co",
+  configStatus.ok ? (rawKey as string).trim() : "placeholder-anon-key.placeholder-segment.placeholder-key",
+  {
+    auth: {
+      autoRefreshToken:   true,
+      persistSession:     true,
+      detectSessionInUrl: true,
+      storage:            browserStorage,
+      storageKey:         "youssef-portfolio-auth",
+    },
+    global: {
+      headers: { "x-application-name": "youssef-portfolio" },
+    },
+    realtime: {
+      params: { eventsPerSecond: 10 },
+    },
+  }
+);
 
-export const isSupabaseEnabled = !!supabase;
+export const isSupabaseEnabled = configStatus.ok;
 
 // Human-readable explanation for the UI to display
 export function getConfigErrorMessage(): string | null {
@@ -150,7 +140,6 @@ export function getConfigErrorMessage(): string | null {
     case "key_invalid_shape":
       return "VITE_SUPABASE_ANON_KEY does not look like a Supabase anon key. Copy the 'anon public' key from Supabase → Settings → API.";
     case "url_includes_api_path":
-      // Shouldn't reach here — we auto-correct this; included for completeness.
       return "VITE_SUPABASE_URL should be just the project URL (e.g. https://xxx.supabase.co), without /rest/v1.";
   }
 }
