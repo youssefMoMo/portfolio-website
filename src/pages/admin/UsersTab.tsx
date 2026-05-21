@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase";
 import {
   banUser,
   unbanUser,
   sendAdminMessage,
   clearAdminMessage,
-} from "@/admin/adminApi";
+} from "@/lib/adminApi";
 import {
   ShieldBan,
   ShieldCheck,

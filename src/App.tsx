@@ -9,7 +9,7 @@ import BannedScreen, {
   UnbanToast,
   AdminBroadcastBanner,
 } from "@/components/BannedScreen";
-import Navbar from "@/components/Navbar";
+import Navbar from "@/components/layout/Navbar";
 // ... import your page router / layout components here
 
 // ─── Session-token helper (must match useUserTracker) ────────────────────────

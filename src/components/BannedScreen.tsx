@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase";
 import { ShieldBan, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
