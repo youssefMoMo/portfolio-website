@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { supabase } from "./lib/supabase";
 import { v4 as uuidv4 } from "uuid";
 
@@ -55,7 +55,9 @@ function AlertBanner({
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-40" />
             <span className="relative inline-flex h-3 w-3 rounded-full bg-black" />
           </span>
-          <p className="font-bold text-sm sm:text-base truncate">{alert.message}</p>
+          <p className="font-bold text-sm sm:text-base truncate">
+            {alert.message}
+          </p>
         </div>
         <button
           onClick={onDismiss}
@@ -257,7 +259,7 @@ export default function App() {
           } else if (row.is_banned === false) {
             setBan(null);
           }
-        }
+        },
       )
       .subscribe();
 
@@ -280,7 +282,7 @@ export default function App() {
         (payload) => {
           if (payload.eventType === "DELETE") {
             setAlert((prev) =>
-              prev?.id === (payload.old as { id: string }).id ? null : prev
+              prev?.id === (payload.old as { id: string }).id ? null : prev,
             );
             return;
           }
@@ -296,7 +298,7 @@ export default function App() {
           } else {
             setAlert((prev) => (prev?.id === row.id ? null : prev));
           }
-        }
+        },
       )
       .subscribe();
 
