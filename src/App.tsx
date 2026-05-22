@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { supabase } from "./lib/supabase";
-import { v4 as uuidv4 } from "uuid";
 
 // ─── Pages ────────────────────────────────────────────────────────────────────
 import HomePage from "./pages/HomePage";
@@ -11,24 +10,36 @@ import PricingPage from "./pages/PricingPage";
 import ReviewsPage from "./pages/ReviewsPage";
 import PoliciesPage from "./pages/PoliciesPage";
 
-// ─── Session Token ─────────────────────────────────────────────────────────────
+// ─── Native UUID ───────────────────────────────────────────────────────────────
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Fallback for older environments
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function getOrCreateSessionToken(): string {
   try {
     let token = localStorage.getItem("session_token");
     if (!token) {
-      token = uuidv4();
+      token = generateUUID();
       localStorage.setItem("session_token", token);
     }
     return token;
   } catch {
-    return uuidv4();
+    return generateUUID();
   }
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 interface AlertState {
-  message: string;
   id: string;
+  message: string;
 }
 
 interface BanState {
@@ -45,19 +56,15 @@ function AlertBanner({
 }) {
   return (
     <div
-      style={{ zIndex: 99999 }}
-      className="fixed top-0 left-0 w-full pointer-events-auto"
+      style={{ zIndex: 99999, position: "fixed", top: 0, left: 0, width: "100%" }}
     >
       <div className="w-full bg-yellow-400 text-black flex items-center justify-between px-4 py-3 shadow-2xl border-b-4 border-yellow-600">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          {/* Pulse dot */}
           <span className="relative flex h-3 w-3 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-40" />
             <span className="relative inline-flex h-3 w-3 rounded-full bg-black" />
           </span>
-          <p className="font-bold text-sm sm:text-base truncate">
-            {alert.message}
-          </p>
+          <p className="font-bold text-sm sm:text-base truncate">{alert.message}</p>
         </div>
         <button
           onClick={onDismiss}
@@ -73,7 +80,6 @@ function AlertBanner({
 
 // ─── BAN OVERLAY ───────────────────────────────────────────────────────────────
 function BanOverlay({ reason }: { reason: string }) {
-  // Kill all scroll & interaction on the page beneath
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -84,15 +90,21 @@ function BanOverlay({ reason }: { reason: string }) {
 
   return (
     <div
-      style={{ zIndex: 999999 }}
-      className="fixed inset-0 bg-black flex flex-col items-center justify-center select-none"
-      // Swallow every pointer / keyboard event so the page is truly dead
+      style={{
+        zIndex: 999999,
+        position: "fixed",
+        inset: 0,
+        background: "#000",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
       onPointerDown={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
       tabIndex={-1}
     >
       <div className="flex flex-col items-center gap-6 px-6 text-center max-w-lg">
-        {/* Icon */}
         <div className="w-20 h-20 rounded-full bg-red-600/20 border-2 border-red-600 flex items-center justify-center">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -110,24 +122,17 @@ function BanOverlay({ reason }: { reason: string }) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12" />
           </svg>
         </div>
-
-        {/* Heading */}
         <h1 className="text-4xl font-extrabold text-red-500 tracking-tight">
           You Have Been Banned
         </h1>
-
-        {/* Reason */}
         {reason && reason.trim() !== "" ? (
           <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4 w-full">
-            <p className="text-xs uppercase tracking-widest text-white/40 mb-1">
-              Reason
-            </p>
+            <p className="text-xs uppercase tracking-widest text-white/40 mb-1">Reason</p>
             <p className="text-white text-base font-medium">{reason}</p>
           </div>
         ) : (
           <p className="text-white/50 text-sm">No reason was provided.</p>
         )}
-
         <p className="text-white/30 text-xs">
           If you believe this is a mistake, contact support via Discord.
         </p>
@@ -155,7 +160,6 @@ export default function App() {
         if (!existing) {
           await supabase.from("sessions").insert({
             token: sessionToken,
-            country: null,
             page: window.location.pathname,
             last_seen: new Date().toISOString(),
           });
@@ -169,7 +173,7 @@ export default function App() {
             .eq("token", sessionToken);
         }
       } catch {
-        // silently ignore — non-critical
+        // non-critical
       }
     };
 
@@ -185,7 +189,7 @@ export default function App() {
           })
           .eq("token", sessionToken);
       } catch {
-        // silently ignore
+        // non-critical
       }
     }, 15_000);
 
@@ -206,7 +210,7 @@ export default function App() {
           setBan({ reason: data.ban_reason ?? "" });
         }
       } catch {
-        // silently ignore
+        // non-critical
       }
     };
 
@@ -229,14 +233,14 @@ export default function App() {
           setAlert({ id: data.id, message: data.message });
         }
       } catch {
-        // silently ignore
+        // non-critical
       }
     };
 
     checkAlert();
   }, []);
 
-  // ── Real-time: session changes (ban/unban) ─────────────────────────────────
+  // ── Real-time: ban/unban for this session ──────────────────────────────────
   useEffect(() => {
     const channel = supabase
       .channel(`session:${sessionToken}`)
@@ -249,17 +253,13 @@ export default function App() {
           filter: `token=eq.${sessionToken}`,
         },
         (payload) => {
-          const row = payload.new as {
-            is_banned?: boolean;
-            ban_reason?: string;
-          };
-
+          const row = payload.new as { is_banned?: boolean; ban_reason?: string };
           if (row.is_banned === true) {
             setBan({ reason: row.ban_reason ?? "" });
           } else if (row.is_banned === false) {
             setBan(null);
           }
-        },
+        }
       )
       .subscribe();
 
@@ -268,7 +268,7 @@ export default function App() {
     };
   }, [sessionToken]);
 
-  // ── Real-time: global alerts ───────────────────────────────────────────────
+  // ── Real-time: global site alerts ─────────────────────────────────────────
   useEffect(() => {
     const channel = supabase
       .channel("global:alerts")
@@ -282,23 +282,17 @@ export default function App() {
         (payload) => {
           if (payload.eventType === "DELETE") {
             setAlert((prev) =>
-              prev?.id === (payload.old as { id: string }).id ? null : prev,
+              prev?.id === (payload.old as { id: string }).id ? null : prev
             );
             return;
           }
-
-          const row = payload.new as {
-            id: string;
-            message: string;
-            active: boolean;
-          };
-
+          const row = payload.new as { id: string; message: string; active: boolean };
           if (row.active && row.message) {
             setAlert({ id: row.id, message: row.message });
           } else {
             setAlert((prev) => (prev?.id === row.id ? null : prev));
           }
-        },
+        }
       )
       .subscribe();
 
@@ -311,17 +305,13 @@ export default function App() {
 
   return (
     <>
-      {/* ── NUCLEAR BAN OVERLAY — rendered outside router, above everything ── */}
       {ban !== null && <BanOverlay reason={ban.reason} />}
 
-      {/* ── GLOBAL ALERT BANNER ─────────────────────────────────────────────── */}
       {!ban && alert !== null && (
         <AlertBanner alert={alert} onDismiss={dismissAlert} />
       )}
 
-      {/* ── MAIN APP ─────────────────────────────────────────────────────────── */}
       <Router>
-        {/* Push content down when alert is visible so it isn't hidden under the banner */}
         <div className={!ban && alert ? "pt-12" : ""}>
           <Routes>
             <Route path="/" element={<HomePage />} />
