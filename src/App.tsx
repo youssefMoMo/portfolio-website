@@ -1,17 +1,26 @@
 // src/App.tsx
 //
-// ✅ REALTIME FIX:
-//   The channel now listens on TWO paths simultaneously:
+// ✅ BUG FIXES IN THIS VERSION:
 //
-//   PATH 1 — postgres_changes (persisted, ~500ms lag, requires REPLICA IDENTITY FULL)
-//     Kept for backwards compatibility and as a durable safety net.
+//   FIX 1 — SyntaxError crash on broadcast receive:
+//     Replaced ALL optional chaining (?.) and nullish-coalescing (??) operators
+//     in the realtime callback paths with explicit null-guard checks so the
+//     handlers run safely on browsers that do not polyfill these operators.
+//     Added a top-level try/catch inside every realtime callback so a malformed
+//     payload cannot freeze the channel.
 //
-//   PATH 2 — Broadcast "admin_action" event (ephemeral, <50ms, ZERO config required)
-//     adminApi.ts fires this immediately after every DB write.
-//     This is the PRIMARY path that triggers the live client-side reaction.
+//   FIX 2 — VPN-immune session token:
+//     SESSION_KEY is now stored in localStorage (was sessionStorage).
+//     sessionStorage is per-tab and is WIPED on page reload — when a VPN user
+//     refreshes the page after changing IP, a new token was generated and the
+//     channel subscription was re-built against the NEW token, making the old
+//     admin action unreachable.
+//     localStorage persists indefinitely across reloads/VPN hops on the same
+//     device, so the admin channel subscription always targets the SAME token.
 //
-//   Both paths map action payloads to the same state setters, so whichever
-//   arrives first wins — and they converge to the same result.
+//   FIX 3 — Dual-path realtime unchanged (it was already correct):
+//     PATH 1 — postgres_changes (persisted, ~500ms lag)
+//     PATH 2 — Broadcast "admin_action" (ephemeral, <50ms)
 
 import React, {
   useCallback,
@@ -57,11 +66,14 @@ function PageLoader() {
   );
 }
 
+// ── VPN FIX: Use localStorage so the token survives page reloads and IP
+//   changes. sessionStorage was wiped on every reload, which caused a VPN user
+//   (after refreshing) to generate a new token, breaking the channel link. ──
 const SESSION_KEY = "youssef_session_token";
 
 function getSessionToken(): string | null {
   try {
-    return sessionStorage.getItem(SESSION_KEY);
+    return localStorage.getItem(SESSION_KEY);
   } catch {
     return null;
   }
@@ -151,7 +163,7 @@ function AppShell() {
   const isBannedRef = useRef(false);
   useEffect(() => { isBannedRef.current = isBanned; }, [isBanned]);
 
-  // ── Resolve session token ────────────────────────────────────────────
+  // ── Resolve session token (localStorage now — survives VPN IP changes) ──
   useEffect(() => {
     let attempts = 0;
     const poll = setInterval(() => {
@@ -162,70 +174,107 @@ function AppShell() {
     return () => clearInterval(poll);
   }, []);
 
-  // ── Bootstrap from DB ────────────────────────────────────────────────
+  // ── Bootstrap from DB ────────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionToken) return;
     (async () => {
-      const { data } = await supabase
-        .from("user_sessions")
-        .select("is_banned, ban_reason, admin_message")
-        .eq("session_token", sessionToken)
-        .maybeSingle();
-      if (data) {
-        setIsBanned(!!data.is_banned);
-        setBanReason(data.ban_reason ?? null);
-        setAdminMessage(data.admin_message ?? null);
+      try {
+        const { data } = await supabase
+          .from("user_sessions")
+          .select("is_banned, ban_reason, admin_message")
+          .eq("session_token", sessionToken)
+          .maybeSingle();
+        if (data) {
+          setIsBanned(!!data.is_banned);
+          setBanReason(data.ban_reason != null ? data.ban_reason : null);
+          setAdminMessage(data.admin_message != null ? data.admin_message : null);
+        }
+      } catch {
+        // Silently suppress — never crash the UI on bootstrap failure
       }
     })();
   }, [sessionToken]);
 
-  // ── Dual-path Realtime subscription ─────────────────────────────────
+  // ── Dual-path Realtime subscription ─────────────────────────────────────
   useEffect(() => {
     if (!sessionToken) return;
 
-    // ── Shared state-setter logic ──────────────────────────────────────
+    // ── Shared state-setter logic ────────────────────────────────────────
+    // SYNTAX FIX: No optional chaining (?.) or nullish-coalescing (??) below.
+    // Using explicit null guards to support browsers without these operators.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function applyModerationRow(row: Record<string, any>) {
-      if (row.is_banned === true) {
-        setBanReason((row.ban_reason as string | null) ?? null);
-        setIsBanned(true);
-        return;
+      try {
+        if (!row || typeof row !== "object") return;
+
+        if (row.is_banned === true) {
+          const reason = (row.ban_reason !== null && row.ban_reason !== undefined)
+            ? String(row.ban_reason)
+            : null;
+          setBanReason(reason);
+          setIsBanned(true);
+          return;
+        }
+
+        if (row.is_banned === false && isBannedRef.current) {
+          setIsBanned(false);
+          const ubMsg = (row.unban_message !== null && row.unban_message !== undefined)
+            ? String(row.unban_message)
+            : null;
+          setUnbanMessage(ubMsg);
+          return;
+        }
+
+        const msg = (row.admin_message !== null && row.admin_message !== undefined)
+          ? String(row.admin_message)
+          : null;
+        setAdminMessage(msg);
+      } catch {
+        // Swallow malformed row — never crash the channel
       }
-      if (row.is_banned === false && isBannedRef.current) {
-        setIsBanned(false);
-        setUnbanMessage((row.unban_message as string | null) ?? null);
-        return;
-      }
-      setAdminMessage((row.admin_message as string | null) ?? null);
     }
 
-    // ── PATH 2: Broadcast action handler ──────────────────────────────
+    // ── PATH 2: Broadcast action handler ────────────────────────────────
+    // SYNTAX FIX: destructuring replaced with explicit property access +
+    // explicit null checks so no optional-chaining opcode is emitted.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function applyBroadcastAction(payload: Record<string, any>) {
-      const { action, reason, unbanMessage: ubMsg, message } = payload;
+      try {
+        if (!payload || typeof payload !== "object") return;
 
-      switch (action) {
-        case "ban":
-          setBanReason(reason ?? null);
-          setIsBanned(true);
-          break;
-        case "unban":
-          setIsBanned(false);
-          setUnbanMessage(ubMsg ?? null);
-          break;
-        case "message":
-          setAdminMessage(message ?? null);
-          break;
-        case "clear_message":
-          setAdminMessage(null);
-          break;
-        default:
-          break;
+        const action  = payload.action  !== undefined ? String(payload.action)  : "";
+        const reason  = payload.reason  !== undefined && payload.reason  !== null
+          ? String(payload.reason)  : null;
+        const ubMsg   = payload.unbanMessage !== undefined && payload.unbanMessage !== null
+          ? String(payload.unbanMessage) : null;
+        const message = payload.message !== undefined && payload.message !== null
+          ? String(payload.message) : null;
+
+        switch (action) {
+          case "ban":
+            setBanReason(reason);
+            setIsBanned(true);
+            break;
+          case "unban":
+            setIsBanned(false);
+            setUnbanMessage(ubMsg);
+            break;
+          case "message":
+            setAdminMessage(message);
+            break;
+          case "clear_message":
+            setAdminMessage(null);
+            break;
+          default:
+            break;
+        }
+      } catch {
+        // Swallow malformed broadcast — never freeze the channel
       }
     }
 
     const channel = supabase
-      .channel(`app-session-${sessionToken}`, {
+      .channel("app-session-" + sessionToken, {
         config: { broadcast: { self: false } },
       })
       // PATH 1 — postgres_changes (durable, requires REPLICA IDENTITY FULL)
@@ -235,12 +284,17 @@ function AppShell() {
           event:  "UPDATE",
           schema: "public",
           table:  "user_sessions",
-          filter: `session_token=eq.${sessionToken}`,
+          filter: "session_token=eq." + sessionToken,
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (payload: any) => {
-          const row = payload?.new;
-          if (row) applyModerationRow(row);
+          try {
+            // SYNTAX FIX: explicit property access, no optional chaining
+            const row = (payload && payload.new) ? payload.new : null;
+            if (row) applyModerationRow(row);
+          } catch {
+            // Suppress
+          }
         }
       )
       // PATH 2 — Broadcast (instant, fired by adminApi after every DB write)
@@ -249,8 +303,13 @@ function AppShell() {
         { event: "admin_action" },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (msg: any) => {
-          const p = msg?.payload;
-          if (p) applyBroadcastAction(p);
+          try {
+            // SYNTAX FIX: explicit property access, no optional chaining
+            const p = (msg && msg.payload) ? msg.payload : null;
+            if (p) applyBroadcastAction(p);
+          } catch {
+            // Suppress
+          }
         }
       )
       .subscribe();

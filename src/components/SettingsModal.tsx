@@ -1,3 +1,14 @@
+// src/components/SettingsModal.tsx
+//
+// ✅ NEW IN THIS VERSION:
+//   • Settings gear in Navbar now opens this modal (was dead — no onClick)
+//   • Performance Booster toggle (stored in localStorage as yd_perf_boost)
+//   • Low-End Device (Eco) Mode toggle (stored in localStorage as yd_eco_mode)
+//     — When ON: all marquees are replaced with static grid cards,
+//       canvas particles and complex transitions are disabled site-wide
+//   • `usePerformanceSettings` hook exported for use by DualMarqueeSection
+//     and other components that respond to these toggles
+
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { DISCORD_PROFILE_URL } from "@/lib/discord";
@@ -9,71 +20,143 @@ import {
   Globe,
   MessageSquare,
   Sparkles,
+  Zap,
+  Leaf,
+  Info,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme";
 import { useLanguage } from "@/hooks/use-language";
-import { profile } from "@/lib/data";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type SettingsModalProps = { isOpen: boolean; onClose: () => void };
+// ─── Performance settings keys ────────────────────────────────────────────────
+export const PERF_BOOST_KEY = "yd_perf_boost";
+export const ECO_MODE_KEY   = "yd_eco_mode";
+export const PERF_SETTINGS_EVENT = "yd-perf-settings-changed";
 
+// ─── usePerformanceSettings ───────────────────────────────────────────────────
+// Shared hook — import this in any component that needs to react to
+// Performance Booster or Eco Mode toggles.
+export function usePerformanceSettings() {
+  const readBool = (key: string) => {
+    try { return localStorage.getItem(key) === "true"; } catch { return false; }
+  };
+
+  const [perfBoost, setPerfBoostState] = useState(() => readBool(PERF_BOOST_KEY));
+  const [ecoMode,   setEcoModeState]   = useState(() => readBool(ECO_MODE_KEY));
+
+  useEffect(() => {
+    const sync = () => {
+      setPerfBoostState(readBool(PERF_BOOST_KEY));
+      setEcoModeState(readBool(ECO_MODE_KEY));
+    };
+    window.addEventListener(PERF_SETTINGS_EVENT, sync);
+    return () => window.removeEventListener(PERF_SETTINGS_EVENT, sync);
+  }, []);
+
+  const setPerfBoost = useCallback((val: boolean) => {
+    try { localStorage.setItem(PERF_BOOST_KEY, String(val)); } catch {}
+    setPerfBoostState(val);
+    window.dispatchEvent(new Event(PERF_SETTINGS_EVENT));
+  }, []);
+
+  const setEcoMode = useCallback((val: boolean) => {
+    try { localStorage.setItem(ECO_MODE_KEY, String(val)); } catch {}
+    setEcoModeState(val);
+    // Toggle eco-mode class on <html> so other CSS-driven animations respect it
+    if (val) {
+      document.documentElement.classList.add("eco-mode");
+    } else {
+      document.documentElement.classList.remove("eco-mode");
+    }
+    window.dispatchEvent(new Event(PERF_SETTINGS_EVENT));
+  }, []);
+
+  return { perfBoost, setPerfBoost, ecoMode, setEcoMode };
+}
+
+// ─── Framer Motion variants ───────────────────────────────────────────────────
 const backdropVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.3 } },
-  exit: { opacity: 0, transition: { duration: 0.2 } },
+  hidden:  { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.25 } },
+  exit:    { opacity: 0, transition: { duration: 0.2 } },
 };
 const modalVariants = {
-  hidden: { opacity: 0, x: "100%", scale: 0.95 },
+  hidden:  { opacity: 0, x: "100%", scale: 0.97 },
   visible: {
     opacity: 1, x: 0, scale: 1,
-    transition: { type: "spring", damping: 25, stiffness: 300 },
+    transition: { type: "spring", damping: 28, stiffness: 320 },
   },
   exit: {
-    opacity: 0, x: "100%", scale: 0.95,
-    transition: { type: "spring", damping: 25, stiffness: 300, duration: 0.3 },
+    opacity: 0, x: "100%", scale: 0.97,
+    transition: { type: "spring", damping: 28, stiffness: 320, duration: 0.25 },
   },
 };
 const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.2 } },
+  hidden:  { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.18 } },
 };
 const itemVariants = {
-  hidden: { opacity: 0, x: 20, y: 10 },
-  visible: { opacity: 1, x: 0, y: 0, transition: { type: "spring", stiffness: 200, damping: 15 } },
+  hidden:  { opacity: 0, x: 16, y: 8 },
+  visible: { opacity: 1, x: 0,  y: 0, transition: { type: "spring", stiffness: 200, damping: 18 } },
 };
 
-// Flag image filenames — files live in /public/images/global/:
-// flag-en.png (US/UK flag)
-// flag-ar.png (Saudi Arabia flag)
-// flag-es.png (Spain flag)
+// ─── Flag images & emoji fallbacks ───────────────────────────────────────────
 const FLAG_IMAGES: Record<string, string> = {
   en: "/images/global/flag-en.png",
   ar: "/images/global/flag-ar.png",
   es: "/images/global/flag-es.png",
 };
+const FLAG_EMOJI: Record<string, string> = { en: "🇺🇸", ar: "🇸🇦", es: "🇪🇸" };
 
-const FLAG_EMOJI: Record<string, string> = {
-  en: "🇺🇸",
-  ar: "🇸🇦",
-  es: "🇪🇸",
-};
+// ─── Toggle Switch sub-component ─────────────────────────────────────────────
+function ToggleSwitch({
+  checked,
+  onChange,
+  id,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  id: string;
+}) {
+  return (
+    <button
+      id={id}
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full
+                  border-2 border-transparent transition-colors duration-200 focus:outline-none
+                  focus-visible:ring-2 focus-visible:ring-primary/60
+                  ${checked ? "bg-primary" : "bg-white/15"}`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white
+                    shadow-lg transform transition-transform duration-200
+                    ${checked ? "translate-x-5" : "translate-x-0"}`}
+      />
+    </button>
+  );
+}
+
+// ─── Main SettingsModal ───────────────────────────────────────────────────────
+type SettingsModalProps = { isOpen: boolean; onClose: () => void };
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
-  const { lang, setLang } = useLanguage();
+  const { lang, setLang }   = useLanguage();
+  const { perfBoost, setPerfBoost, ecoMode, setEcoMode } = usePerformanceSettings();
   const [flagErrors, setFlagErrors] = useState<Record<string, boolean>>({});
 
   const themes = useMemo(() => [
-    { value: "light", label: "Light", icon: Sun, color: "from-amber-400 to-orange-400" },
-    { value: "dark", label: "Dark", icon: Moon, color: "from-indigo-500 to-purple-500" },
+    { value: "light",  label: "Light",  icon: Sun,     color: "from-amber-400 to-orange-400" },
+    { value: "dark",   label: "Dark",   icon: Moon,    color: "from-indigo-500 to-purple-500" },
     { value: "system", label: "System", icon: Monitor, color: "from-cyan-400 to-blue-500" },
   ], []);
 
   const languages = useMemo(() => [
-    { value: "en", label: "English", color: "from-blue-500 to-indigo-500" },
-    { value: "ar", label: "العربية", color: "from-green-500 to-emerald-500" },
-    { value: "es", label: "Español", color: "from-red-500 to-orange-500" },
+    { value: "en", label: "English",  color: "from-blue-500 to-indigo-500" },
+    { value: "ar", label: "العربية",  color: "from-green-500 to-emerald-500" },
+    { value: "es", label: "Español",  color: "from-red-500 to-orange-500" },
   ], []);
 
   const handleLanguageChange = useCallback((newLang: string) => {
@@ -91,30 +174,34 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   // ESC closes
   useEffect(() => {
     if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
-  // Body scroll lock with scrollbar-width compensation
+  // Body scroll lock
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return;
     const body = document.body;
     const html = document.documentElement;
     const scrollbarWidth = window.innerWidth - html.clientWidth;
-    const prev = {
-      overflow: body.style.overflow,
-      paddingRight: body.style.paddingRight,
-    };
+    const prev = { overflow: body.style.overflow, paddingRight: body.style.paddingRight };
     body.style.overflow = "hidden";
-    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+    if (scrollbarWidth > 0) body.style.paddingRight = scrollbarWidth + "px";
     return () => {
       body.style.overflow = prev.overflow;
       body.style.paddingRight = prev.paddingRight;
     };
   }, [isOpen]);
+
+  // Apply eco-mode class on mount (in case page loads with eco on)
+  useEffect(() => {
+    if (ecoMode) {
+      document.documentElement.classList.add("eco-mode");
+    } else {
+      document.documentElement.classList.remove("eco-mode");
+    }
+  }, [ecoMode]);
 
   if (typeof document === "undefined") return null;
 
@@ -122,30 +209,34 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <AnimatePresence>
       {isOpen && (
         <>
+          {/* Backdrop */}
           <motion.div
             variants={backdropVariants}
             initial="hidden" animate="visible" exit="exit"
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
             onClick={onClose}
           />
+
+          {/* Panel */}
           <motion.div
             variants={modalVariants}
             initial="hidden" animate="visible" exit="exit"
-            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[380px] pointer-events-none"
+            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] pointer-events-none"
           >
             <div className="h-full bg-card border-l border-white/10 shadow-2xl pointer-events-auto overflow-hidden flex flex-col">
-              {/* Header */}
+
+              {/* ── Header ───────────────────────────────────────────── */}
               <motion.div
-                initial={{ opacity: 0, y: -16 }}
+                initial={{ opacity: 0, y: -14 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
+                transition={{ delay: 0.28, type: "spring", stiffness: 200 }}
                 className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 bg-card/50 backdrop-blur-xl"
               >
                 <div className="flex items-center gap-2.5">
                   <motion.div
                     initial={{ scale: 0, rotate: -180 }}
                     animate={{ scale: 1, rotate: 0 }}
-                    transition={{ delay: 0.4, type: "spring", stiffness: 300 }}
+                    transition={{ delay: 0.38, type: "spring", stiffness: 300 }}
                     className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center"
                   >
                     <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
@@ -167,13 +258,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </motion.button>
               </motion.div>
 
-              {/* Content */}
+              {/* ── Content ──────────────────────────────────────────── */}
               <motion.div
                 variants={containerVariants}
                 initial="hidden" animate="visible"
                 className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-6 sm:space-y-7"
               >
-                {/* Language Section */}
+
+                {/* Language */}
                 <motion.div variants={itemVariants} className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
@@ -181,37 +273,27 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {languages.map((langOption, index) => {
-                      const isActive = lang === langOption.value;
+                      const isActive  = lang === langOption.value;
                       const showEmoji = flagErrors[langOption.value];
                       return (
                         <motion.button
                           key={langOption.value}
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
-                          transition={{ delay: 0.5 + index * 0.1, type: "spring", stiffness: 300 }}
-                          whileHover={{
-                            scale: 1.08,
-                            transition: { type: "spring", stiffness: 400, damping: 10 },
-                          }}
+                          transition={{ delay: 0.45 + index * 0.1, type: "spring", stiffness: 300 }}
+                          whileHover={{ scale: 1.08, transition: { type: "spring", stiffness: 400, damping: 10 } }}
                           whileTap={{ scale: 0.93 }}
                           onClick={() => handleLanguageChange(langOption.value)}
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
                             isActive
-                              ? `bg-gradient-to-br ${langOption.color} border-transparent shadow-lg`
+                              ? "bg-gradient-to-br " + langOption.color + " border-transparent shadow-lg"
                               : "bg-background/50 border-white/10 hover:border-white/20"
                           }`}
                         >
-                          {/* Animated glow sweep */}
-                          <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${
-                            isActive ? "" : `bg-gradient-to-r ${langOption.color}`
-                          }`} style={{ opacity: isActive ? 0 : undefined }}>
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                          </div>
                           {!isActive && (
                             <div className="absolute inset-0 opacity-0 group-hover:opacity-[0.08] transition-opacity duration-300 bg-gradient-to-br from-white to-transparent rounded-xl" />
                           )}
                           <div className="relative flex flex-col items-center gap-1.5">
-                            {/* Flag image with emoji fallback */}
                             {showEmoji ? (
                               <span className="text-2xl sm:text-3xl">{FLAG_EMOJI[langOption.value]}</span>
                             ) : (
@@ -241,7 +323,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 </motion.div>
 
-                {/* Theme Section */}
+                {/* Theme */}
                 <motion.div variants={itemVariants} className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
@@ -249,27 +331,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {themes.map((t, index) => {
-                      const Icon = t.icon;
+                      const Icon     = t.icon;
                       const isActive = theme === t.value;
                       return (
                         <motion.button
                           key={t.value}
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
-                          transition={{ delay: 0.6 + index * 0.1, type: "spring", stiffness: 300 }}
-                          whileHover={{
-                            scale: 1.08,
-                            transition: { type: "spring", stiffness: 400, damping: 10 },
-                          }}
+                          transition={{ delay: 0.55 + index * 0.1, type: "spring", stiffness: 300 }}
+                          whileHover={{ scale: 1.08, transition: { type: "spring", stiffness: 400, damping: 10 } }}
                           whileTap={{ scale: 0.93 }}
                           onClick={() => handleThemeChange(t.value)}
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
                             isActive
-                              ? `bg-gradient-to-br ${t.color} border-transparent shadow-lg`
+                              ? "bg-gradient-to-br " + t.color + " border-transparent shadow-lg"
                               : "bg-background/50 border-white/10 hover:border-white/20"
                           }`}
                         >
-                          {/* Animated glow sweep */}
                           {!isActive && (
                             <div className="absolute inset-0 opacity-0 group-hover:opacity-[0.08] transition-opacity duration-300 bg-gradient-to-br from-white to-transparent rounded-xl" />
                           )}
@@ -277,9 +355,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <motion.div
                               initial={{ scale: 0, rotate: -180 }}
                               animate={{ scale: 1, rotate: 0 }}
-                              transition={{ delay: 0.6 + index * 0.1, type: "spring" }}
+                              transition={{ delay: 0.55 + index * 0.1, type: "spring" }}
                             >
-                              <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"}`} />
+                              <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${
+                                isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
+                              }`} />
                             </motion.div>
                             <span className={`text-[10px] sm:text-xs font-semibold ${
                               isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
@@ -300,7 +380,79 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 </motion.div>
 
-                {/* Contact Section */}
+                {/* ── Performance Section ──────────────────────────── */}
+                <motion.div variants={itemVariants} className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
+                    <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                    <span>Performance</span>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {/* Performance Booster */}
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-background/50 px-4 py-3.5">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                          <p className="text-xs sm:text-sm font-semibold text-foreground">
+                            Performance Booster
+                          </p>
+                        </div>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                          Prioritizes strict rendering loops &amp; reduces repaints
+                        </p>
+                      </div>
+                      <ToggleSwitch
+                        id="perf-boost-toggle"
+                        checked={perfBoost}
+                        onChange={setPerfBoost}
+                      />
+                    </div>
+
+                    {/* Eco Mode */}
+                    <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3.5 transition-colors duration-300 ${
+                      ecoMode
+                        ? "border-emerald-500/40 bg-emerald-950/20"
+                        : "border-white/10 bg-background/50"
+                    }`}>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Leaf className={`w-3.5 h-3.5 flex-shrink-0 ${ecoMode ? "text-emerald-400" : "text-muted-foreground"}`} />
+                          <p className="text-xs sm:text-sm font-semibold text-foreground">
+                            Low-End Device Mode
+                          </p>
+                        </div>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                          Disables animations, particles &amp; marquees — replaces with static grids
+                        </p>
+                      </div>
+                      <ToggleSwitch
+                        id="eco-mode-toggle"
+                        checked={ecoMode}
+                        onChange={setEcoMode}
+                      />
+                    </div>
+
+                    {/* Info chip when eco is on */}
+                    <AnimatePresence>
+                      {ecoMode && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          className="flex items-start gap-2 rounded-lg bg-emerald-900/20 border border-emerald-500/20 px-3 py-2.5"
+                        >
+                          <Info className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-emerald-300/80 leading-relaxed">
+                            Eco Mode active — all marquees, canvas particles and complex
+                            transitions are replaced with lightweight static layouts.
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+
+                {/* Contact */}
                 <motion.div variants={itemVariants} className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
@@ -310,9 +462,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     href={DISCORD_PROFILE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    whileHover={{ scale: 1.03, fontWeight: 700 }}
+                    whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
-                    className="flex items-center justify-center gap-2 sm:gap-2.5 p-3 sm:p-4 rounded-xl bg-gradient-to-r from-[#5865F2] to-[#4752C4] text-white text-xs sm:text-sm font-semibold shadow-lg discord-glow transition-all duration-300 group"
+                    className="flex items-center justify-center gap-2 sm:gap-2.5 p-3 sm:p-4 rounded-xl bg-gradient-to-r from-[#5865F2] to-[#4752C4] text-white text-xs sm:text-sm font-semibold shadow-lg transition-all duration-300 group"
                   >
                     <motion.div
                       animate={{ scale: [1, 1.1, 1] }}
@@ -323,19 +475,21 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <span>Open Discord DM</span>
                   </motion.a>
                 </motion.div>
+
               </motion.div>
 
-              {/* Footer */}
+              {/* ── Footer ───────────────────────────────────────────── */}
               <motion.div
-                initial={{ opacity: 0, y: 16 }}
+                initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8 }}
+                transition={{ delay: 0.72 }}
                 className="p-4 border-t border-white/10 bg-card/50 backdrop-blur-xl"
               >
                 <p className="text-[10px] sm:text-xs text-center text-muted-foreground">
-                  © 2026 Youssef Design - All Rights Reserved
+                  © 2026 Youssef Design — All Rights Reserved
                 </p>
               </motion.div>
+
             </div>
           </motion.div>
         </>

@@ -1,15 +1,21 @@
 // src/pages/admin/UsersTab.tsx
 //
-// ✅ REALTIME FIX: All action handlers now pass `sessionToken` to adminApi so
-//    the broadcast path fires immediately after every DB write.
+// ✅ FIXES IN THIS VERSION:
 //
-// ✅ UI OVERHAUL: Clean command-center aesthetic —
-//    • Glowing live-status dot with pulse ring
-//    • Page-route badge (color-coded by section)
-//    • Country + flag emoji on the left
-//    • Action tray on the far right (Ban / Unban / Message)
-//    • Smooth CSS transitions on all state changes
-//    • Banned rows get a red left-border accent, not a noisy background flood
+//   BROADCAST SAFETY:
+//     ActionTray validates all input strings before passing them to adminApi.
+//     Strings are trimmed and sanitized so no payload field can start with a
+//     dot (".") or contain characters that could cause a SyntaxError if a
+//     browser's realtime internals inadvertently evaluate the value.
+//     The broadcastMsg, banReason and unbanMsg fields are capped at 500 chars
+//     to prevent excessively large payloads on the WebSocket channel.
+//
+//   SESSION_TOKEN FILTERING:
+//     Admin actions already target users by their permanent session_token
+//     (stored in localStorage — VPN-resistant). No IP-based filtering anywhere.
+//     The ActionTray passes `sessionToken: session.session_token` to every
+//     adminApi call, so Supabase Broadcast targets the exact channel the client
+//     subscribed to regardless of any IP change.
 
 "use client";
 
@@ -22,18 +28,8 @@ import {
   clearAdminMessage,
 } from "@/lib/adminApi";
 import {
-  ShieldBan,
-  ShieldCheck,
-  Send,
-  X,
-  Loader2,
-  RefreshCw,
-  AlertCircle,
-  MessageSquare,
-  ChevronDown,
-  ChevronUp,
-  Search,
-  Users,
+  ShieldBan, ShieldCheck, Send, X, Loader2, RefreshCw,
+  AlertCircle, ChevronDown, ChevronUp, Search, Users,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,18 +49,11 @@ interface Session {
 }
 
 const SAFE_SELECT = [
-  "id",
-  "session_token",
-  "current_page",
-  "country",
-  "is_banned",
-  "ban_reason",
-  "unban_message",
-  "admin_message",
-  "last_seen",
+  "id", "session_token", "current_page", "country",
+  "is_banned", "ban_reason", "unban_message", "admin_message", "last_seen",
 ].join(", ");
 
-// ─── Country flag helper ──────────────────────────────────────────────────────
+// ─── Country flags ────────────────────────────────────────────────────────────
 const COUNTRY_FLAGS: Record<string, string> = {
   "United States": "🇺🇸", "Egypt": "🇪🇬", "United Kingdom": "🇬🇧",
   "Germany": "🇩🇪", "France": "🇫🇷", "Japan": "🇯🇵", "Canada": "🇨🇦",
@@ -76,13 +65,13 @@ const COUNTRY_FLAGS: Record<string, string> = {
 };
 function getFlag(country: string | null): string {
   if (!country) return "🌐";
-  return COUNTRY_FLAGS[country] ?? "🌐";
+  return COUNTRY_FLAGS[country] || "🌐";
 }
 
-// ─── Page-route badge color map ────────────────────────────────────────────────
+// ─── Route badge ──────────────────────────────────────────────────────────────
 function routeBadgeClass(page: string | null): string {
-  const p = page ?? "/";
-  if (p.startsWith("/admin"))    return "bg-violet-500/15 text-violet-300 border-violet-500/25";
+  const p = page || "/";
+  if (p.startsWith("/admin"))     return "bg-violet-500/15 text-violet-300 border-violet-500/25";
   if (p.startsWith("/portfolio")) return "bg-cyan-500/15 text-cyan-300 border-cyan-500/25";
   if (p.startsWith("/games"))     return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
   if (p.startsWith("/pricing"))   return "bg-amber-500/15 text-amber-300 border-amber-500/25";
@@ -96,22 +85,26 @@ function timeAgo(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
     const diff = Date.now() - new Date(iso).getTime();
-    if (diff < 5_000)       return "just now";
-    if (diff < 60_000)      return `${Math.round(diff / 1000)}s ago`;
-    if (diff < 3_600_000)   return `${Math.round(diff / 60_000)}m ago`;
-    return `${Math.round(diff / 3_600_000)}h ago`;
-  } catch {
-    return "—";
-  }
+    if (diff < 5_000)     return "just now";
+    if (diff < 60_000)    return Math.round(diff / 1000) + "s ago";
+    if (diff < 3_600_000) return Math.round(diff / 60_000) + "m ago";
+    return Math.round(diff / 3_600_000) + "h ago";
+  } catch { return "—"; }
 }
 
-// ─── Is "active now" — last seen within 3 minutes ───────────────────────────
 function isActive(last_seen: string): boolean {
-  try {
-    return Date.now() - new Date(last_seen).getTime() < 3 * 60_000;
-  } catch {
-    return false;
-  }
+  try { return Date.now() - new Date(last_seen).getTime() < 3 * 60_000; }
+  catch { return false; }
+}
+
+// ─── Payload sanitiser ────────────────────────────────────────────────────────
+// Prevents broadcast payloads from containing values that start with "."
+// (which can trigger SyntaxError in some realtime evaluation paths) or
+// that exceed a safe length.
+function sanitisePayloadString(raw: string, maxLen = 500): string {
+  const trimmed = raw.trim().slice(0, maxLen);
+  // Strip any leading dots that could look like a JS expression start
+  return trimmed.replace(/^\.+/, "");
 }
 
 // ─── Inline feedback flash ────────────────────────────────────────────────────
@@ -124,7 +117,7 @@ function useFeedback() {
   return { msg, flash };
 }
 
-// ─── Action Tray (expanded panel) ─────────────────────────────────────────────
+// ─── Action Tray ──────────────────────────────────────────────────────────────
 function ActionTray({
   session,
   onRefresh,
@@ -134,9 +127,9 @@ function ActionTray({
   onRefresh: () => void;
   onClose: () => void;
 }) {
-  const [banReason,    setBanReason]    = useState(session.ban_reason ?? "");
-  const [unbanMsg,     setUnbanMsg]     = useState(session.unban_message ?? "");
-  const [broadcastMsg, setBroadcastMsg] = useState(session.admin_message ?? "");
+  const [banReason,    setBanReason]    = useState(session.ban_reason || "");
+  const [unbanMsg,     setUnbanMsg]     = useState(session.unban_message || "");
+  const [broadcastMsg, setBroadcastMsg] = useState(session.admin_message || "");
   const [busy, setBusy] = useState<"ban" | "unban" | "send" | "clear" | null>(null);
   const { msg: feedback, flash } = useFeedback();
 
@@ -159,19 +152,17 @@ function ActionTray({
 
   return (
     <div className="mt-0 overflow-hidden rounded-b-2xl border-t border-white/6 bg-[#0d0d14]">
-      {/* Header bar */}
+      {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30">
           Moderation Panel
         </span>
         {feedback && (
-          <span
-            className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
-              feedback.ok
-                ? "text-emerald-300 bg-emerald-500/10"
-                : "text-red-300 bg-red-500/10"
-            }`}
-          >
+          <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
+            feedback.ok
+              ? "text-emerald-300 bg-emerald-500/10"
+              : "text-red-300 bg-red-500/10"
+          }`}>
             {feedback.text}
           </span>
         )}
@@ -185,7 +176,7 @@ function ActionTray({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-white/5">
-        {/* ── Ban ─────────────────────────────────────────────────────── */}
+        {/* ── Ban ────────────────────────────────────────────────────── */}
         <div className="p-4 space-y-2.5">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-red-400/60">
             Ban User
@@ -193,7 +184,7 @@ function ActionTray({
           <input
             type="text"
             value={banReason}
-            onChange={(e) => setBanReason(e.target.value)}
+            onChange={(e) => setBanReason(e.target.value.slice(0, 500))}
             placeholder="Reason (optional)"
             className="w-full rounded-lg border border-white/8 bg-white/4
                        px-3 py-2 text-xs text-white placeholder:text-white/25
@@ -203,9 +194,9 @@ function ActionTray({
             onClick={() =>
               act("ban", () =>
                 banUser({
-                  sessionId: session.id,
+                  sessionId:    session.id,
                   sessionToken: session.session_token,
-                  reason: banReason.trim() || undefined,
+                  reason: sanitisePayloadString(banReason) || undefined,
                 }), "Banned"
               )
             }
@@ -214,12 +205,14 @@ function ActionTray({
                        bg-red-600/80 hover:bg-red-500 disabled:opacity-35
                        px-3 py-2 text-xs font-semibold text-white transition-all"
           >
-            {busy === "ban" ? <Loader2 size={12} className="animate-spin" /> : <ShieldBan size={12} />}
+            {busy === "ban"
+              ? <Loader2 size={12} className="animate-spin" />
+              : <ShieldBan size={12} />}
             {session.is_banned ? "Already Banned" : "Ban Session"}
           </button>
         </div>
 
-        {/* ── Unban ────────────────────────────────────────────────────── */}
+        {/* ── Unban ──────────────────────────────────────────────────── */}
         <div className="p-4 space-y-2.5">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400/60">
             Unban User
@@ -227,7 +220,7 @@ function ActionTray({
           <input
             type="text"
             value={unbanMsg}
-            onChange={(e) => setUnbanMsg(e.target.value)}
+            onChange={(e) => setUnbanMsg(e.target.value.slice(0, 500))}
             placeholder="Welcome-back message"
             className="w-full rounded-lg border border-white/8 bg-white/4
                        px-3 py-2 text-xs text-white placeholder:text-white/25
@@ -237,9 +230,9 @@ function ActionTray({
             onClick={() =>
               act("unban", () =>
                 unbanUser({
-                  sessionId: session.id,
+                  sessionId:    session.id,
                   sessionToken: session.session_token,
-                  unbanMessage: unbanMsg.trim() || undefined,
+                  unbanMessage: sanitisePayloadString(unbanMsg) || undefined,
                 }), "Unbanned"
               )
             }
@@ -248,12 +241,14 @@ function ActionTray({
                        bg-emerald-700/80 hover:bg-emerald-600 disabled:opacity-35
                        px-3 py-2 text-xs font-semibold text-white transition-all"
           >
-            {busy === "unban" ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />}
+            {busy === "unban"
+              ? <Loader2 size={12} className="animate-spin" />
+              : <ShieldCheck size={12} />}
             {session.is_banned ? "Unban Session" : "Not Banned"}
           </button>
         </div>
 
-        {/* ── Broadcast ────────────────────────────────────────────────── */}
+        {/* ── Broadcast ──────────────────────────────────────────────── */}
         <div className="p-4 space-y-2.5">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-400/60">
             Live Alert
@@ -261,7 +256,7 @@ function ActionTray({
           <input
             type="text"
             value={broadcastMsg}
-            onChange={(e) => setBroadcastMsg(e.target.value)}
+            onChange={(e) => setBroadcastMsg(e.target.value.slice(0, 500))}
             placeholder="Message shown to this user now…"
             className="w-full rounded-lg border border-white/8 bg-white/4
                        px-3 py-2 text-xs text-white placeholder:text-white/25
@@ -269,21 +264,25 @@ function ActionTray({
           />
           <div className="flex gap-2">
             <button
-              onClick={() =>
+              onClick={() => {
+                const safe = sanitisePayloadString(broadcastMsg);
+                if (!safe) return;
                 act("send", () =>
                   sendAdminMessage({
-                    sessionId: session.id,
+                    sessionId:    session.id,
                     sessionToken: session.session_token,
-                    message: broadcastMsg.trim(),
+                    message:      safe,
                   }), "Alert sent"
-                )
-              }
+                );
+              }}
               disabled={!!busy || !broadcastMsg.trim()}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg
                          bg-amber-600/80 hover:bg-amber-500 disabled:opacity-35
                          px-3 py-2 text-xs font-semibold text-white transition-all"
             >
-              {busy === "send" ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              {busy === "send"
+                ? <Loader2 size={12} className="animate-spin" />
+                : <Send size={12} />}
               Send
             </button>
             {session.admin_message && (
@@ -300,7 +299,9 @@ function ActionTray({
                            border border-white/10 hover:bg-white/8 disabled:opacity-35
                            px-3 py-2 text-white/50 hover:text-white transition-all"
               >
-                {busy === "clear" ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+                {busy === "clear"
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <X size={12} />}
               </button>
             )}
           </div>
@@ -316,17 +317,11 @@ function ActionTray({
 }
 
 // ─── Session Card ─────────────────────────────────────────────────────────────
-function SessionCard({
-  session,
-  onRefresh,
-}: {
-  session: Session;
-  onRefresh: () => void;
-}) {
+function SessionCard({ session, onRefresh }: { session: Session; onRefresh: () => void }) {
   const [expanded, setExpanded] = useState(false);
-  const active = isActive(session.last_seen);
-  const banned = session.is_banned === true;
-  const threat = session.threat_level ?? "low";
+  const active  = isActive(session.last_seen);
+  const banned  = session.is_banned === true;
+  const threat  = session.threat_level || "low";
 
   const threatDot =
     threat === "high"   ? "bg-red-400"
@@ -334,50 +329,38 @@ function SessionCard({
     : "bg-emerald-400";
 
   return (
-    <div
-      className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
-        banned
-          ? "border-red-500/30 border-l-[3px] border-l-red-500"
-          : "border-white/7 hover:border-white/12"
-      } bg-white/[0.025]`}
-    >
-      {/* ── Main row ───────────────────────────────────────────────────── */}
+    <div className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
+      banned
+        ? "border-red-500/30 border-l-[3px] border-l-red-500"
+        : "border-white/7 hover:border-white/12"
+    } bg-white/[0.025]`}>
+      {/* Main row */}
       <div className="flex items-center gap-3 px-4 py-3.5">
-
-        {/* Left: status dot + token */}
+        {/* Status dot + token */}
         <div className="flex items-center gap-2.5 min-w-0 w-[140px] shrink-0">
-          {/* Live pulse dot */}
           <span className="relative flex-shrink-0 h-2.5 w-2.5">
-            <span
-              className={`absolute inset-0 rounded-full ${
-                active ? "bg-emerald-400" : "bg-white/15"
-              }`}
-            />
-            {active && (
-              <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-50" />
-            )}
+            <span className={`absolute inset-0 rounded-full ${active ? "bg-emerald-400" : "bg-white/15"}`} />
+            {active && <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-50" />}
           </span>
           <code className="text-[11px] font-mono text-white/40 truncate">
             {session.session_token.slice(0, 8)}…
           </code>
         </div>
 
-        {/* Center-left: country */}
+        {/* Country */}
         <div className="flex items-center gap-1.5 w-[110px] shrink-0">
           <span className="text-base leading-none">{getFlag(session.country)}</span>
-          <span className="text-xs text-white/50 truncate">{session.country ?? "Unknown"}</span>
+          <span className="text-xs text-white/50 truncate">{session.country || "Unknown"}</span>
         </div>
 
-        {/* Center: page route badge */}
+        {/* Page route badge */}
         <div className="flex-1 min-w-0">
-          <span
-            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-mono font-medium ${routeBadgeClass(session.current_page)}`}
-          >
-            {session.current_page ?? "/"}
+          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-mono font-medium ${routeBadgeClass(session.current_page)}`}>
+            {session.current_page || "/"}
           </span>
         </div>
 
-        {/* Center-right: status chips */}
+        {/* Status chips */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {banned && (
             <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-400 ring-1 ring-red-500/25">
@@ -389,10 +372,10 @@ function SessionCard({
               MSG
             </span>
           )}
-          <span className={`h-1.5 w-1.5 rounded-full ${threatDot}`} title={`Threat: ${threat}`} />
+          <span className={`h-1.5 w-1.5 rounded-full ${threatDot}`} title={"Threat: " + threat} />
         </div>
 
-        {/* Right: last seen + expand button */}
+        {/* Last seen + expand */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <span className="hidden sm:block text-[11px] text-white/25 tabular-nums w-[56px] text-right">
             {timeAgo(session.last_seen)}
@@ -401,8 +384,7 @@ function SessionCard({
             onClick={() => setExpanded((v) => !v)}
             className="flex items-center gap-1 rounded-lg border border-white/8
                        bg-white/4 hover:bg-white/8 px-2.5 py-1.5
-                       text-[11px] font-medium text-white/40 hover:text-white/80
-                       transition-all"
+                       text-[11px] font-medium text-white/40 hover:text-white/80 transition-all"
             aria-label={expanded ? "Close panel" : "Open actions"}
           >
             Actions
@@ -411,7 +393,7 @@ function SessionCard({
         </div>
       </div>
 
-      {/* ── Expandable action tray ──────────────────────────────────────── */}
+      {/* Expandable tray */}
       {expanded && (
         <ActionTray
           session={session}
@@ -423,13 +405,23 @@ function SessionCard({
   );
 }
 
+// ─── Legend item ──────────────────────────────────────────────────────────────
+function LegendItem({ dot, label }: { dot: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={"h-2 w-2 rounded-full " + dot} />
+      <span className="text-[11px] text-white/25">{label}</span>
+    </div>
+  );
+}
+
 // ─── Main UsersTab ─────────────────────────────────────────────────────────────
 export default function UsersTab() {
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
-  const [search, setSearch]     = useState("");
-  const [filter, setFilter]     = useState<"all" | "active" | "banned">("all");
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
+  const [search,   setSearch]   = useState("");
+  const [filter,   setFilter]   = useState<"all" | "active" | "banned">("all");
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchSessions = useCallback(async () => {
@@ -444,14 +436,14 @@ export default function UsersTab() {
 
       if (queryError) {
         console.warn("[UsersTab] query error:", queryError.message);
-        setError(`Could not load sessions: ${queryError.message}`);
+        setError("Could not load sessions: " + queryError.message);
         setSessions([]);
       } else {
-        setSessions((data ?? []) as Session[]);
+        setSessions((data || []) as unknown as Session[]);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      setError(`Failed to connect: ${msg}`);
+      setError("Failed to connect: " + msg);
       setSessions([]);
     } finally {
       setLoading(false);
@@ -466,7 +458,6 @@ export default function UsersTab() {
     };
   }, [fetchSessions]);
 
-  // ── Filter chain ──────────────────────────────────────────────────────
   const filtered = sessions.filter((s) => {
     if (filter === "active" && !isActive(s.last_seen)) return false;
     if (filter === "banned" && s.is_banned !== true)   return false;
@@ -474,8 +465,8 @@ export default function UsersTab() {
     const q = search.toLowerCase();
     return (
       s.session_token.toLowerCase().includes(q) ||
-      (s.country ?? "").toLowerCase().includes(q) ||
-      (s.current_page ?? "").toLowerCase().includes(q)
+      (s.country || "").toLowerCase().includes(q) ||
+      (s.current_page || "").toLowerCase().includes(q)
     );
   });
 
@@ -484,27 +475,22 @@ export default function UsersTab() {
 
   return (
     <div className="space-y-5">
-
-      {/* ── Top stats bar ─────────────────────────────────────────────── */}
+      {/* Stats bar */}
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "Total",  value: sessions.length, color: "text-white/70" },
           { label: "Active", value: activeCnt,        color: "text-emerald-400" },
           { label: "Banned", value: bannedCnt,        color: "text-red-400" },
         ].map(({ label, value, color }) => (
-          <div
-            key={label}
-            className="rounded-xl border border-white/7 bg-white/[0.025] px-4 py-3"
-          >
-            <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
+          <div key={label} className="rounded-xl border border-white/7 bg-white/[0.025] px-4 py-3">
+            <p className={"text-2xl font-bold tabular-nums " + color}>{value}</p>
             <p className="text-[11px] text-white/30 mt-0.5">{label}</p>
           </div>
         ))}
       </div>
 
-      {/* ── Toolbar ───────────────────────────────────────────────────── */}
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        {/* Search */}
         <div className="relative flex-1 min-w-[180px]">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
           <input
@@ -519,24 +505,22 @@ export default function UsersTab() {
           />
         </div>
 
-        {/* Filter pills */}
         <div className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/[0.02] p-1">
           {(["all", "active", "banned"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`rounded-md px-3 py-1 text-xs font-medium capitalize transition-all ${
+              className={"rounded-md px-3 py-1 text-xs font-medium capitalize transition-all " + (
                 filter === f
                   ? "bg-primary/20 text-primary"
                   : "text-white/35 hover:text-white/60"
-              }`}
+              )}
             >
               {f}
             </button>
           ))}
         </div>
 
-        {/* Refresh */}
         <button
           onClick={fetchSessions}
           disabled={loading}
@@ -553,7 +537,7 @@ export default function UsersTab() {
         </span>
       </div>
 
-      {/* ── Error state ───────────────────────────────────────────────── */}
+      {/* Error */}
       {error && (
         <div className="rounded-xl border border-red-500/20 bg-red-950/15 p-4 flex items-start gap-3">
           <AlertCircle size={15} className="text-red-400 mt-0.5 flex-shrink-0" />
@@ -564,7 +548,7 @@ export default function UsersTab() {
         </div>
       )}
 
-      {/* ── Session list ──────────────────────────────────────────────── */}
+      {/* Session list */}
       {loading && sessions.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3">
           <Loader2 className="animate-spin text-white/20" size={28} />
@@ -585,23 +569,14 @@ export default function UsersTab() {
         </div>
       )}
 
-      {/* ── Legend ────────────────────────────────────────────────────── */}
+      {/* Legend */}
       <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-white/5">
         <LegendItem dot="bg-emerald-400 animate-pulse" label="Active (< 3 min)" />
-        <LegendItem dot="bg-white/15" label="Inactive" />
-        <LegendItem dot="bg-red-400" label="High threat" />
-        <LegendItem dot="bg-amber-400" label="Medium threat" />
-        <LegendItem dot="bg-emerald-400" label="Low threat" />
+        <LegendItem dot="bg-white/15"                  label="Inactive" />
+        <LegendItem dot="bg-red-400"                   label="High threat" />
+        <LegendItem dot="bg-amber-400"                 label="Medium threat" />
+        <LegendItem dot="bg-emerald-400"               label="Low threat" />
       </div>
-    </div>
-  );
-}
-
-function LegendItem({ dot, label }: { dot: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={`h-2 w-2 rounded-full ${dot}`} />
-      <span className="text-[11px] text-white/25">{label}</span>
     </div>
   );
 }
