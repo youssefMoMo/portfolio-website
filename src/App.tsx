@@ -1,17 +1,17 @@
 // src/App.tsx
 //
-// ╔═══════════════════════════════════════════════════════════════════╗
-// ║  PROVIDER HIERARCHY (outermost → innermost)                      ║
-// ║                                                                   ║
-// ║  ThemeProvider      — must wrap everything; Navbar calls         ║
-// ║    LanguageProvider   useTheme() on first render                 ║
-// ║      [moderation state + realtime subscriptions]                 ║
-// ║        RouterContent → Layout → Navbar (safe to call hooks)      ║
-// ║                                                                   ║
-// ║  Rule: any component that calls useTheme() or useLanguage()      ║
-// ║  MUST be rendered below both providers. Nothing is rendered      ║
-// ║  outside this tree.                                               ║
-// ╚═══════════════════════════════════════════════════════════════════╝
+// ✅ REALTIME FIX:
+//   The channel now listens on TWO paths simultaneously:
+//
+//   PATH 1 — postgres_changes (persisted, ~500ms lag, requires REPLICA IDENTITY FULL)
+//     Kept for backwards compatibility and as a durable safety net.
+//
+//   PATH 2 — Broadcast "admin_action" event (ephemeral, <50ms, ZERO config required)
+//     adminApi.ts fires this immediately after every DB write.
+//     This is the PRIMARY path that triggers the live client-side reaction.
+//
+//   Both paths map action payloads to the same state setters, so whichever
+//   arrives first wins — and they converge to the same result.
 
 import React, {
   useCallback,
@@ -25,29 +25,20 @@ import { Switch, Route, useLocation } from "wouter";
 import { AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 
-// ─── Context providers (MUST be at absolute root) ────────────────────────────
 import { ThemeProvider }    from "@/hooks/use-theme";
 import { LanguageProvider } from "@/hooks/use-language";
-
-// ─── Supabase + tracker ───────────────────────────────────────────────────────
 import { supabase }         from "@/lib/supabase";
 import { useUserTracker }   from "@/hooks/useUserTracker";
-
-// ─── Layout wrapper (public pages) ───────────────────────────────────────────
 import { Layout }           from "@/components/layout/Layout";
-
-// ─── Moderation overlays ──────────────────────────────────────────────────────
 import BannedScreen, {
   UnbanToast,
   AdminBroadcastBanner,
 } from "@/components/BannedScreen";
 
-// ─── Eager-loaded pages (critical path) ──────────────────────────────────────
 import Home       from "@/pages/Home";
 import AdminLogin from "@/pages/AdminLogin";
 import NotFound   from "@/pages/not-found";
 
-// ─── Lazy-loaded pages (deferred until navigated to) ─────────────────────────
 const Portfolio      = lazy(() => import("@/pages/Portfolio"));
 const Games          = lazy(() => import("@/pages/Games"));
 const Pricing        = lazy(() => import("@/pages/Pricing"));
@@ -56,10 +47,8 @@ const Policies       = lazy(() => import("@/pages/Policies"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
 const AdminCallback  = lazy(() => import("@/pages/admin/callback"));
 
-// ─── ProtectedRoute ───────────────────────────────────────────────────────────
-import { ProtectedRoute }   from "@/components/ProtectedRoute";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
-// ─── Shared page-loading fallback ─────────────────────────────────────────────
 function PageLoader() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
@@ -68,19 +57,16 @@ function PageLoader() {
   );
 }
 
-// ─── Session-token reader ─────────────────────────────────────────────────────
-// Key must match SESSION_KEY in useUserTracker.ts
+const SESSION_KEY = "youssef_session_token";
+
 function getSessionToken(): string | null {
   try {
-    return sessionStorage.getItem("youssef_session_token");
+    return sessionStorage.getItem(SESSION_KEY);
   } catch {
     return null;
   }
 }
 
-// ─── RouterContent ────────────────────────────────────────────────────────────
-// Sits INSIDE the provider tree so useLocation(), useTheme(), useLanguage()
-// are all safe to call in Layout → Navbar → any page component.
 function RouterContent({
   isBanned,
   adminMessage,
@@ -91,17 +77,12 @@ function RouterContent({
   onDismissAdminBanner: () => void;
 }) {
   const [location] = useLocation();
-
-  // Silently track the visitor's session (Geo-IP + page heartbeat)
   useUserTracker(location);
 
-  // When banned, render nothing here — the BannedScreen overlay is
-  // shown by the parent AppShell above us in the tree.
   if (isBanned) return null;
 
   return (
     <>
-      {/* Admin broadcast banner — floats above all page content */}
       <AnimatePresence>
         {adminMessage && (
           <AdminBroadcastBanner
@@ -112,59 +93,46 @@ function RouterContent({
         )}
       </AnimatePresence>
 
-      {/* ── Route table ─────────────────────────────────────────────── */}
       <Switch>
-        {/* Public pages — wrapped in shared Layout (Navbar + Footer) */}
         <Route path="/">
           <Layout><Home /></Layout>
         </Route>
-
         <Route path="/portfolio">
           <Layout>
             <Suspense fallback={<PageLoader />}><Portfolio /></Suspense>
           </Layout>
         </Route>
-
         <Route path="/games">
           <Layout>
             <Suspense fallback={<PageLoader />}><Games /></Suspense>
           </Layout>
         </Route>
-
         <Route path="/pricing">
           <Layout>
             <Suspense fallback={<PageLoader />}><Pricing /></Suspense>
           </Layout>
         </Route>
-
         <Route path="/reviews">
           <Layout>
             <Suspense fallback={<PageLoader />}><Reviews /></Suspense>
           </Layout>
         </Route>
-
         <Route path="/policies">
           <Layout>
             <Suspense fallback={<PageLoader />}><Policies /></Suspense>
           </Layout>
         </Route>
-
-        {/* Admin pages — no Layout wrapper */}
         <Route path="/admin">
           <AdminLogin />
         </Route>
-
         <Route path="/admin/callback">
           <Suspense fallback={<PageLoader />}><AdminCallback /></Suspense>
         </Route>
-
         <Route path="/admin/dashboard">
           <ProtectedRoute>
             <Suspense fallback={<PageLoader />}><AdminDashboard /></Suspense>
           </ProtectedRoute>
         </Route>
-
-        {/* 404 catch-all */}
         <Route>
           <Layout><NotFound /></Layout>
         </Route>
@@ -173,42 +141,28 @@ function RouterContent({
   );
 }
 
-// ─── AppShell ─────────────────────────────────────────────────────────────────
-// Handles all moderation state and realtime subscriptions.
-// Rendered INSIDE ThemeProvider + LanguageProvider so every hook in every
-// child component can safely call useTheme() / useLanguage().
 function AppShell() {
-  // ── Moderation state ──────────────────────────────────────────────────
   const [isBanned,     setIsBanned]     = useState(false);
   const [banReason,    setBanReason]    = useState<string | null>(null);
   const [unbanMessage, setUnbanMessage] = useState<string | null>(null);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
-  // Ref mirror so the realtime callback always reads the current value,
-  // not the stale closure value captured at channel-subscribe time.
   const isBannedRef = useRef(false);
   useEffect(() => { isBannedRef.current = isBanned; }, [isBanned]);
 
-  // ── Resolve session token ─────────────────────────────────────────────
-  // useUserTracker writes it to sessionStorage on mount; we poll until
-  // it appears so we can attach the realtime subscription to the right row.
+  // ── Resolve session token ────────────────────────────────────────────
   useEffect(() => {
     let attempts = 0;
     const poll = setInterval(() => {
       const tok = getSessionToken();
-      if (tok) {
-        setSessionToken(tok);
-        clearInterval(poll);
-      }
-      // Give up after ~3 s to avoid an infinite poll in private-browsing
-      // environments or when Supabase is not configured.
+      if (tok) { setSessionToken(tok); clearInterval(poll); }
       if (++attempts > 30) clearInterval(poll);
     }, 100);
     return () => clearInterval(poll);
   }, []);
 
-  // ── Bootstrap: hydrate ban + admin-message from current DB row ────────
+  // ── Bootstrap from DB ────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionToken) return;
     (async () => {
@@ -225,12 +179,56 @@ function AppShell() {
     })();
   }, [sessionToken]);
 
-  // ── Realtime subscription ──────────────────────────────────────────────
+  // ── Dual-path Realtime subscription ─────────────────────────────────
   useEffect(() => {
     if (!sessionToken) return;
 
+    // ── Shared state-setter logic ──────────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function applyModerationRow(row: Record<string, any>) {
+      if (row.is_banned === true) {
+        setBanReason((row.ban_reason as string | null) ?? null);
+        setIsBanned(true);
+        return;
+      }
+      if (row.is_banned === false && isBannedRef.current) {
+        setIsBanned(false);
+        setUnbanMessage((row.unban_message as string | null) ?? null);
+        return;
+      }
+      setAdminMessage((row.admin_message as string | null) ?? null);
+    }
+
+    // ── PATH 2: Broadcast action handler ──────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function applyBroadcastAction(payload: Record<string, any>) {
+      const { action, reason, unbanMessage: ubMsg, message } = payload;
+
+      switch (action) {
+        case "ban":
+          setBanReason(reason ?? null);
+          setIsBanned(true);
+          break;
+        case "unban":
+          setIsBanned(false);
+          setUnbanMessage(ubMsg ?? null);
+          break;
+        case "message":
+          setAdminMessage(message ?? null);
+          break;
+        case "clear_message":
+          setAdminMessage(null);
+          break;
+        default:
+          break;
+      }
+    }
+
     const channel = supabase
-      .channel(`app-session-${sessionToken}`)
+      .channel(`app-session-${sessionToken}`, {
+        config: { broadcast: { self: false } },
+      })
+      // PATH 1 — postgres_changes (durable, requires REPLICA IDENTITY FULL)
       .on(
         "postgres_changes",
         {
@@ -242,32 +240,24 @@ function AppShell() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (payload: any) => {
           const row = payload?.new;
-          if (!row) return;
-
-          // State A — Ban
-          if (row.is_banned === true) {
-            setBanReason((row.ban_reason as string | null) ?? null);
-            setIsBanned(true);
-            return;
-          }
-
-          // State B — Unban (read ref to avoid stale closure)
-          if (row.is_banned === false && isBannedRef.current) {
-            setIsBanned(false);
-            setUnbanMessage((row.unban_message as string | null) ?? null);
-            return;
-          }
-
-          // State C — Live admin broadcast message
-          setAdminMessage((row.admin_message as string | null) ?? null);
-        },
+          if (row) applyModerationRow(row);
+        }
+      )
+      // PATH 2 — Broadcast (instant, fired by adminApi after every DB write)
+      .on(
+        "broadcast",
+        { event: "admin_action" },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (msg: any) => {
+          const p = msg?.payload;
+          if (p) applyBroadcastAction(p);
+        }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [sessionToken]);
 
-  // ── Callbacks ─────────────────────────────────────────────────────────
   const handleUnban        = useCallback((msg: string | null) => {
     setIsBanned(false);
     setUnbanMessage(msg);
@@ -275,10 +265,8 @@ function AppShell() {
   const dismissUnbanToast  = useCallback(() => setUnbanMessage(null), []);
   const dismissAdminBanner = useCallback(() => setAdminMessage(null), []);
 
-  // ── Render ────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Unban toast — slides in from top after ban is lifted */}
       <AnimatePresence>
         {unbanMessage && (
           <UnbanToast
@@ -289,7 +277,6 @@ function AppShell() {
         )}
       </AnimatePresence>
 
-      {/* Full-page banned screen */}
       <AnimatePresence>
         {isBanned && sessionToken && (
           <BannedScreen
@@ -301,10 +288,6 @@ function AppShell() {
         )}
       </AnimatePresence>
 
-      {/*
-       * Main app shell — always mounted.
-       * Renders null when banned so only BannedScreen is visible.
-       */}
       <RouterContent
         isBanned={isBanned}
         adminMessage={adminMessage}
@@ -314,11 +297,6 @@ function AppShell() {
   );
 }
 
-// ─── App (root export) ────────────────────────────────────────────────────────
-// ThemeProvider and LanguageProvider are the outermost wrappers so that
-// every component in the entire tree — including Navbar, Layout, all pages,
-// all admin components, and all moderation overlays — can safely call
-// useTheme() and useLanguage() without a context-missing runtime error.
 export default function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">

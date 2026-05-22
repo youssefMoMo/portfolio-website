@@ -1,19 +1,87 @@
+// src/lib/adminApi.ts
+//
+// ✅ REALTIME FIX:
+//   - All moderation payloads now accept an optional `sessionToken` field.
+//   - After every DB write, a Supabase Broadcast is fired on the EXACT same
+//     channel name the client subscribes to: `app-session-${sessionToken}`.
+//   - This gives two delivery paths:
+//       1. postgres_changes  — persisted, fires within ~500 ms (requires REPLICA
+//          IDENTITY FULL on the table, which may not be set)
+//       2. Broadcast         — ephemeral, fires instantly (<50 ms), no DB config
+//          needed. This is the primary "live action" path.
+//   - If sessionToken is omitted the broadcast is skipped silently; the DB write
+//     still happens.
+
 import { supabase } from "@/lib/supabase";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Fires a one-shot Supabase Broadcast on the user's private channel.
+ * The user's App.tsx subscribes to this same channel and handles the payload.
+ *
+ * Pattern: subscribe → wait for SUBSCRIBED → send → cleanup after 2 s.
+ * A 3 s hard timeout prevents the promise from hanging forever.
+ */
+async function broadcastToSession(
+  sessionToken: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: Record<string, any>
+): Promise<void> {
+  return new Promise((resolve) => {
+    const CHANNEL = `app-session-${sessionToken}`;
+    let done = false;
+
+    const hardTimeout = setTimeout(() => {
+      if (!done) {
+        done = true;
+        try { supabase.removeChannel(ch); } catch { /* ignore */ }
+        resolve();
+      }
+    }, 3_000);
+
+    const ch = supabase.channel(CHANNEL, { config: { broadcast: { ack: false } } });
+
+    ch.subscribe((status) => {
+      if (status === "SUBSCRIBED" && !done) {
+        ch.send({ type: "broadcast", event: "admin_action", payload })
+          .then(() => {
+            setTimeout(() => {
+              done = true;
+              clearTimeout(hardTimeout);
+              try { supabase.removeChannel(ch); } catch { /* ignore */ }
+              resolve();
+            }, 300);
+          })
+          .catch(() => {
+            done = true;
+            clearTimeout(hardTimeout);
+            try { supabase.removeChannel(ch); } catch { /* ignore */ }
+            resolve();
+          });
+      }
+    });
+  });
+}
 
 // ─── Moderation payloads ──────────────────────────────────────────────────────
 
 export interface BanPayload {
   sessionId: string;
+  /** Include so we can broadcast instantly to the user's live channel. */
+  sessionToken?: string;
   reason?: string;
 }
 
 export interface UnbanPayload {
   sessionId: string;
+  sessionToken?: string;
   unbanMessage?: string;
 }
 
 export interface BroadcastPayload {
   sessionId: string;
+  sessionToken?: string;
   message: string | null; // null clears the message
 }
 
@@ -74,10 +142,6 @@ export interface AnalyticsData {
 type AnyRow = Record<string, any>;
 
 // ─── Safe query helper ────────────────────────────────────────────────────────
-/**
- * Wraps a Supabase query in a try/catch so any 400 / missing-column error
- * returns an empty array instead of crashing the caller.
- */
 async function safeQuery<T>(
   queryFn: () => Promise<{ data: T[] | null; error: { message: string } | null }>
 ): Promise<T[]> {
@@ -96,7 +160,7 @@ async function safeQuery<T>(
 
 // ─── Ban / Unban / Broadcast ──────────────────────────────────────────────────
 
-export async function banUser({ sessionId, reason }: BanPayload) {
+export async function banUser({ sessionId, sessionToken, reason }: BanPayload) {
   const { error } = await supabase
     .from("user_sessions")
     .update({
@@ -108,9 +172,17 @@ export async function banUser({ sessionId, reason }: BanPayload) {
     })
     .eq("id", sessionId);
   if (error) throw new Error(`banUser failed: ${error.message}`);
+
+  // Immediate broadcast — fires even if postgres_changes isn't configured
+  if (sessionToken) {
+    await broadcastToSession(sessionToken, {
+      action: "ban",
+      reason: reason ?? null,
+    });
+  }
 }
 
-export async function unbanUser({ sessionId, unbanMessage }: UnbanPayload) {
+export async function unbanUser({ sessionId, sessionToken, unbanMessage }: UnbanPayload) {
   const { error } = await supabase
     .from("user_sessions")
     .update({
@@ -121,18 +193,32 @@ export async function unbanUser({ sessionId, unbanMessage }: UnbanPayload) {
     })
     .eq("id", sessionId);
   if (error) throw new Error(`unbanUser failed: ${error.message}`);
+
+  if (sessionToken) {
+    await broadcastToSession(sessionToken, {
+      action: "unban",
+      unbanMessage: unbanMessage ?? null,
+    });
+  }
 }
 
-export async function sendAdminMessage({ sessionId, message }: BroadcastPayload) {
+export async function sendAdminMessage({ sessionId, sessionToken, message }: BroadcastPayload) {
   const { error } = await supabase
     .from("user_sessions")
     .update({ admin_message: message, updated_at: new Date().toISOString() })
     .eq("id", sessionId);
   if (error) throw new Error(`sendAdminMessage failed: ${error.message}`);
+
+  if (sessionToken) {
+    await broadcastToSession(sessionToken, {
+      action: message ? "message" : "clear_message",
+      message: message ?? null,
+    });
+  }
 }
 
-export async function clearAdminMessage(sessionId: string) {
-  return sendAdminMessage({ sessionId, message: null });
+export async function clearAdminMessage(sessionId: string, sessionToken?: string) {
+  return sendAdminMessage({ sessionId, sessionToken, message: null });
 }
 
 export async function clearUnbanMessage(sessionId: string) {
@@ -252,15 +338,9 @@ export const reviewsApi = {
 // ─── Analytics API ────────────────────────────────────────────────────────────
 
 export const analyticsApi = {
-  /**
-   * Aggregates data from reviews, site_content, and games tables.
-   * Every query is independently guarded — a missing table or column NEVER
-   * crashes the analytics view. Instead it gracefully returns zeros/empty arrays.
-   */
   get: async (): Promise<AnalyticsData> => {
     const now = new Date().toISOString();
 
-    // Run all queries in parallel, each individually safe
     const [rawReviews, contentRows, gamesRows] = await Promise.all([
       safeQuery<AnyRow>(() =>
         supabase
@@ -274,8 +354,7 @@ export const analyticsApi = {
           .select("content_type, updated_at")
           .order("updated_at", { ascending: false }) as any
       ),
-      // Games query: use only the minimal safe columns.
-      // If the games table doesn't exist, safeQuery returns [].
+      // NOTE: is_active does NOT exist — use is_published instead.
       safeQuery<AnyRow>(() =>
         supabase
           .from("games")
@@ -283,29 +362,24 @@ export const analyticsApi = {
       ),
     ]);
 
-    // ── Reviews ───────────────────────────────────────────────────────────
     const isApproved = (r: AnyRow) =>
       r.status === "approved" || r.approved === true;
     const isPending = (r: AnyRow) =>
       !isApproved(r) && !(r.status === "rejected" || r.rejected === true);
 
     const approvedReviews = rawReviews.filter(isApproved);
-    const pendingReviews = rawReviews.filter(isPending);
+    const pendingReviews  = rawReviews.filter(isPending);
     const avgRating =
       approvedReviews.length > 0
         ? Math.round(
             (approvedReviews.reduce((sum, r) => sum + (Number(r.rating) || 0), 0) /
-              approvedReviews.length) *
-              10
+              approvedReviews.length) * 10
           ) / 10
         : 0;
 
-    // ── Content ───────────────────────────────────────────────────────────
     const contentSections = new Set(contentRows.map((c) => c.content_type as string)).size;
     const lastUpdated = (contentRows[0]?.updated_at as string) ?? null;
 
-    // ── Games ─────────────────────────────────────────────────────────────
-    // icon_url is optional — games may not have it; default to null
     const topGames = [...gamesRows]
       .sort((a, b) => (Number(b.visits) || 0) - (Number(a.visits) || 0))
       .slice(0, 5)
