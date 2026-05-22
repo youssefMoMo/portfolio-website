@@ -1,367 +1,336 @@
-// src/App.tsx
-//
-// ✅ BUG FIXES IN THIS VERSION:
-//
-//   FIX 1 — SyntaxError crash on broadcast receive:
-//     Replaced ALL optional chaining (?.) and nullish-coalescing (??) operators
-//     in the realtime callback paths with explicit null-guard checks so the
-//     handlers run safely on browsers that do not polyfill these operators.
-//     Added a top-level try/catch inside every realtime callback so a malformed
-//     payload cannot freeze the channel.
-//
-//   FIX 2 — VPN-immune session token:
-//     SESSION_KEY is now stored in localStorage (was sessionStorage).
-//     sessionStorage is per-tab and is WIPED on page reload — when a VPN user
-//     refreshes the page after changing IP, a new token was generated and the
-//     channel subscription was re-built against the NEW token, making the old
-//     admin action unreachable.
-//     localStorage persists indefinitely across reloads/VPN hops on the same
-//     device, so the admin channel subscription always targets the SAME token.
-//
-//   FIX 3 — Dual-path realtime unchanged (it was already correct):
-//     PATH 1 — postgres_changes (persisted, ~500ms lag)
-//     PATH 2 — Broadcast "admin_action" (ephemeral, <50ms)
+import { useEffect, useState, useCallback } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { supabase } from "./lib/supabase";
+import { v4 as uuidv4 } from "uuid";
 
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  lazy,
-  Suspense,
-} from "react";
-import { Switch, Route, useLocation } from "wouter";
-import { AnimatePresence } from "framer-motion";
-import { Loader2 } from "lucide-react";
+// ─── Pages ────────────────────────────────────────────────────────────────────
+import HomePage from "./pages/HomePage";
+import PortfolioPage from "./pages/PortfolioPage";
+import GamesPage from "./pages/GamesPage";
+import PricingPage from "./pages/PricingPage";
+import ReviewsPage from "./pages/ReviewsPage";
+import PoliciesPage from "./pages/PoliciesPage";
 
-import { ThemeProvider }    from "@/hooks/use-theme";
-import { LanguageProvider } from "@/hooks/use-language";
-import { supabase }         from "@/lib/supabase";
-import { useUserTracker }   from "@/hooks/useUserTracker";
-import { Layout }           from "@/components/layout/Layout";
-import BannedScreen, {
-  UnbanToast,
-  AdminBroadcastBanner,
-} from "@/components/BannedScreen";
+// ─── Session Token ─────────────────────────────────────────────────────────────
+function getOrCreateSessionToken(): string {
+  try {
+    let token = localStorage.getItem("session_token");
+    if (!token) {
+      token = uuidv4();
+      localStorage.setItem("session_token", token);
+    }
+    return token;
+  } catch {
+    return uuidv4();
+  }
+}
 
-import Home       from "@/pages/Home";
-import AdminLogin from "@/pages/AdminLogin";
-import NotFound   from "@/pages/not-found";
+// ─── Types ─────────────────────────────────────────────────────────────────────
+interface AlertState {
+  message: string;
+  id: string;
+}
 
-const Portfolio      = lazy(() => import("@/pages/Portfolio"));
-const Games          = lazy(() => import("@/pages/Games"));
-const Pricing        = lazy(() => import("@/pages/Pricing"));
-const Reviews        = lazy(() => import("@/pages/Reviews"));
-const Policies       = lazy(() => import("@/pages/Policies"));
-const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
-const AdminCallback  = lazy(() => import("@/pages/admin/callback"));
+interface BanState {
+  reason: string;
+}
 
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-
-function PageLoader() {
+// ─── ALERT BANNER ──────────────────────────────────────────────────────────────
+function AlertBanner({
+  alert,
+  onDismiss,
+}: {
+  alert: AlertState;
+  onDismiss: () => void;
+}) {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <Loader2 className="h-10 w-10 animate-spin text-primary/60" />
+    <div
+      style={{ zIndex: 99999 }}
+      className="fixed top-0 left-0 w-full pointer-events-auto"
+    >
+      <div className="w-full bg-yellow-400 text-black flex items-center justify-between px-4 py-3 shadow-2xl border-b-4 border-yellow-600">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          {/* Pulse dot */}
+          <span className="relative flex h-3 w-3 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-40" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-black" />
+          </span>
+          <p className="font-bold text-sm sm:text-base truncate">{alert.message}</p>
+        </div>
+        <button
+          onClick={onDismiss}
+          aria-label="Dismiss alert"
+          className="ml-4 shrink-0 text-black/70 hover:text-black transition-colors text-xl leading-none font-bold"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
 
-// ── VPN FIX: Use localStorage so the token survives page reloads and IP
-//   changes. sessionStorage was wiped on every reload, which caused a VPN user
-//   (after refreshing) to generate a new token, breaking the channel link. ──
-const SESSION_KEY = "youssef_session_token";
-
-function getSessionToken(): string | null {
-  try {
-    return localStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function RouterContent({
-  isBanned,
-  adminMessage,
-  onDismissAdminBanner,
-}: {
-  isBanned: boolean;
-  adminMessage: string | null;
-  onDismissAdminBanner: () => void;
-}) {
-  const [location] = useLocation();
-  useUserTracker(location);
-
-  if (isBanned) return null;
+// ─── BAN OVERLAY ───────────────────────────────────────────────────────────────
+function BanOverlay({ reason }: { reason: string }) {
+  // Kill all scroll & interaction on the page beneath
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   return (
-    <>
-      <AnimatePresence>
-        {adminMessage && (
-          <AdminBroadcastBanner
-            key="admin-banner"
-            message={adminMessage}
-            onDismiss={onDismissAdminBanner}
-          />
-        )}
-      </AnimatePresence>
+    <div
+      style={{ zIndex: 999999 }}
+      className="fixed inset-0 bg-black flex flex-col items-center justify-center select-none"
+      // Swallow every pointer / keyboard event so the page is truly dead
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      tabIndex={-1}
+    >
+      <div className="flex flex-col items-center gap-6 px-6 text-center max-w-lg">
+        {/* Icon */}
+        <div className="w-20 h-20 rounded-full bg-red-600/20 border-2 border-red-600 flex items-center justify-center">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-10 h-10 text-red-500"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M18.364 5.636A9 9 0 115.636 18.364 9 9 0 0118.364 5.636z"
+            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12" />
+          </svg>
+        </div>
 
-      <Switch>
-        <Route path="/">
-          <Layout><Home /></Layout>
-        </Route>
-        <Route path="/portfolio">
-          <Layout>
-            <Suspense fallback={<PageLoader />}><Portfolio /></Suspense>
-          </Layout>
-        </Route>
-        <Route path="/games">
-          <Layout>
-            <Suspense fallback={<PageLoader />}><Games /></Suspense>
-          </Layout>
-        </Route>
-        <Route path="/pricing">
-          <Layout>
-            <Suspense fallback={<PageLoader />}><Pricing /></Suspense>
-          </Layout>
-        </Route>
-        <Route path="/reviews">
-          <Layout>
-            <Suspense fallback={<PageLoader />}><Reviews /></Suspense>
-          </Layout>
-        </Route>
-        <Route path="/policies">
-          <Layout>
-            <Suspense fallback={<PageLoader />}><Policies /></Suspense>
-          </Layout>
-        </Route>
-        <Route path="/admin">
-          <AdminLogin />
-        </Route>
-        <Route path="/admin/callback">
-          <Suspense fallback={<PageLoader />}><AdminCallback /></Suspense>
-        </Route>
-        <Route path="/admin/dashboard">
-          <ProtectedRoute>
-            <Suspense fallback={<PageLoader />}><AdminDashboard /></Suspense>
-          </ProtectedRoute>
-        </Route>
-        <Route>
-          <Layout><NotFound /></Layout>
-        </Route>
-      </Switch>
-    </>
+        {/* Heading */}
+        <h1 className="text-4xl font-extrabold text-red-500 tracking-tight">
+          You Have Been Banned
+        </h1>
+
+        {/* Reason */}
+        {reason && reason.trim() !== "" ? (
+          <div className="bg-white/5 border border-white/10 rounded-xl px-6 py-4 w-full">
+            <p className="text-xs uppercase tracking-widest text-white/40 mb-1">
+              Reason
+            </p>
+            <p className="text-white text-base font-medium">{reason}</p>
+          </div>
+        ) : (
+          <p className="text-white/50 text-sm">No reason was provided.</p>
+        )}
+
+        <p className="text-white/30 text-xs">
+          If you believe this is a mistake, contact support via Discord.
+        </p>
+      </div>
+    </div>
   );
 }
 
-function AppShell() {
-  const [isBanned,     setIsBanned]     = useState(false);
-  const [banReason,    setBanReason]    = useState<string | null>(null);
-  const [unbanMessage, setUnbanMessage] = useState<string | null>(null);
-  const [adminMessage, setAdminMessage] = useState<string | null>(null);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
+// ─── APP ───────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [sessionToken] = useState<string>(getOrCreateSessionToken);
+  const [alert, setAlert] = useState<AlertState | null>(null);
+  const [ban, setBan] = useState<BanState | null>(null);
 
-  const isBannedRef = useRef(false);
-  useEffect(() => { isBannedRef.current = isBanned; }, [isBanned]);
-
-  // ── Resolve session token (localStorage now — survives VPN IP changes) ──
+  // ── Register / heartbeat session ───────────────────────────────────────────
   useEffect(() => {
-    let attempts = 0;
-    const poll = setInterval(() => {
-      const tok = getSessionToken();
-      if (tok) { setSessionToken(tok); clearInterval(poll); }
-      if (++attempts > 30) clearInterval(poll);
-    }, 100);
-    return () => clearInterval(poll);
-  }, []);
-
-  // ── Bootstrap from DB ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!sessionToken) return;
-    (async () => {
+    const register = async () => {
       try {
-        const { data } = await supabase
-          .from("user_sessions")
-          .select("is_banned, ban_reason, admin_message")
-          .eq("session_token", sessionToken)
+        const { data: existing } = await supabase
+          .from("sessions")
+          .select("id")
+          .eq("token", sessionToken)
           .maybeSingle();
-        if (data) {
-          setIsBanned(!!data.is_banned);
-          setBanReason(data.ban_reason != null ? data.ban_reason : null);
-          setAdminMessage(data.admin_message != null ? data.admin_message : null);
+
+        if (!existing) {
+          await supabase.from("sessions").insert({
+            token: sessionToken,
+            country: null,
+            page: window.location.pathname,
+            last_seen: new Date().toISOString(),
+          });
+        } else {
+          await supabase
+            .from("sessions")
+            .update({
+              page: window.location.pathname,
+              last_seen: new Date().toISOString(),
+            })
+            .eq("token", sessionToken);
         }
       } catch {
-        // Silently suppress — never crash the UI on bootstrap failure
+        // silently ignore — non-critical
       }
-    })();
+    };
+
+    register();
+
+    const interval = setInterval(async () => {
+      try {
+        await supabase
+          .from("sessions")
+          .update({
+            page: window.location.pathname,
+            last_seen: new Date().toISOString(),
+          })
+          .eq("token", sessionToken);
+      } catch {
+        // silently ignore
+      }
+    }, 15_000);
+
+    return () => clearInterval(interval);
   }, [sessionToken]);
 
-  // ── Dual-path Realtime subscription ─────────────────────────────────────
+  // ── Check existing ban on mount ────────────────────────────────────────────
   useEffect(() => {
-    if (!sessionToken) return;
-
-    // ── Shared state-setter logic ────────────────────────────────────────
-    // SYNTAX FIX: No optional chaining (?.) or nullish-coalescing (??) below.
-    // Using explicit null guards to support browsers without these operators.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    function applyModerationRow(row: Record<string, any>) {
+    const checkBan = async () => {
       try {
-        if (!row || typeof row !== "object") return;
+        const { data } = await supabase
+          .from("sessions")
+          .select("is_banned, ban_reason")
+          .eq("token", sessionToken)
+          .maybeSingle();
 
-        if (row.is_banned === true) {
-          const reason = (row.ban_reason !== null && row.ban_reason !== undefined)
-            ? String(row.ban_reason)
-            : null;
-          setBanReason(reason);
-          setIsBanned(true);
-          return;
-        }
-
-        if (row.is_banned === false && isBannedRef.current) {
-          setIsBanned(false);
-          const ubMsg = (row.unban_message !== null && row.unban_message !== undefined)
-            ? String(row.unban_message)
-            : null;
-          setUnbanMessage(ubMsg);
-          return;
-        }
-
-        const msg = (row.admin_message !== null && row.admin_message !== undefined)
-          ? String(row.admin_message)
-          : null;
-        setAdminMessage(msg);
-      } catch {
-        // Swallow malformed row — never crash the channel
-      }
-    }
-
-    // ── PATH 2: Broadcast action handler ────────────────────────────────
-    // SYNTAX FIX: destructuring replaced with explicit property access +
-    // explicit null checks so no optional-chaining opcode is emitted.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    function applyBroadcastAction(payload: Record<string, any>) {
-      try {
-        if (!payload || typeof payload !== "object") return;
-
-        const action  = payload.action  !== undefined ? String(payload.action)  : "";
-        const reason  = payload.reason  !== undefined && payload.reason  !== null
-          ? String(payload.reason)  : null;
-        const ubMsg   = payload.unbanMessage !== undefined && payload.unbanMessage !== null
-          ? String(payload.unbanMessage) : null;
-        const message = payload.message !== undefined && payload.message !== null
-          ? String(payload.message) : null;
-
-        switch (action) {
-          case "ban":
-            setBanReason(reason);
-            setIsBanned(true);
-            break;
-          case "unban":
-            setIsBanned(false);
-            setUnbanMessage(ubMsg);
-            break;
-          case "message":
-            setAdminMessage(message);
-            break;
-          case "clear_message":
-            setAdminMessage(null);
-            break;
-          default:
-            break;
+        if (data?.is_banned) {
+          setBan({ reason: data.ban_reason ?? "" });
         }
       } catch {
-        // Swallow malformed broadcast — never freeze the channel
+        // silently ignore
       }
-    }
+    };
 
+    checkBan();
+  }, [sessionToken]);
+
+  // ── Check active alert on mount ────────────────────────────────────────────
+  useEffect(() => {
+    const checkAlert = async () => {
+      try {
+        const { data } = await supabase
+          .from("site_alerts")
+          .select("id, message")
+          .eq("active", true)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data?.message) {
+          setAlert({ id: data.id, message: data.message });
+        }
+      } catch {
+        // silently ignore
+      }
+    };
+
+    checkAlert();
+  }, []);
+
+  // ── Real-time: session changes (ban/unban) ─────────────────────────────────
+  useEffect(() => {
     const channel = supabase
-      .channel("app-session-" + sessionToken, {
-        config: { broadcast: { self: false } },
-      })
-      // PATH 1 — postgres_changes (durable, requires REPLICA IDENTITY FULL)
+      .channel(`session:${sessionToken}`)
       .on(
         "postgres_changes",
         {
-          event:  "UPDATE",
+          event: "UPDATE",
           schema: "public",
-          table:  "user_sessions",
-          filter: "session_token=eq." + sessionToken,
+          table: "sessions",
+          filter: `token=eq.${sessionToken}`,
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (payload: any) => {
-          try {
-            // SYNTAX FIX: explicit property access, no optional chaining
-            const row = (payload && payload.new) ? payload.new : null;
-            if (row) applyModerationRow(row);
-          } catch {
-            // Suppress
-          }
-        }
-      )
-      // PATH 2 — Broadcast (instant, fired by adminApi after every DB write)
-      .on(
-        "broadcast",
-        { event: "admin_action" },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (msg: any) => {
-          try {
-            // SYNTAX FIX: explicit property access, no optional chaining
-            const p = (msg && msg.payload) ? msg.payload : null;
-            if (p) applyBroadcastAction(p);
-          } catch {
-            // Suppress
+        (payload) => {
+          const row = payload.new as {
+            is_banned?: boolean;
+            ban_reason?: string;
+          };
+
+          if (row.is_banned === true) {
+            setBan({ reason: row.ban_reason ?? "" });
+          } else if (row.is_banned === false) {
+            setBan(null);
           }
         }
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [sessionToken]);
 
-  const handleUnban        = useCallback((msg: string | null) => {
-    setIsBanned(false);
-    setUnbanMessage(msg);
+  // ── Real-time: global alerts ───────────────────────────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel("global:alerts")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "site_alerts",
+        },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            setAlert((prev) =>
+              prev?.id === (payload.old as { id: string }).id ? null : prev
+            );
+            return;
+          }
+
+          const row = payload.new as {
+            id: string;
+            message: string;
+            active: boolean;
+          };
+
+          if (row.active && row.message) {
+            setAlert({ id: row.id, message: row.message });
+          } else {
+            setAlert((prev) => (prev?.id === row.id ? null : prev));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
-  const dismissUnbanToast  = useCallback(() => setUnbanMessage(null), []);
-  const dismissAdminBanner = useCallback(() => setAdminMessage(null), []);
+
+  const dismissAlert = useCallback(() => setAlert(null), []);
 
   return (
     <>
-      <AnimatePresence>
-        {unbanMessage && (
-          <UnbanToast
-            key="unban-toast"
-            message={unbanMessage}
-            onDismiss={dismissUnbanToast}
-          />
-        )}
-      </AnimatePresence>
+      {/* ── NUCLEAR BAN OVERLAY — rendered outside router, above everything ── */}
+      {ban !== null && <BanOverlay reason={ban.reason} />}
 
-      <AnimatePresence>
-        {isBanned && sessionToken && (
-          <BannedScreen
-            key="banned"
-            sessionToken={sessionToken}
-            initialBanReason={banReason}
-            onUnban={handleUnban}
-          />
-        )}
-      </AnimatePresence>
+      {/* ── GLOBAL ALERT BANNER ─────────────────────────────────────────────── */}
+      {!ban && alert !== null && (
+        <AlertBanner alert={alert} onDismiss={dismissAlert} />
+      )}
 
-      <RouterContent
-        isBanned={isBanned}
-        adminMessage={adminMessage}
-        onDismissAdminBanner={dismissAdminBanner}
-      />
+      {/* ── MAIN APP ─────────────────────────────────────────────────────────── */}
+      <Router>
+        {/* Push content down when alert is visible so it isn't hidden under the banner */}
+        <div className={!ban && alert ? "pt-12" : ""}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
+            <Route path="/games" element={<GamesPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/reviews" element={<ReviewsPage />} />
+            <Route path="/policies" element={<PoliciesPage />} />
+          </Routes>
+        </div>
+      </Router>
     </>
-  );
-}
-
-export default function App() {
-  return (
-    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-      <LanguageProvider defaultLanguage="en" storageKey="yd_language">
-        <AppShell />
-      </LanguageProvider>
-    </ThemeProvider>
   );
 }
