@@ -1,3 +1,4 @@
+// src/hooks/useUserTracker.ts
 import { useEffect, useRef } from "react";
 import { supabase, isSupabaseEnabled } from "@/lib/supabase";
 
@@ -12,7 +13,7 @@ interface SessionMeta {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const SESSION_KEY          = "youssef_session_token"; // must match App.tsx
+const SESSION_KEY           = "youssef_session_token"; // must match App.tsx
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // ─── Geo providers (tried in order, first success wins) ──────────────────────
@@ -81,29 +82,36 @@ function generateUUID(): string {
   });
 }
 
-// VPN-safe: localStorage survives IP changes; sessionStorage does not.
-function getOrCreateSessionToken(): string {
+// ─── Session token helpers ────────────────────────────────────────────────────
+// Returns { token, isNew }
+// isNew = true  → brand-new visitor; caller MUST hard-INSERT
+// isNew = false → returning visitor; caller can upsert / heartbeat
+function getOrCreateSessionToken(): { token: string; isNew: boolean } {
   try {
     const existing = localStorage.getItem(SESSION_KEY);
-    if (existing) return existing;
+    if (existing) return { token: existing, isNew: false };
+
     const fresh = generateUUID();
     localStorage.setItem(SESSION_KEY, fresh);
-    return fresh;
+    return { token: fresh, isNew: true };
   } catch {
-    return generateUUID();
+    // localStorage blocked (private mode / storage quota) → treat as new
+    return { token: generateUUID(), isNew: true };
   }
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useUserTracker(currentPage: string) {
-  // Stable token ref — never changes for the lifetime of the tab
-  const sessionTokenRef = useRef<string>(getOrCreateSessionToken());
+  // Stable token ref — never changes for the lifetime of the tab.
+  // Also records whether this was a brand-new visitor at mount time.
+  const sessionInfoRef = useRef<{ token: string; isNew: boolean }>(
+    getOrCreateSessionToken()
+  );
 
   // metaRef holds geo data once resolved
   const metaRef = useRef<SessionMeta | null>(null);
 
-  // ── KEY FIX: store currentPage in a ref so the heartbeat closure always
-  //    reads the LATEST value, not the one captured at mount time.
+  // Always read the LATEST page from the heartbeat closure
   const currentPageRef = useRef<string>(currentPage);
   useEffect(() => {
     currentPageRef.current = currentPage;
@@ -112,36 +120,59 @@ export function useUserTracker(currentPage: string) {
   const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const initialisedRef = useRef(false);
 
-  // ── Core upsert — writes all tracked columns to user_sessions ─────────────
+  // ── Hard INSERT — used ONLY for brand-new visitors ────────────────────────
+  // This is a guaranteed first-time write that Supabase cannot silently skip.
+  // It fires even if there is a conflict on session_token (DO NOTHING), which
+  // handles the edge case of localStorage being cleared mid-session.
+  async function hardInsertSession(page: string): Promise<void> {
+    if (!isSupabaseEnabled) return;
+    if (!metaRef.current)   return;
+
+    const now = new Date().toISOString();
+
+    const { error } = await supabase.from("user_sessions").insert({
+      session_token: metaRef.current.sessionToken,
+      current_page:  page,
+      country:       metaRef.current.country,
+      last_seen:     now,
+      updated_at:    now,
+    });
+
+    if (error) {
+      // "23505" = unique_violation — row already exists (race / double-mount).
+      // Not fatal — fall through to the heartbeat upsert loop.
+      if (error.code !== "23505") {
+        console.warn("[useUserTracker] hard INSERT failed:", error.message, error.code);
+      }
+    }
+  }
+
+  // ── Upsert — used for heartbeats and returning visitors ──────────────────
   async function upsertSession(page: string): Promise<void> {
     if (!isSupabaseEnabled) return;
     if (!metaRef.current)   return;
 
     const now = new Date().toISOString();
 
-    try {
-      const { error } = await supabase
-        .from("user_sessions")
-        .upsert(
-          {
-            session_token: metaRef.current.sessionToken,  // PK / conflict target
-            current_page:  page,
-            country:       metaRef.current.country,
-            last_seen:     now,
-            updated_at:    now,                           // admin useNow() reads this
-          },
-          { onConflict: "session_token" }
-        );
+    const { error } = await supabase
+      .from("user_sessions")
+      .upsert(
+        {
+          session_token: metaRef.current.sessionToken,
+          current_page:  page,
+          country:       metaRef.current.country,
+          last_seen:     now,
+          updated_at:    now,
+        },
+        { onConflict: "session_token" }
+      );
 
-      if (error) {
-        console.warn("[useUserTracker] upsert warning:", error.message);
-      }
-    } catch (err) {
-      console.warn("[useUserTracker] upsert exception (suppressed):", err);
+    if (error) {
+      console.warn("[useUserTracker] upsert warning:", error.message);
     }
   }
 
-  // ── Initialise once: resolve geo, write first row, start heartbeat ─────────
+  // ── Initialise once: resolve geo → write row → start heartbeat ────────────
   useEffect(() => {
     if (initialisedRef.current) return;
     initialisedRef.current = true;
@@ -154,14 +185,20 @@ export function useUserTracker(currentPage: string) {
         if (cancelled) return;
 
         metaRef.current = {
-          sessionToken: sessionTokenRef.current,
+          sessionToken: sessionInfoRef.current.token,
           country:      geo.country,
         };
 
-        // First write — establishes the row in user_sessions
-        await upsertSession(currentPageRef.current);
+        // ── CRITICAL BRANCH ────────────────────────────────────────────────
+        // Brand-new visitor → hard INSERT to guarantee the row lands.
+        // Returning visitor  → upsert so we refresh last_seen without dupes.
+        if (sessionInfoRef.current.isNew) {
+          await hardInsertSession(currentPageRef.current);
+        } else {
+          await upsertSession(currentPageRef.current);
+        }
 
-        // Heartbeat — reads currentPageRef.current so it's ALWAYS up-to-date
+        // Heartbeat — always upsert; row is guaranteed to exist by this point
         heartbeatTimer.current = setInterval(() => {
           upsertSession(currentPageRef.current);
         }, HEARTBEAT_INTERVAL_MS);
@@ -173,15 +210,13 @@ export function useUserTracker(currentPage: string) {
 
     init();
 
-    // Clean up on tab close: delete the row so the admin list self-prunes
+    // Best-effort cleanup on tab close
     const handleUnload = () => {
       if (!metaRef.current) return;
       try {
-        // sendBeacon is fire-and-forget — best effort
         navigator.sendBeacon(
           "/api/session-end?token=" + metaRef.current.sessionToken
         );
-        // Also attempt a direct Supabase delete (may not complete before unload)
         supabase
           .from("user_sessions")
           .delete()
@@ -203,9 +238,6 @@ export function useUserTracker(currentPage: string) {
   }, []); // ← intentionally empty: runs once on mount
 
   // ── Page-change effect: immediately update current_page on navigation ──────
-  // Fires whenever wouter changes the route. If init hasn't finished yet,
-  // currentPageRef is already updated above so the first upsert will use
-  // the correct page automatically.
   useEffect(() => {
     if (!metaRef.current) return; // geo not resolved yet — heartbeat will catch it
     upsertSession(currentPage);

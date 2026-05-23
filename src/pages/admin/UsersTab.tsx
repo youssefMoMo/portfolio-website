@@ -40,7 +40,7 @@ const SAFE_SELECT = [
 // Heartbeat fires every 30 s → 90 s = 3 missed heartbeats of grace period.
 // This is timezone-safe: both Date.now() and new Date(isoUTC).getTime()
 // return UTC epoch milliseconds, so no Cairo / UTC offset problem exists.
-const ACTIVE_THRESHOLD_MS = 90_000;
+const ACTIVE_THRESHOLD_MS = 300_000; // 5 minutes
 
 // ─── useNow — ticks every 15 s so active dots repaint without a full fetch ────
 function useNow(intervalMs = 15_000): number {
@@ -582,7 +582,7 @@ export default function UsersTab() {
 
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-white/5">
-        <LegendItem dot="bg-emerald-400 animate-pulse" label={`Active (< ${ACTIVE_THRESHOLD_MS / 1000}s)`} />
+        <LegendItem dot="bg-emerald-400 animate-pulse" label={`Active (last 5 min)`} />
         <LegendItem dot="bg-white/15"                  label="Inactive" />
       </div>
     </div>
