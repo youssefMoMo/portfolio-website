@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseEnabled } from "@/lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface GeoData {
@@ -12,9 +12,10 @@ interface SessionMeta {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const SESSION_KEY = "youssef_session_token";
+const SESSION_KEY          = "youssef_session_token"; // must match App.tsx
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
+// ─── Geo providers (tried in order, first success wins) ──────────────────────
 const GEO_PROVIDERS: Array<{
   url: string;
   extract: (data: Record<string, unknown>) => GeoData | null;
@@ -28,15 +29,6 @@ const GEO_PROVIDERS: Array<{
     },
   },
   {
-    url: "http://ip-api.com/json/?fields=status,country",
-    extract(data) {
-      if (String(data.status) !== "success") return null;
-      const country = String(data.country || "").trim();
-      if (!country) return null;
-      return { country };
-    },
-  },
-  {
     url: "https://ipwho.is/",
     extract(data) {
       if (!data.success) return null;
@@ -45,32 +37,39 @@ const GEO_PROVIDERS: Array<{
       return { country };
     },
   },
+  {
+    url: "http://ip-api.com/json/?fields=status,country",
+    extract(data) {
+      if (String(data.status) !== "success") return null;
+      const country = String(data.country || "").trim();
+      if (!country) return null;
+      return { country };
+    },
+  },
 ];
 
 async function resolveGeoData(): Promise<GeoData> {
-  const fallback: GeoData = { country: "Unknown" };
-
   for (const provider of GEO_PROVIDERS) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4_000);
-      const res = await fetch(provider.url, {
+      const timeout    = setTimeout(() => controller.abort(), 4_000);
+      const res        = await fetch(provider.url, {
         signal: controller.signal,
-        cache: "no-store",
+        cache:  "no-store",
       });
       clearTimeout(timeout);
       if (!res.ok) continue;
       const json = (await res.json()) as Record<string, unknown>;
-      const geo = provider.extract(json);
+      const geo  = provider.extract(json);
       if (geo && geo.country && geo.country !== "Unknown") return geo;
     } catch {
-      // Try next provider
+      // try next provider
     }
   }
-
-  return fallback;
+  return { country: "Unknown" };
 }
 
+// ─── UUID ─────────────────────────────────────────────────────────────────────
 function generateUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -82,9 +81,7 @@ function generateUUID(): string {
   });
 }
 
-// ── VPN FIX: localStorage persists across page reloads and IP changes.
-//   sessionStorage was cleared on reload — VPN users who refreshed got a new
-//   token, breaking the realtime channel subscription in App.tsx. ──
+// VPN-safe: localStorage survives IP changes; sessionStorage does not.
 function getOrCreateSessionToken(): string {
   try {
     const existing = localStorage.getItem(SESSION_KEY);
@@ -97,24 +94,45 @@ function getOrCreateSessionToken(): string {
   }
 }
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useUserTracker(currentPage: string) {
-  const sessionToken = useRef<string>(getOrCreateSessionToken());
-  const metaRef = useRef<SessionMeta | null>(null);
-  const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Stable token ref — never changes for the lifetime of the tab
+  const sessionTokenRef = useRef<string>(getOrCreateSessionToken());
 
-  async function upsertSession(page: string) {
-    if (!metaRef.current) return;
+  // metaRef holds geo data once resolved
+  const metaRef = useRef<SessionMeta | null>(null);
+
+  // ── KEY FIX: store currentPage in a ref so the heartbeat closure always
+  //    reads the LATEST value, not the one captured at mount time.
+  const currentPageRef = useRef<string>(currentPage);
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const initialisedRef = useRef(false);
+
+  // ── Core upsert — writes all tracked columns to user_sessions ─────────────
+  async function upsertSession(page: string): Promise<void> {
+    if (!isSupabaseEnabled) return;
+    if (!metaRef.current)   return;
+
+    const now = new Date().toISOString();
+
     try {
-      const { error } = await supabase.from("user_sessions").upsert(
-        {
-          session_token: metaRef.current.sessionToken,
-          current_page: page,
-          country: metaRef.current.country,
-          last_seen: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "session_token" }
-      );
+      const { error } = await supabase
+        .from("user_sessions")
+        .upsert(
+          {
+            session_token: metaRef.current.sessionToken,  // PK / conflict target
+            current_page:  page,
+            country:       metaRef.current.country,
+            last_seen:     now,
+            updated_at:    now,                           // admin useNow() reads this
+          },
+          { onConflict: "session_token" }
+        );
+
       if (error) {
         console.warn("[useUserTracker] upsert warning:", error.message);
       }
@@ -123,21 +141,31 @@ export function useUserTracker(currentPage: string) {
     }
   }
 
+  // ── Initialise once: resolve geo, write first row, start heartbeat ─────────
   useEffect(() => {
+    if (initialisedRef.current) return;
+    initialisedRef.current = true;
+
     let cancelled = false;
 
     async function init() {
       try {
         const geo = await resolveGeoData();
         if (cancelled) return;
+
         metaRef.current = {
-          sessionToken: sessionToken.current,
-          country: geo.country,
+          sessionToken: sessionTokenRef.current,
+          country:      geo.country,
         };
-        await upsertSession(currentPage);
+
+        // First write — establishes the row in user_sessions
+        await upsertSession(currentPageRef.current);
+
+        // Heartbeat — reads currentPageRef.current so it's ALWAYS up-to-date
         heartbeatTimer.current = setInterval(() => {
-          upsertSession(currentPage);
+          upsertSession(currentPageRef.current);
         }, HEARTBEAT_INTERVAL_MS);
+
       } catch (err) {
         console.warn("[useUserTracker] init exception (suppressed):", err);
       }
@@ -145,19 +173,22 @@ export function useUserTracker(currentPage: string) {
 
     init();
 
+    // Clean up on tab close: delete the row so the admin list self-prunes
     const handleUnload = () => {
       if (!metaRef.current) return;
       try {
+        // sendBeacon is fire-and-forget — best effort
         navigator.sendBeacon(
           "/api/session-end?token=" + metaRef.current.sessionToken
         );
+        // Also attempt a direct Supabase delete (may not complete before unload)
         supabase
           .from("user_sessions")
           .delete()
           .eq("session_token", metaRef.current.sessionToken)
           .then(() => {});
       } catch {
-        // Suppress unload errors
+        // Suppress — unload errors are expected
       }
     };
 
@@ -169,10 +200,14 @@ export function useUserTracker(currentPage: string) {
       window.removeEventListener("beforeunload", handleUnload);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // ← intentionally empty: runs once on mount
 
+  // ── Page-change effect: immediately update current_page on navigation ──────
+  // Fires whenever wouter changes the route. If init hasn't finished yet,
+  // currentPageRef is already updated above so the first upsert will use
+  // the correct page automatically.
   useEffect(() => {
-    if (!metaRef.current) return;
+    if (!metaRef.current) return; // geo not resolved yet — heartbeat will catch it
     upsertSession(currentPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
