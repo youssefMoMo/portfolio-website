@@ -1,37 +1,81 @@
-import { ReactNode } from "react";
-// FIX: Was `import { Navbar } from "./Navbar"` (named import) but Navbar.tsx
-// only has a default export — the named binding resolved to `undefined`,
-// crashing silently on every public page render.
+// src/components/layout/Layout.tsx
+
+import { ReactNode, useEffect, useRef, useState, useCallback } from "react";
 import Navbar from "./Navbar";
 import { Footer } from "./Footer";
 import { useLocation } from "wouter";
-import { useEffect, useRef } from "react";
 import { BackgroundOverlay } from "@/components/BackgroundOverlay";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface StarConfig {
+  id: number;
+  top: string;
+  left: string;
+}
+
+// ─── ShootingStar ─────────────────────────────────────────────────────────────
+
+/**
+ * Renders a single shooting-star div with randomly generated position.
+ * Calls `onComplete` when its CSS animation ends so the parent can
+ * remove it from state — no imperative DOM manipulation required.
+ */
+function ShootingStar({
+  config,
+  onComplete,
+}: {
+  config: StarConfig;
+  onComplete: (id: number) => void;
+}) {
+  const handleAnimationEnd = useCallback(() => {
+    onComplete(config.id);
+  }, [config.id, onComplete]);
+
+  return (
+    <div
+      className="shooting-star"
+      style={{ top: config.top, left: config.left }}
+      onAnimationEnd={handleAnimationEnd}
+      aria-hidden="true"
+    />
+  );
+}
+
+// ─── Layout ───────────────────────────────────────────────────────────────────
 
 interface LayoutProps {
   children: ReactNode;
 }
 
-export function Layout({ children }: LayoutProps) {
-  const [location] = useLocation();
+export default function Layout({ children }: LayoutProps) {
+  const [location]  = useLocation();
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isScrolling = useRef(false);
+  const nextId      = useRef(0);
 
-  // Scroll to top on route change
+  // React-managed star pool
+  const [stars, setStars] = useState<StarConfig[]>([]);
+
+  // ── Scroll-to-top on route change ─────────────────────────────────────────
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location]);
 
-  // Pause heavy CSS animations during fast scroll
+  // ── Pause heavy CSS animations during fast scroll ─────────────────────────
   useEffect(() => {
     const handleScroll = () => {
-      if (!document.body.classList.contains("is-scrolling")) {
+      if (!isScrolling.current) {
         document.body.classList.add("is-scrolling");
+        isScrolling.current = true;
       }
       if (scrollTimer.current) clearTimeout(scrollTimer.current);
       scrollTimer.current = setTimeout(() => {
         document.body.classList.remove("is-scrolling");
+        isScrolling.current = false;
       }, 150);
     };
+
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       window.removeEventListener("scroll", handleScroll);
@@ -39,31 +83,38 @@ export function Layout({ children }: LayoutProps) {
     };
   }, []);
 
-  // Shooting stars (reduced for performance)
+  // ── Shooting-star spawner (React state, zero imperative DOM) ──────────────
   useEffect(() => {
-    const createShootingStar = () => {
-      const container = document.getElementById("shootingStars");
-      if (!container || document.body.classList.contains("is-scrolling")) return;
-      const star = document.createElement("div");
-      star.className = "shooting-star";
-      star.style.top = `${Math.random() * 50}%`;
-      star.style.left = `${Math.random() * 70 + 20}%`;
-      container.appendChild(star);
-      setTimeout(() => star.remove(), 3000);
+    const spawn = () => {
+      // Skip while the user is actively scrolling to avoid jank.
+      if (isScrolling.current) return;
+
+      setStars((prev) => [
+        ...prev,
+        {
+          id:   nextId.current++,
+          top:  `${Math.random() * 50}%`,
+          left: `${Math.random() * 70 + 20}%`,
+        },
+      ]);
     };
-    const interval = setInterval(createShootingStar, 10000);
+
+    const interval = setInterval(spawn, 10_000);
     return () => clearInterval(interval);
   }, []);
 
+  // Cleanup callback passed down to each ShootingStar
+  const removeStar = useCallback((id: number) => {
+    setStars((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col relative bg-background">
-      {/* Global fixed background image + theme-aware overlay (bottom-most layer, z-0) */}
+      {/* Fixed background image + theme-aware overlay — bottom-most layer (z-0) */}
       <BackgroundOverlay />
 
-      {/* Decorative animated layers (stars, nebulas) — z-[1] so they sit ABOVE
-          the BackgroundOverlay but BELOW page content (z-10). Without explicit
-          z-index higher than 0, this wrapper would share z-0 with BackgroundOverlay
-          and DOM order would put it on top, which used to cover the bg image. */}
+      {/* Decorative animated layers — z-[1]: above BackgroundOverlay, below content */}
       <div className="fixed inset-0 z-[1] pointer-events-none">
         <div className="galaxy-bg">
           <div className="stars-layer stars-layer-1" />
@@ -71,19 +122,31 @@ export function Layout({ children }: LayoutProps) {
           <div className="stars-layer stars-layer-3" />
           <div className="nebula nebula-1" />
           <div className="nebula nebula-2" />
-          <div className="shooting-stars-container" id="shootingStars" />
+
+          {/* React-owned shooting stars — no document.createElement */}
+          <div className="shooting-stars-container">
+            {stars.map((star) => (
+              <ShootingStar key={star.id} config={star} onComplete={removeStar} />
+            ))}
+          </div>
+
           <div className="vignette" />
         </div>
+
         <div className="light-bg">
           <div className="light-gradient-1" />
           <div className="light-gradient-2" />
         </div>
       </div>
 
-      {/* Content — no AnimatePresence here; App.tsx handles page transitions */}
+      {/* Page content — z-10: above all decorative layers */}
       <div className="relative z-10 flex flex-col min-h-screen">
         <Navbar />
-        <main className="flex-1 mt-16">
+        {/*
+          pt-14 precisely offsets the fixed h-14 (56 px) Navbar height,
+          eliminating the 8 px gap that mt-16 (64 px) previously introduced.
+        */}
+        <main className="flex-1 pt-14">
           {children}
         </main>
         <Footer />
@@ -91,5 +154,3 @@ export function Layout({ children }: LayoutProps) {
     </div>
   );
 }
-
-export default Layout;
