@@ -105,6 +105,69 @@ export type Translations = Record<Language, Record<TranslationKey, string>>;
 // TRANSLATIONS
 // ═══════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════
+// 🌐 LOCALIZATION ARCHITECTURE — FUTURE OPTIMIZATION GUIDE
+// ═══════════════════════════════════════════════════════════════
+//
+// CURRENT APPROACH (synchronous, co-located):
+//   All three locale dictionaries (en, ar, es) are inlined here and
+//   shipped in the main bundle on every page load, regardless of the
+//   user's active language. At current scale (~3 languages × ~100 keys)
+//   the overhead is negligible, but this becomes a liability when
+//   adding more locales or richer content namespaces.
+//
+// FUTURE-PROOFING STRATEGY — Code Splitting via Dynamic Imports:
+//
+//   Step 1 — Extract each language into its own JSON module:
+//     src/locales/en.json   (English strings)
+//     src/locales/ar.json   (Arabic strings)
+//     src/locales/es.json   (Spanish strings)
+//
+//   Step 2 — Replace the static `translations` object with a loader:
+//
+//     // src/lib/i18n.ts
+//     import type { Language, TranslationKey } from '@/lib/data';
+//
+//     const _localeCache = new Map<Language, Record<TranslationKey, string>>();
+//
+//     export async function loadLocale(
+//       lang: Language
+//     ): Promise<Record<TranslationKey, string>> {
+//       if (_localeCache.has(lang)) return _localeCache.get(lang)!;
+//       // Vite/Rollup statically analyses this pattern and emits one
+//       // code-split chunk per locale (e.g. assets/en-Bk3xP.js):
+//       const mod = await import(`./locales/${lang}.json`);
+//       _localeCache.set(lang, mod.default);
+//       return mod.default;
+//     }
+//
+//   Step 3 — Preload the detected locale before first render:
+//
+//     // src/main.tsx
+//     import { loadLocale } from '@/lib/i18n';
+//     const detectedLang = (navigator.language.slice(0, 2) as Language) ?? 'en';
+//     await loadLocale(detectedLang);   // fires before ReactDOM.createRoot
+//     ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+//
+//   Step 4 — Update `useLanguage` hook so that on language switch it calls
+//     `loadLocale(lang)` instead of importing from this file directly.
+//     Wrap lazy switches in React.Suspense with an `en` fallback so the
+//     UI never flickers during the async chunk fetch.
+//
+//   WHY THIS MATTERS:
+//   • Reduces initial bundle by ~(n-1)/n for n languages (currently ~67%).
+//   • Each locale JSON chunk is independently cacheable by the CDN/SW.
+//   • Enables adding new locales without touching the core bundle at all.
+//   • `import(`./locales/${lang}.json`)` is statically analysable by
+//     Vite/Rollup, so it emits deterministic chunk filenames for optimal
+//     cache invalidation on locale-only content changes.
+//
+//   MIGRATION GATE:
+//   `translations.ts` has been DEPRECATED and deleted as of this refactor.
+//   All consumers MUST import `translations`, `TranslationKey`, `Language`,
+//   `getTranslation`, and `getTranslations` exclusively from `@/lib/data`.
+// ═══════════════════════════════════════════════════════════════
+
 export const translations: Translations = {
   en: {
     // Navigation

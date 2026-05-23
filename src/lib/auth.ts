@@ -7,7 +7,7 @@
 // paths. If Supabase is not configured, every auth call fails with a clear
 // error — admin-only routes simply cannot be accessed.
 
-import { supabase } from "./supabase";
+import { supabase, isSupabaseEnabled, SUPABASE_AUTH_STORAGE_KEY } from "./supabase";
 
 export interface AuthResponse {
   success: boolean;
@@ -19,7 +19,7 @@ export interface AuthResponse {
 const SUPABASE_NOT_CONFIGURED =
   "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment, then redeploy.";
 
-// ── Sign in ─────────────────────────────────────────────────────
+// ── Sign in ──────────────────────────────────────────────────────────────────
 // Calls supabase.auth.signInWithPassword, then verifies the resulting user
 // is registered as an active admin. If verification fails, the session is
 // signed out so a non-admin user can never linger in a half-authenticated
@@ -28,7 +28,7 @@ export async function loginWithPassword(
   email: string,
   password: string,
 ): Promise<AuthResponse> {
-  if (!supabase) {
+  if (!isSupabaseEnabled) {
     return { success: false, error: SUPABASE_NOT_CONFIGURED };
   }
 
@@ -76,10 +76,10 @@ export async function loginWithPassword(
   return { success: true, email: cleanEmail };
 }
 
-// ── Verify the current session belongs to an active admin ─────
+// ── Verify the current session belongs to an active admin ────────────────────
 // Used by ProtectedRoute on each mount.
 export async function verifyAdmin(): Promise<AuthResponse> {
-  if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+  if (!isSupabaseEnabled) return { success: false, error: SUPABASE_NOT_CONFIGURED };
   try {
     const { data: { user }, error: userErr } = await supabase.auth.getUser();
     if (userErr || !user) return { success: false, error: "No active session" };
@@ -104,9 +104,9 @@ export async function verifyAdmin(): Promise<AuthResponse> {
   }
 }
 
-// ── Session helpers ────────────────────────────────────────────
+// ── Session helpers ───────────────────────────────────────────────────────────
 export async function getSession() {
-  if (!supabase) return null;
+  if (!isSupabaseEnabled) return null;
   const { data: { session } } = await supabase.auth.getSession();
   return session;
 }
@@ -115,26 +115,31 @@ export async function isAuthenticated(): Promise<boolean> {
   return !!(await getSession());
 }
 
-// Synchronous check using the cached Supabase session in localStorage.
+// Synchronous check using the cached Supabase session token in localStorage.
 // Used by ProtectedRoute / AdminLogin to avoid a spinner flash on mount.
-// Note: this only proves the user has a session token — full admin
-// verification still happens via verifyAdmin().
+// Note: this only proves the user has a (not-yet-expired) session token —
+// full admin verification still happens via verifyAdmin().
+//
+// `SUPABASE_AUTH_STORAGE_KEY` is imported directly from `./supabase` — the
+// single source of truth for this key string. It must never be duplicated
+// as an inline literal in this file or anywhere else.
 export function isAuthenticatedSync(): boolean {
-  if (!supabase) return false;
-  const storageKey = "youssef-portfolio-auth";
+  if (!isSupabaseEnabled) return false;
   try {
-    const raw = localStorage.getItem(storageKey);
+    const raw = localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY);
     if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    const exp = parsed?.expires_at ?? 0;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return false;
+    const exp = (parsed as Record<string, unknown>).expires_at;
+    if (typeof exp !== "number") return false;
     return exp > Math.floor(Date.now() / 1000);
   } catch {
     return false;
   }
 }
 
-// ── Logout ─────────────────────────────────────────────────────
+// ── Logout ────────────────────────────────────────────────────────────────────
 export async function logout(): Promise<void> {
-  if (!supabase) return;
+  if (!isSupabaseEnabled) return;
   try { await supabase.auth.signOut(); } catch { /* ignore */ }
 }
