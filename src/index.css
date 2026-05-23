@@ -3,9 +3,8 @@
    ═══════════════════════════════════════════════════════════════ */
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
-@custom-variant dark {
-  &:is(.dark *) { @slot; }
-}
+/* NOTE: @custom-variant dark removed — Tailwind v4 handles dark: variants
+   natively. The @slot token is illegal in v4 and would cause a build error. */
 
 /* ═══════════════════════════════════════════════════════════════
    THEME DEFINITIONS (Inline theme variables)
@@ -605,10 +604,13 @@
    ═══════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+  ::before,
+  ::after {
+    /* Use none rather than a near-zero duration. A 0.01ms duration still
+       triggers animation events and can cause flicker on composited layers.
+       none prevents any animation frame from being scheduled at all. */
+    animation: none !important;
+    transition: none !important;
   }
 }
 
@@ -703,10 +705,9 @@ body.is-scrolling .shooting-star {
   display: none !important;
 }
 
-/* GPU acceleration for animated elements */
+/* GPU acceleration hint for animated elements */
 [class*="animate-"],
 [class*="transition-"] {
-  will-change: auto;
   backface-visibility: hidden;
 }
 
@@ -956,19 +957,15 @@ body.is-scrolling .shooting-star {
    SkillsMarquee.tsx and ReviewsMarquee.tsx have been
    removed (dead code — never imported by any page).
 ═══════════════════════════════════════════════════════ */
-@keyframes marquee-scroll-left {
-  0%   { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(-50%, 0, 0); }
-}
+/* NOTE: marquee-scroll-left / marquee-scroll-right keyframes removed.
+   DualMarqueeSection.tsx uses marquee-left / marquee-right (defined in its
+   embedded <style> tag) — keeping these dead keyframes was dead code. */
 
-@keyframes marquee-scroll-right {
-  0%   { transform: translate3d(-50%, 0, 0); }
-  100% { transform: translate3d(0, 0, 0); }
-}
-
-/* Pause marquee while user is scrolling (avoids jank) */
-body.is-scrolling [style*="marquee-scroll-left"],
-body.is-scrolling [style*="marquee-scroll-right"] {
+/* Pause marquee while user is scrolling (avoids jank).
+   Selectors match the animation names used in DualMarqueeSection.tsx:
+   `marquee-left` and `marquee-right` (injected via the style prop). */
+body.is-scrolling [style*="marquee-left"],
+body.is-scrolling [style*="marquee-right"] {
   animation-play-state: paused !important;
 }
 

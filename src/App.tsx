@@ -24,7 +24,9 @@ import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/not-found";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const SESSION_STORAGE_KEY = "youssef_session_token";
+// localStorage key — persists across tabs and browser restarts so the ban
+// state is synchronised across all open viewports for the same device.
+const LOCAL_STORAGE_KEY = "youssef_session_token";
 const SESSION_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes rolling window
 
 // ─── Helpers (pure functions — no hooks, no context) ─────────────────────────
@@ -45,33 +47,36 @@ interface SessionData {
 }
 
 /**
- * Reads or creates a session token stored in sessionStorage with a
+ * Reads or creates a session token stored in localStorage with a
  * 30-minute rolling expiry. Each call that finds a valid token
  * extends the expiry by another 30 minutes (rolling window).
- * Falls back to an ephemeral token if sessionStorage is unavailable.
+ *
+ * Using localStorage (not sessionStorage) so the same token — and therefore
+ * the same ban state — is shared across all tabs and browser windows on this
+ * device. Falls back to an ephemeral in-memory token if storage is blocked.
  */
 function getOrCreateSessionToken(): string {
   try {
-    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
       const data: SessionData = JSON.parse(raw);
       if (Date.now() < data.expiresAt) {
         // Roll the expiry forward
         data.expiresAt = Date.now() + SESSION_EXPIRY_MS;
-        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
         return data.token;
       }
       // Expired — clear and regenerate
-      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
     }
   } catch {
-    // sessionStorage unavailable — return an ephemeral token
+    // localStorage unavailable — return an ephemeral token
     return generateUUID();
   }
   const token = generateUUID();
   const data: SessionData = { token, expiresAt: Date.now() + SESSION_EXPIRY_MS };
   try {
-    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
   } catch {
     /* Storage full or blocked — continue with in-memory token */
   }

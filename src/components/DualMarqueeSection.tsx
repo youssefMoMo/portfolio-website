@@ -155,6 +155,7 @@ interface AvatarProps {
 
 function Avatar({ src, name }: AvatarProps) {
   const initial = name.charAt(0).toUpperCase();
+  const [imgFailed, setImgFailed] = useState(false);
 
   return (
     <div
@@ -162,28 +163,24 @@ function Avatar({ src, name }: AvatarProps) {
                  bg-gradient-to-br from-primary/20 to-secondary/20"
       style={{ width: 36, height: 36 }}
     >
-      {src ? (
+      {src && !imgFailed ? (
         <img
           src={src}
           alt={name}
           className="absolute inset-0 w-full h-full object-cover"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-            const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
-            if (fb) fb.style.display = "flex";
-          }}
+          onError={() => setImgFailed(true)}
         />
       ) : null}
-      {/* Fallback: visible when no src, or after image load error */}
-      <span
-        className="absolute inset-0 items-center justify-center
-                   text-primary font-bold text-xs select-none"
-        // Hidden when an img is present (shown via onError DOM manipulation)
-        style={{ display: src ? "none" : "flex" }}
-        aria-hidden="true"
-      >
-        {initial}
-      </span>
+      {/* Fallback: shown when no src provided, or after image load failure */}
+      {(!src || imgFailed) && (
+        <span
+          className="absolute inset-0 flex items-center justify-center
+                     text-primary font-bold text-xs select-none"
+          aria-hidden="true"
+        >
+          {initial}
+        </span>
+      )}
     </div>
   );
 }
@@ -271,6 +268,8 @@ function StatCard({ stat }: { stat: Stat }) {
 }
 
 function ToolCard({ tool }: { tool: ToolDef }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
   return (
     <div
       className="flex-shrink-0 bg-white/80 dark:bg-card/70
@@ -288,25 +287,23 @@ function ToolCard({ tool }: { tool: ToolDef }) {
                    flex items-center justify-center"
         style={{ width: 56, height: 56 }}
       >
-        <img
-          src={tool.logo}
-          alt={tool.name}
-          className="absolute w-8 h-8 sm:w-9 sm:h-9 object-contain"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-            const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
-            if (fb) fb.style.display = "flex";
-          }}
-        />
-        {/* Emoji fallback — same fixed-size box, zero layout shift */}
-        <span
-          className="absolute inset-0 items-center justify-center
-                     text-2xl select-none"
-          style={{ display: "none" }}
-          aria-hidden="true"
-        >
-          {tool.emoji}
-        </span>
+        {!imgFailed ? (
+          <img
+            src={tool.logo}
+            alt={tool.name}
+            className="absolute w-8 h-8 sm:w-9 sm:h-9 object-contain"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          /* Emoji fallback — same fixed-size box, zero layout shift */
+          <span
+            className="absolute inset-0 flex items-center justify-center
+                       text-2xl select-none"
+            aria-hidden="true"
+          >
+            {tool.emoji}
+          </span>
+        )}
       </div>
       <p className="text-[11px] sm:text-xs font-medium text-foreground text-center">
         {tool.name}
@@ -495,7 +492,7 @@ export function DualMarqueeSection() {
       {/* ── Row 1: Reviews — scrolls left ──────────────────────────────── */}
       {dupReviews.length > 0 && (
         <div className="mb-6 sm:mb-8">
-          <MarqueeRow duration={90} direction="left" running={running}>
+          <MarqueeRow duration={25} direction="left" running={running}>
             {dupReviews.map((r, i) => (
               <ReviewCard key={`rev-${r.id}-${i}`} review={r} />
             ))}
@@ -505,7 +502,7 @@ export function DualMarqueeSection() {
 
       {/* ── Row 2: Stats — scrolls left ────────────────────────────────── */}
       <div className="mb-6 sm:mb-8">
-        <MarqueeRow duration={80} direction="left" running={running}>
+        <MarqueeRow duration={25} direction="left" running={running}>
           {dupStats.map((s, i) => (
             <StatCard key={`stat-${s.id}-${i}`} stat={s} />
           ))}
@@ -513,7 +510,7 @@ export function DualMarqueeSection() {
       </div>
 
       {/* ── Row 3: Tools — scrolls right ───────────────────────────────── */}
-      <MarqueeRow duration={80} direction="right" running={running}>
+      <MarqueeRow duration={25} direction="right" running={running}>
         {dupTools.map((t, i) => (
           <ToolCard key={`tool-${t.id}-${i}`} tool={t} />
         ))}
