@@ -29,12 +29,15 @@ function generateUUID(): string {
   });
 }
 
+// Must match the key used in useUserTracker.ts
+const SESSION_KEY = "youssef_session_token";
+
 function getOrCreateSessionToken(): string {
   try {
-    let token = localStorage.getItem("session_token");
+    let token = localStorage.getItem(SESSION_KEY);
     if (!token) {
       token = generateUUID();
-      localStorage.setItem("session_token", token);
+      localStorage.setItem(SESSION_KEY, token);
     }
     return token;
   } catch {
@@ -151,56 +154,15 @@ function AppInner() {
   const [alert, setAlert] = useState<AlertState | null>(null);
   const [ban,   setBan]   = useState<BanState   | null>(null);
 
-  // ── Register + heartbeat ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isSupabaseEnabled) return;
-
-    const register = async () => {
-      try {
-        const { data: existing } = await supabase
-          .from("sessions")
-          .select("id")
-          .eq("token", sessionToken)
-          .maybeSingle();
-
-        if (!existing) {
-          await supabase.from("sessions").insert({
-            token: sessionToken,
-            page: window.location.pathname,
-            last_seen: new Date().toISOString(),
-          });
-        } else {
-          await supabase
-            .from("sessions")
-            .update({ page: window.location.pathname, last_seen: new Date().toISOString() })
-            .eq("token", sessionToken);
-        }
-      } catch { /* non-critical */ }
-    };
-
-    register();
-
-    const interval = setInterval(async () => {
-      try {
-        await supabase
-          .from("sessions")
-          .update({ page: window.location.pathname, last_seen: new Date().toISOString() })
-          .eq("token", sessionToken);
-      } catch { /* non-critical */ }
-    }, 15_000);
-
-    return () => clearInterval(interval);
-  }, [sessionToken]);
-
   // ── Ban check on mount ────────────────────────────────────────────────────
   useEffect(() => {
     if (!isSupabaseEnabled) return;
     (async () => {
       try {
         const { data } = await supabase
-          .from("sessions")
+          .from("user_sessions")
           .select("is_banned, ban_reason")
-          .eq("token", sessionToken)
+          .eq("session_token", sessionToken)
           .maybeSingle();
         if (data?.is_banned) setBan({ reason: data.ban_reason ?? "" });
       } catch { /* non-critical */ }
@@ -224,7 +186,7 @@ function AppInner() {
     })();
   }, []);
 
-  // ── Realtime: ban / unban ─────────────────────────────────────────────────
+  // ── Realtime: ban / unban this session ────────────────────────────────────
   useEffect(() => {
     if (!isSupabaseEnabled) return;
 
@@ -232,7 +194,12 @@ function AppInner() {
       .channel(`session:${sessionToken}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "sessions", filter: `token=eq.${sessionToken}` },
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "user_sessions",
+          filter: `session_token=eq.${sessionToken}`,
+        },
         (payload) => {
           const row = payload.new as { is_banned?: boolean; ban_reason?: string };
           if (row.is_banned === true)  setBan({ reason: row.ban_reason ?? "" });
@@ -244,7 +211,7 @@ function AppInner() {
     return () => { supabase.removeChannel(ch); };
   }, [sessionToken]);
 
-  // ── Realtime: global alerts ───────────────────────────────────────────────
+  // ── Realtime: global site alerts ─────────────────────────────────────────
   useEffect(() => {
     if (!isSupabaseEnabled) return;
 
@@ -255,12 +222,14 @@ function AppInner() {
         { event: "*", schema: "public", table: "site_alerts" },
         (payload) => {
           if (payload.eventType === "DELETE") {
-            setAlert((prev) => prev?.id === (payload.old as { id: string }).id ? null : prev);
+            setAlert((prev) =>
+              prev?.id === (payload.old as { id: string }).id ? null : prev
+            );
             return;
           }
           const row = payload.new as { id: string; message: string; active: boolean };
           if (row.active && row.message) setAlert({ id: row.id, message: row.message });
-          else setAlert((prev) => prev?.id === row.id ? null : prev);
+          else setAlert((prev) => (prev?.id === row.id ? null : prev));
         }
       )
       .subscribe();
