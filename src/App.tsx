@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Switch, Route } from "wouter";
-import { supabase } from "./lib/supabase";
+import { supabase, isSupabaseEnabled } from "./lib/supabase";
 import { ThemeProvider } from "./hooks/use-theme";
 import { LanguageProvider } from "./hooks/use-language";
 import { Layout } from "./components/layout/Layout";
@@ -145,7 +145,7 @@ function BanOverlay({ reason }: { reason: string }) {
   );
 }
 
-// ─── INNER APP — lives inside providers, safe to use theme/language ───────────
+// ─── INNER APP ────────────────────────────────────────────────────────────────
 function AppInner() {
   const [sessionToken] = useState<string>(getOrCreateSessionToken);
   const [alert, setAlert] = useState<AlertState | null>(null);
@@ -153,6 +153,8 @@ function AppInner() {
 
   // ── Register + heartbeat ──────────────────────────────────────────────────
   useEffect(() => {
+    if (!isSupabaseEnabled) return;
+
     const register = async () => {
       try {
         const { data: existing } = await supabase
@@ -192,6 +194,7 @@ function AppInner() {
 
   // ── Ban check on mount ────────────────────────────────────────────────────
   useEffect(() => {
+    if (!isSupabaseEnabled) return;
     (async () => {
       try {
         const { data } = await supabase
@@ -206,6 +209,7 @@ function AppInner() {
 
   // ── Active alert check on mount ───────────────────────────────────────────
   useEffect(() => {
+    if (!isSupabaseEnabled) return;
     (async () => {
       try {
         const { data } = await supabase
@@ -222,6 +226,8 @@ function AppInner() {
 
   // ── Realtime: ban / unban ─────────────────────────────────────────────────
   useEffect(() => {
+    if (!isSupabaseEnabled) return;
+
     const ch = supabase
       .channel(`session:${sessionToken}`)
       .on(
@@ -234,11 +240,14 @@ function AppInner() {
         }
       )
       .subscribe();
+
     return () => { supabase.removeChannel(ch); };
   }, [sessionToken]);
 
   // ── Realtime: global alerts ───────────────────────────────────────────────
   useEffect(() => {
+    if (!isSupabaseEnabled) return;
+
     const ch = supabase
       .channel("global:alerts")
       .on(
@@ -255,6 +264,7 @@ function AppInner() {
         }
       )
       .subscribe();
+
     return () => { supabase.removeChannel(ch); };
   }, []);
 
@@ -262,10 +272,8 @@ function AppInner() {
 
   return (
     <>
-      {/* BAN OVERLAY — rendered first, nothing can paint above it */}
       {ban !== null && <BanOverlay reason={ban.reason} />}
 
-      {/* ALERT BANNER — above all page content, below ban overlay */}
       {!ban && alert !== null && (
         <AlertBanner alert={alert} onDismiss={dismissAlert} />
       )}
@@ -305,7 +313,7 @@ function AppInner() {
   );
 }
 
-// ─── APP ROOT — providers wrap everything ─────────────────────────────────────
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="youssef-ui-theme">
