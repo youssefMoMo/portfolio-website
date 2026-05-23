@@ -18,7 +18,23 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { supabase, isSupabaseEnabled } from "./supabase";
-import { svgPlaceholder } from "./imageFallback";
+
+// FIX: explicit `.ts` extension forces Vite/Rollup to resolve this import as a
+// direct file lookup, bypassing the extension-guessing chain entirely.
+//
+// Without the extension, Vite walks its `resolve.extensions` list in order and
+// stops at the first match. When both imageFallback.js and imageFallback.ts
+// exist in the Git index (the "ghost file" problem), the default order
+// ['.mjs', '.js', ...] picks the .js variant, which does NOT export
+// svgPlaceholder — causing the Vercel build error:
+//   'svgPlaceholder' is not exported by 'src/lib/imageFallback.js'
+//
+// With `moduleResolution: "bundler"` in tsconfig.json, TypeScript fully accepts
+// explicit .ts extensions on local imports. Vite resolves them as a stat() call
+// on the exact path — zero ambiguity, immune to index pollution or resolver
+// ordering changes in any future Vite version.
+import { svgPlaceholder } from "./imageFallback.ts";
+
 import {
   reviewsData,
   pricingPlans,
