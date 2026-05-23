@@ -25,24 +25,24 @@ export function Footer() {
               Youssef<span className="text-primary">.</span>
             </h3>
             <p className="text-muted-foreground text-sm">
-              {t("footer.tagline", { defaultValue: "Crafting digital experiences with passion." })}
+              {t("footer.tagline")}
             </p>
           </div>
 
           {/* Tagline */}
           <div className="flex-1 text-center">
             <p className="text-foreground font-medium mb-2">
-              {t("footer.role", { defaultValue: "Full-Stack Developer & Designer" })}
+              {t("footer.role")}
             </p>
             <p className="text-muted-foreground text-sm">
-              {t("footer.transform", { defaultValue: "Turning ideas into reality, one pixel at a time." })}
+              {t("footer.transform")}
             </p>
           </div>
 
           {/* Socials */}
           <div className={`flex-1 text-center ${isRTL ? "md:text-left" : "md:text-right"}`}>
             <h4 className="font-semibold mb-4">
-              {t("footer.follow", { defaultValue: "Follow Me" })}
+              {t("footer.follow")}
             </h4>
             <div
               className={`flex justify-center gap-4 ${
@@ -80,7 +80,7 @@ export function Footer() {
         <div className="pt-8 border-t border-slate-200 dark:border-white/5 text-center">
           <p className="text-muted-foreground text-sm flex items-center justify-center gap-2 flex-wrap">
             © {currentYear}{" "}
-            {t("footer.rights", { defaultValue: "Youssef. All rights reserved. Made with" })}
+            {t("footer.rights")}
 
             {/* Accessible animated heart */}
             <svg

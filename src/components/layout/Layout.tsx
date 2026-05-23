@@ -48,7 +48,8 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-export default function Layout({ children }: LayoutProps) {
+// Named export so callers using `import { Layout }` continue to work.
+export function Layout({ children }: LayoutProps) {
   const [location]  = useLocation();
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isScrolling = useRef(false);
@@ -154,3 +155,5 @@ export default function Layout({ children }: LayoutProps) {
     </div>
   );
 }
+
+export default Layout;
