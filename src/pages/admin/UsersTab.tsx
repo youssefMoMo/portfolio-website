@@ -450,11 +450,61 @@ export default function UsersTab() {
     }
   }, []);
 
+  // ── Initial load + 15-second fallback poll ──────────────────────────────
   useEffect(() => {
     fetchSessions();
     tickRef.current = setInterval(fetchSessions, 15_000);
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
+    };
+  }, [fetchSessions]);
+
+  // ── Realtime: live INSERT / UPDATE / DELETE on user_sessions ────────────
+  useEffect(() => {
+    const ch = supabase
+      .channel("admin:user_sessions")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "user_sessions" },
+        (payload) => {
+          const row = payload.new as Session;
+          setSessions((prev) => {
+            // Avoid duplicates if the polling already picked it up
+            if (prev.some((s) => s.id === row.id)) return prev;
+            return [row, ...prev];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "user_sessions" },
+        (payload) => {
+          const row = payload.new as Session;
+          setSessions((prev) =>
+            prev.map((s) => (s.id === row.id ? { ...s, ...row } : s))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "user_sessions" },
+        (payload) => {
+          const old = payload.old as { id?: string };
+          if (old?.id) {
+            setSessions((prev) => prev.filter((s) => s.id !== old.id));
+          }
+        }
+      )
+      .subscribe((status) => {
+        // If the channel fails to connect, fall back to faster polling
+        if (status === "CHANNEL_ERROR") {
+          if (tickRef.current) clearInterval(tickRef.current);
+          tickRef.current = setInterval(fetchSessions, 5_000);
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(ch);
     };
   }, [fetchSessions]);
 
