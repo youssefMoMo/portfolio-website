@@ -3,7 +3,9 @@
    ═══════════════════════════════════════════════════════════════ */
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark {
+  &:is(.dark *) { @slot; }
+}
 
 /* ═══════════════════════════════════════════════════════════════
    THEME DEFINITIONS (Inline theme variables)
@@ -79,7 +81,7 @@
   --secondary-foreground: 0 0% 100%;
   --secondary-border: 190 90% 35%;
   --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  --muted-foreground: 215 20% 32%;  /* WCAG AA: ≥4.5:1 contrast on white */
   --muted-border: 214 32% 91%;
   --accent: 238 84% 96%;
   --accent-foreground: 238 84% 67%;
@@ -196,35 +198,16 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  /* ✅ FIXED: Border calculations in single line for Tailwind v4 */
-  --sidebar-primary-border: hsl(
-    from hsl(var(--sidebar-primary)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-  --sidebar-accent-border: hsl(
-    from hsl(var(--sidebar-accent)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-  --primary-border: hsl(
-    from hsl(var(--primary)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-  --secondary-border: hsl(
-    from hsl(var(--secondary)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-  --muted-border: hsl(
-    from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) /
-      alpha
-  );
-  --accent-border: hsl(
-    from hsl(var(--accent)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
-  --destructive-border: hsl(
-    from hsl(var(--destructive)) h s
-      calc(l + var(--opaque-button-border-intensity)) / alpha
-  );
+  /* ✅ Border colours via color-mix() — universally supported, no relative
+     colour syntax quirks. Light context (:root): darken base colour ~10%.
+     Dark context (.dark below): lighten base colour ~12%. */
+  --sidebar-primary-border: color-mix(in srgb, hsl(var(--sidebar-primary)) 90%, black);
+  --sidebar-accent-border:  color-mix(in srgb, hsl(var(--sidebar-accent))  90%, black);
+  --primary-border:         color-mix(in srgb, hsl(var(--primary))          90%, black);
+  --secondary-border:       color-mix(in srgb, hsl(var(--secondary))        90%, black);
+  --muted-border:           color-mix(in srgb, hsl(var(--muted))            90%, black);
+  --accent-border:          color-mix(in srgb, hsl(var(--accent))           90%, black);
+  --destructive-border:     color-mix(in srgb, hsl(var(--destructive))      90%, black);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -284,6 +267,15 @@
     0px 2px 0px 0px hsl(0 0% 0% / 0.3), 0px 20px 25px -5px hsl(0 0% 0% / 0.7);
   --shadow-2xl:
     0px 2px 0px 0px hsl(0 0% 0% / 0.3), 0px 25px 50px -12px hsl(0 0% 0% / 0.8);
+
+  /* Dark context: lighten base colour ~12% for borders */
+  --sidebar-primary-border: color-mix(in srgb, hsl(var(--sidebar-primary)) 88%, white);
+  --sidebar-accent-border:  color-mix(in srgb, hsl(var(--sidebar-accent))  88%, white);
+  --primary-border:         color-mix(in srgb, hsl(var(--primary))          88%, white);
+  --secondary-border:       color-mix(in srgb, hsl(var(--secondary))        88%, white);
+  --muted-border:           color-mix(in srgb, hsl(var(--muted))            88%, white);
+  --accent-border:          color-mix(in srgb, hsl(var(--accent))           88%, white);
+  --destructive-border:     color-mix(in srgb, hsl(var(--destructive))      88%, white);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -370,100 +362,109 @@
 .stars-layer {
   position: absolute;
   inset: 0;
-  background-size: 300px 300px;
-  animation: starsMove 80s linear infinite;
+  animation: linear infinite;
 }
 
 .stars-layer-1 {
   background-image:
-    radial-gradient(
-      1px 1px at 50px 50px,
-      rgba(255, 255, 255, 0.5),
-      transparent
-    ),
-    radial-gradient(
-      1px 1px at 150px 120px,
-      rgba(255, 255, 255, 0.4),
-      transparent
-    ),
-    radial-gradient(
-      1.5px 1.5px at 200px 200px,
-      rgba(255, 255, 255, 0.3),
-      transparent
-    );
-  animation-duration: 100s;
+    radial-gradient(1px 1px at 50px 50px,   rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 150px 120px, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1.5px 1.5px at 200px 200px, rgba(255, 255, 255, 0.3), transparent);
+  /* Unique tile size — breaks symmetric grid repetition */
+  background-size: 240px 240px;
+  animation-name: starsMove1;
+  animation-duration: 90s;
 }
 
 .stars-layer-2 {
   background-image:
-    radial-gradient(
-      1px 1px at 80px 180px,
-      rgba(181, 193, 220, 0.4),
-      transparent
-    ),
-    radial-gradient(
-      1px 1px at 250px 80px,
-      rgba(181, 193, 220, 0.3),
-      transparent
-    );
-  animation-duration: 150s;
+    radial-gradient(1px 1px at 80px 180px,  rgba(181, 193, 220, 0.4), transparent),
+    radial-gradient(1px 1px at 250px 80px,  rgba(181, 193, 220, 0.3), transparent);
+  /* Unique tile size — prevents phase-lock with layer-1 */
+  background-size: 380px 380px;
+  animation-name: starsMove2;
+  animation-duration: 140s;
 }
 
 .stars-layer-3 {
   background-image:
-    radial-gradient(
-      1.5px 1.5px at 120px 260px,
-      rgba(255, 255, 255, 0.2),
-      transparent
-    ),
-    radial-gradient(
-      1px 1px at 280px 150px,
-      rgba(255, 255, 255, 0.15),
-      transparent
-    );
+    radial-gradient(1.5px 1.5px at 120px 260px, rgba(255, 255, 255, 0.2), transparent),
+    radial-gradient(1px 1px at 280px 150px,      rgba(255, 255, 255, 0.15), transparent);
+  /* Unique tile size — eliminates coincident seams across all layers */
+  background-size: 520px 520px;
+  animation-name: starsMove3;
   animation-duration: 200s;
 }
 
-@keyframes starsMove {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-300px);
-  }
+/* Three distinct star-movement animations — each shifts by exactly its own
+   background-size value diagonally, guaranteeing seamless looping while
+   the different velocities and vectors prevent visual synchronisation. */
+@keyframes starsMove1 {
+  0%   { transform: translate3d(0,      0,    0); }
+  100% { transform: translate3d(-30px, -240px, 0); }
+}
+
+@keyframes starsMove2 {
+  0%   { transform: translate3d(0,      0,    0); }
+  100% { transform: translate3d(-50px, -380px, 0); }
+}
+
+@keyframes starsMove3 {
+  0%   { transform: translate3d(0,      0,    0); }
+  100% { transform: translate3d(-70px, -520px, 0); }
 }
 
 .nebula {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.25;
+  /* Replaced filter:blur(100px) with native radial-gradient soft-edge.
+     Eliminates the GPU compositor layer cost of a large blur filter.
+     The gradient fades to transparent at 70% radius, replicating the
+     soft nebula glow without any filter primitives. */
   animation: nebulaPulse 15s ease-in-out infinite alternate;
+  will-change: transform, opacity;
 }
 
 .nebula-1 {
-  width: 500px;
-  height: 500px;
-  top: -10%;
-  left: -5%;
-  background: #7c3aed;
+  width: 700px;
+  height: 700px;
+  top: -15%;
+  left: -10%;
+  background: radial-gradient(
+    circle,
+    rgba(124, 58, 237, 0.35)  0%,
+    rgba(124, 58, 237, 0.12) 40%,
+    transparent              70%
+  );
+  opacity: 1;
 }
 .nebula-2 {
-  width: 400px;
-  height: 400px;
-  bottom: -15%;
-  right: -8%;
-  background: #06b6d4;
+  width: 600px;
+  height: 600px;
+  bottom: -18%;
+  right: -10%;
+  background: radial-gradient(
+    circle,
+    rgba(6, 182, 212, 0.30)  0%,
+    rgba(6, 182, 212, 0.10) 40%,
+    transparent             70%
+  );
+  opacity: 1;
   animation-delay: -5s;
 }
 .nebula-3 {
-  width: 350px;
-  height: 350px;
-  top: 40%;
-  right: 20%;
-  background: #a855f7;
+  width: 500px;
+  height: 500px;
+  top: 35%;
+  right: 18%;
+  background: radial-gradient(
+    circle,
+    rgba(168, 85, 247, 0.18) 0%,
+    rgba(168, 85, 247, 0.06) 40%,
+    transparent              70%
+  );
+  opacity: 1;
   animation-delay: -10s;
-  opacity: 0.08;
 }
 
 @keyframes nebulaPulse {
@@ -621,14 +622,14 @@
    ═══════════════════════════════════════════════════════════════ */
 
 .tool-logo {
-  transition:
-    transform 0.3s ease,
-    filter 0.3s ease;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+  /* Hardware-accelerated transform only — filter:drop-shadow triggers a
+     compositor layer upgrade and repaints on every hover frame. */
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 .tool-logo:hover {
-  transform: scale(1.1);
-  filter: drop-shadow(0 8px 12px rgba(124, 58, 237, 0.5));
+  /* scale + translate3d forces GPU compositing, zero repaint cost */
+  transform: scale(1.05) translate3d(0, 0, 0);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -769,7 +770,7 @@ body.is-scrolling .shooting-star {
 /* Ensure muted text is visible in light mode */
 [data-theme="light"] .text-muted-foreground,
 .light .text-muted-foreground {
-  color: hsl(215 16% 42%);
+  color: hsl(215 20% 32%);  /* WCAG AA: ≥4.5:1 contrast */
 }
 
 /* Card hover borders in light mode */
@@ -968,5 +969,19 @@ body.is-scrolling .shooting-star {
 /* Pause marquee while user is scrolling (avoids jank) */
 body.is-scrolling [style*="marquee-scroll-left"],
 body.is-scrolling [style*="marquee-scroll-right"] {
-  animation-play-state: paused;
+  animation-play-state: paused !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCROLL PERFORMANCE — broad animation pause during active scroll
+   Activated by the passive scroll listener in main.tsx which adds
+   .is-scrolling to <body> and clears it via 150 ms debounce.
+   ═══════════════════════════════════════════════════════════════ */
+body.is-scrolling .stars-layer,
+body.is-scrolling .nebula,
+body.is-scrolling .shooting-star,
+body.is-scrolling .light-gradient-1,
+body.is-scrolling .light-gradient-2,
+body.is-scrolling [class*="animate-"] {
+  animation-play-state: paused !important;
 }

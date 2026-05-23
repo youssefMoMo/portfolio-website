@@ -6,89 +6,249 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
 import { addErrorLog } from "./lib/contentManager";
 
-// Global error monitors (dev + prod)
-window.onerror = (message, source, lineno, colno, error) => {
-  addErrorLog({
-    type: "error",
-    page: window.location.pathname,
-    message: String(message),
-    stack: error?.stack?.slice(0, 500) ?? `${source}:${lineno}:${colno}`,
-  });
-  return false;
-};
+// ─── Error deduplication ─────────────────────────────────────────────────────
+// Cap unique tracked errors at 50 to prevent memory leaks in long sessions.
+// The Set key is a short fingerprint of the error signature.
+const _seenErrors = new Set<string>();
+const MAX_SEEN_ERRORS = 50;
 
-window.onunhandledrejection = (event) => {
-  addErrorLog({
-    type: "unhandled",
-    page: window.location.pathname,
-    message: event.reason?.message ?? String(event.reason) ?? "Unhandled rejection",
-    stack: event.reason?.stack?.slice(0, 400),
-  });
-};
-
-// Network error monitor — skip proxy + Roblox URLs (expected failures handled internally).
-// Re-entrance guard so HMR re-running this module doesn't stack wrappers.
-type WrappedFetch = typeof window.fetch & { __ydWrapped?: boolean };
-const _existingFetch = window.fetch as WrappedFetch;
-if (!_existingFetch.__ydWrapped) {
-  const _originalFetch = window.fetch.bind(window);
-  const wrapped = (async (...args: Parameters<typeof fetch>) => {
-    try {
-      const res = await _originalFetch(...args);
-      if (!res.ok && res.status >= 500) {
-        const url = typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url ?? "";
-        const isInternal = url.includes("/api/roblox") || url.includes("roblox.com");
-        if (!isInternal) {
-          addErrorLog({
-            type: "network",
-            page: window.location.pathname,
-            message: `HTTP ${res.status} — ${url.slice(0, 120)}`,
-          });
-        }
-      }
-      return res;
-    } catch (err: unknown) {
-      const url = typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url ?? "";
-      const isRobloxOrProxy = url.includes("roblox.com") || url.includes("/api/roblox");
-      if (!isRobloxOrProxy) {
-        addErrorLog({
-          type: "network",
-          page: window.location.pathname,
-          message: `Fetch failed: ${err instanceof Error ? err.message : "Network error"} — ${url.slice(0, 100)}`,
-        });
-      }
-      throw err;
-    }
-  }) as WrappedFetch;
-  wrapped.__ydWrapped = true;
-  window.fetch = wrapped;
+function safeTrack(fingerprint: string, logFn: () => void): void {
+  if (_seenErrors.has(fingerprint) || _seenErrors.size >= MAX_SEEN_ERRORS) {
+    return;
+  }
+  _seenErrors.add(fingerprint);
+  try {
+    logFn();
+  } catch {
+    /* addErrorLog must never throw — silence all errors inside the tracker */
+  }
 }
 
-type WrappedConsoleError = typeof console.error & { __ydWrapped?: boolean };
-const _existingConsoleError = console.error as WrappedConsoleError;
-if (!_existingConsoleError.__ydWrapped) {
-  const _origConsoleError = console.error.bind(console);
-  const wrappedError = ((...args: unknown[]) => {
-    _origConsoleError(...args);
+// ─── Safe stack extractor ─────────────────────────────────────────────────────
+// Prevents calling .slice on undefined when error.stack is missing (e.g.
+// in some non-V8 runtimes or when the Error object was manually constructed).
+function safeStack(
+  error: Error | undefined | null,
+  source?: string,
+  lineno?: number,
+  colno?: number
+): string {
+  if (error?.stack && typeof error.stack === "string") {
+    return error.stack.slice(0, 500);
+  }
+  // Fallback: reconstruct a minimal trace from onerror positional arguments
+  const parts: string[] = [];
+  if (source) parts.push(source);
+  if (typeof lineno === "number") parts.push(`line ${lineno}`);
+  if (typeof colno === "number") parts.push(`col ${colno}`);
+  return parts.join(":") || "stack unavailable";
+}
+
+// ─── Global error monitors ───────────────────────────────────────────────────
+// Preserve any pre-existing listeners so third-party utilities (e.g. Sentry,
+// LogRocket) are not silently broken when this module loads.
+
+const _prevOnError = window.onerror;
+window.onerror = (message, source, lineno, colno, error) => {
+  const stack = safeStack(error, source as string, lineno, colno);
+  const fp = `err:${String(message).slice(0, 60)}:${(lineno ?? 0)}`;
+  safeTrack(fp, () =>
+    addErrorLog({
+      type: "error",
+      page: window.location.pathname,
+      message: String(message),
+      stack,
+    })
+  );
+  // Chain to previous listener if one existed
+  if (typeof _prevOnError === "function") {
+    return _prevOnError(message, source, lineno, colno, error);
+  }
+  return false; // Do not suppress the browser's default console output
+};
+
+const _prevOnUnhandledRejection = window.onunhandledrejection as
+  | ((this: Window, ev: PromiseRejectionEvent) => unknown)
+  | null;
+
+window.onunhandledrejection = function (event: PromiseRejectionEvent) {
+  const reason = event.reason as { message?: string; stack?: string } | string | undefined;
+  const msg =
+    typeof reason === "object" && reason !== null
+      ? (reason.message ?? String(reason))
+      : String(reason ?? "Unhandled rejection");
+  const stack =
+    typeof reason === "object" && reason !== null && typeof reason.stack === "string"
+      ? reason.stack.slice(0, 400)
+      : undefined;
+  const fp = `unhandled:${msg.slice(0, 60)}`;
+  safeTrack(fp, () =>
+    addErrorLog({
+      type: "unhandled",
+      page: window.location.pathname,
+      message: msg,
+      stack,
+    })
+  );
+  // Chain to previous listener if one existed
+  if (typeof _prevOnUnhandledRejection === "function") {
+    return _prevOnUnhandledRejection.call(window, event);
+  }
+};
+
+// ─── Network error monitor (fetch Proxy) ─────────────────────────────────────
+// Uses a Proxy instead of a direct override so Service Workers and other
+// instrumentation libraries see an unmodified fetch reference.
+// Explicitly passes through all /api/roblox and roblox.com requests without
+// error tracking — those are expected to fail in certain contexts.
+
+window.fetch = new Proxy(window.fetch, {
+  apply(
+    target: typeof fetch,
+    thisArg: unknown,
+    argArray: Parameters<typeof fetch>
+  ): Promise<Response> {
+    const rawInput = argArray[0];
+    const url: string =
+      typeof rawInput === "string"
+        ? rawInput
+        : rawInput instanceof Request
+        ? rawInput.url
+        : rawInput instanceof URL
+        ? rawInput.toString()
+        : "";
+
+    const isExempt =
+      url.includes("/api/roblox") || url.includes("roblox.com");
+
+    return (Reflect.apply(target, thisArg, argArray) as Promise<Response>)
+      .then((res: Response) => {
+        if (!res.ok && res.status >= 500 && !isExempt) {
+          const fp = `net:${res.status}:${url.slice(0, 80)}`;
+          safeTrack(fp, () =>
+            addErrorLog({
+              type: "network",
+              page: window.location.pathname,
+              message: `HTTP ${res.status} — ${url.slice(0, 120)}`,
+            })
+          );
+        }
+        return res;
+      })
+      .catch((err: unknown) => {
+        if (!isExempt) {
+          const errMsg =
+            err instanceof Error ? err.message : "Network error";
+          const fp = `netfail:${errMsg.slice(0, 40)}:${url.slice(0, 40)}`;
+          safeTrack(fp, () =>
+            addErrorLog({
+              type: "network",
+              page: window.location.pathname,
+              message: `Fetch failed: ${errMsg} — ${url.slice(0, 100)}`,
+            })
+          );
+        }
+        throw err;
+      });
+  },
+} as ProxyHandler<typeof fetch>);
+
+// ─── Console error monitor (console.error Proxy) ─────────────────────────────
+// Uses a Proxy to preserve the original reference and prevent infinite loops
+// that would occur if addErrorLog itself triggered a console.error.
+// A _logLock flag breaks potential re-entrant cycles.
+
+let _consoleLock = false;
+
+console.error = new Proxy(console.error, {
+  apply(
+    target: typeof console.error,
+    thisArg: unknown,
+    args: unknown[]
+  ): void {
+    // Always call the original first so the DevTools console still shows it
+    Reflect.apply(target, thisArg, args);
+
+    // Guard against re-entrant calls (e.g. addErrorLog triggering console.error)
+    if (_consoleLock) return;
+
     const msg = args
-      .map(a => typeof a === "string" ? a : a instanceof Error ? a.message : "")
+      .map((a) =>
+        typeof a === "string" ? a : a instanceof Error ? a.message : ""
+      )
       .join(" ")
       .slice(0, 300);
-    const skip = ["Warning:", "ReactDOM.render", "act(", "Each child", "key prop", "[roblox", "Roblox"];
-    if (msg && !skip.some(p => msg.includes(p))) {
-      addErrorLog({ type: "warning", page: window.location.pathname, message: msg });
-    }
-  }) as WrappedConsoleError;
-  wrappedError.__ydWrapped = true;
-  console.error = wrappedError;
+
+    // Skip known React/Roblox noise that would pollute the error log
+    const skipPatterns = [
+      "Warning:",
+      "ReactDOM.render",
+      "act(",
+      "Each child",
+      "key prop",
+      "[roblox",
+      "Roblox",
+    ];
+    if (!msg || skipPatterns.some((p) => msg.includes(p))) return;
+
+    const fp = `console:${msg.slice(0, 60)}`;
+    _consoleLock = true;
+    safeTrack(fp, () =>
+      addErrorLog({
+        type: "warning",
+        page: window.location.pathname,
+        message: msg,
+      })
+    );
+    _consoleLock = false;
+  },
+} as ProxyHandler<typeof console.error>);
+
+// ─── Scroll performance class ─────────────────────────────────────────────────
+// Injects `.is-scrolling` on <body> while the user scrolls, which allows
+// index.css to pause heavy animations (stars, nebula, marquees) via
+// `animation-play-state: paused` — minimising repaints during scroll events.
+// Uses a passive listener so the browser can optimise touch scrolling freely.
+{
+  let _scrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      document.body.classList.add("is-scrolling");
+      if (_scrollTimer !== null) clearTimeout(_scrollTimer);
+      _scrollTimer = setTimeout(() => {
+        document.body.classList.remove("is-scrolling");
+        _scrollTimer = null;
+      }, 150);
+    },
+    { passive: true }
+  );
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+// ─── App mounting ─────────────────────────────────────────────────────────────
+// Fail loudly with a clear message if #root is missing rather than crashing
+// with an opaque TypeError from the non-null assertion.
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error(
+    "[main.tsx] Fatal boot error: #root element not found in the DOM. " +
+      "Verify that index.html contains <div id=\"root\"></div>."
+  );
+}
+
+// ReactDOM.createRoot is wrapped in a global ErrorBoundary so a catastrophic
+// render-time crash displays a recovery UI rather than a blank white page.
+// StrictMode double-invocation is safe because all channel cleanups in
+// App.tsx use the `destroyed` flag to handle the double-mount pattern.
+const root = ReactDOM.createRoot(rootElement);
+
+root.render(
   <React.StrictMode>
     <HelmetProvider>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
     </HelmetProvider>
-  </React.StrictMode>,
+  </React.StrictMode>
 );

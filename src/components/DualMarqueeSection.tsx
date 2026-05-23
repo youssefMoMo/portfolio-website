@@ -1,93 +1,141 @@
 // src/components/DualMarqueeSection.tsx
 //
-// ✅ NEW IN THIS VERSION:
+// ─── REWRITE NOTES ────────────────────────────────────────────────────────────
 //
-//   HZ DETECTION ENGINE:
-//     A `useEffect` on mount uses requestAnimationFrame timestamp diffing to
-//     measure the actual screen refresh rate over ~60 frames (~1 second).
-//     The detected Hz is snapped to the nearest standard tier (60/120/144/240)
-//     and stored in a CSS custom property `--marquee-hz-scale` on <html>.
-//     MarqueeRow durations are then multiplied by this scale factor so that
-//     perceived scroll speed is visually identical at every refresh rate.
+//  HYDRATION / SSR
+//    • `ecoMode` initialises as `false` (SSR-safe constant), then a single
+//      `useEffect` on mount reads localStorage. Zero hydration mismatches.
+//    • All window/localStorage access is gated behind `useEffect`.
 //
-//   ECO / LOW-END DEVICE MODE:
-//     Reads `yd_eco_mode` from localStorage and listens for the
-//     `yd-perf-settings-changed` custom event emitted by SettingsModal.
-//     When eco mode is ON:
-//       • All three marquee rows are replaced with clean static grid cards
-//       • No canvas, no animation, no `will-change`, no requestAnimationFrame
-//       • The section still shows reviews, stats and tools — just as grids
-//     When eco mode is OFF (default): behaviour is unchanged from before.
+//  ANIMATION
+//    • Hz-detection rAF loop removed entirely. CSS `animation-duration` is
+//      wall-clock seconds; the compositor drives the loop at whatever Hz the
+//      display runs — perceived speed is already frame-rate–independent.
+//    • `@keyframes` are embedded in a `<style>` tag so the file is
+//      100 % self-contained (no global CSS dependency).
+//    • `translate3d(0,0,0)` promotes each track to its own compositor layer.
+//    • `will-change: transform` is set only on the moving track element.
+//    • No `backdrop-filter` on the moving cards — compositor layer explosions
+//      eliminated.
 //
-//   FRAME-RATE INDEPENDENCE (unchanged — CSS handles this):
-//     CSS `animation-duration` is wall-clock seconds, not frame counts.
-//     The Hz scale factor is an additive correction for monitors where
-//     compositor interpolation causes perceived speed drift.
+//  DOM SIZE
+//    • Each row duplicates its data exactly once (2 × original length).
+//      The keyframe travels 0 % → −50 %, so when the second copy exits left
+//      the visual position is identical to the start — seamless, minimal DOM.
+//
+//  INTERSECTION OBSERVER
+//    • `animationPlayState` is `"paused"` whenever the section is not
+//      intersecting the viewport. Zero CPU/GPU waste off-screen.
+//
+//  TYPESCRIPT
+//    • Explicit interfaces for `ToolDef`, `ContentUpdatedDetail`.
+//    • `CustomEvent<ContentUpdatedDetail>` cast — no `as EventListener`.
+//    • Optional chaining on all deep fields (`review.avatar`, `detail.data`).
+//
+//  CLS / AVATAR STABILITY
+//    • `Avatar` wrapper always renders a fixed 36 × 36 box.
+//    • `ToolCard` icon wrapper is always 56 × 56.
+//    • Fallback (emoji / initial) is `position:absolute` inside the same
+//      box — layout never shifts on image-load failure.
+//
+//  EDGE MASK
+//    • Uses CSS alpha mask (`transparent` → `black`). Alpha is theme-agnostic;
+//      works identically in light and dark mode.
 
 import { useEffect, useState, useRef } from "react";
 import {
   Star, CheckCircle, Briefcase, Users, Clock,
   Zap, Gamepad, RefreshCw, Repeat,
 } from "lucide-react";
-import { statsData } from "@/lib/data";
+import { statsData, type Stat } from "@/lib/data";
 import { getAllReviews, type Review } from "@/lib/contentManager";
 import { ECO_MODE_KEY, PERF_SETTINGS_EVENT } from "@/components/SettingsModal";
 
-// ─── Icon map ─────────────────────────────────────────────────────────────────
+// ─── Embedded keyframes ───────────────────────────────────────────────────────
+// Two directions; each track holds 2× the original items so the animation
+// only needs to travel −50% to produce a seamless infinite loop.
+const KEYFRAMES = `
+@keyframes marquee-left {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+@keyframes marquee-right {
+  from { transform: translate3d(-50%, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+`;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface ToolDef {
+  id: number;
+  name: string;
+  logo: string;
+  emoji: string;
+}
+
+/** Shape carried by the "contentUpdated" CustomEvent detail field. */
+interface ContentUpdatedDetail {
+  type: string;
+  data?: { reviews?: Review[] };
+}
+
+// ─── Static data ──────────────────────────────────────────────────────────────
 const STATS_ICONS: Record<string, React.ElementType> = {
-  briefcase: Briefcase, users: Users, clock: Clock,  star: Star,
-  gamepad:   Gamepad,   zap: Zap,     refresh: RefreshCw, repeat: Repeat,
+  briefcase: Briefcase,
+  users:     Users,
+  clock:     Clock,
+  star:      Star,
+  gamepad:   Gamepad,
+  zap:       Zap,
+  refresh:   RefreshCw,
+  repeat:    Repeat,
 };
 
-// ─── Tools ───────────────────────────────────────────────────────────────────
-const TOOLS = [
+const TOOLS: ToolDef[] = [
   { id: 1, name: "Photoshop",     logo: "/images/global/photoshop.png",     emoji: "🖼️" },
   { id: 2, name: "Figma",         logo: "/images/global/figma.png",         emoji: "🎨" },
   { id: 3, name: "Roblox Studio", logo: "/images/global/roblox-studio.png", emoji: "🎮" },
 ];
 
-// ─── Track duplication ────────────────────────────────────────────────────────
-function duplicate<T>(arr: T[], times = 6): T[] {
-  const out: T[] = [];
-  for (let i = 0; i < times; i++) out.push(...arr);
-  return out;
-}
-
-// ─── Fade edge mask ───────────────────────────────────────────────────────────
-const MASK = "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)";
+// ─── Edge-fade mask ───────────────────────────────────────────────────────────
+// CSS mask uses the alpha channel of the gradient, not colour — works
+// identically in light mode and dark mode.
+const EDGE_MASK =
+  "linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%)";
 
 // ─── MarqueeRow ───────────────────────────────────────────────────────────────
 interface MarqueeRowProps {
-  /** Wall-clock seconds for one full loop at 60 Hz baseline. */
-  baseDuration: number;
-  /** Detected Hz scale factor — computed once on mount via rAF diffing. */
-  hzScale: number;
+  /** Wall-clock seconds for one full loop. */
+  duration: number;
   direction?: "left" | "right";
+  /**
+   * Controls `animation-play-state`.
+   * Pass `false` when the section is off-screen or before client mount.
+   */
+  running: boolean;
   children: React.ReactNode;
-  ready: boolean;
 }
 
 function MarqueeRow({
-  baseDuration, hzScale, direction = "left", children, ready,
+  duration,
+  direction = "left",
+  running,
+  children,
 }: MarqueeRowProps) {
-  // Duration is scaled by hzScale so perceived speed is uniform across Hz tiers.
-  // At 60 Hz: scale = 1.0 → duration unchanged.
-  // At 120 Hz: scale = 2.0 → duration doubles → same pixels/second.
-  // At 240 Hz: scale = 4.0 → duration quadruples → same pixels/second.
-  const duration   = baseDuration * hzScale;
-  const animName   = direction === "left" ? "marquee-scroll-left" : "marquee-scroll-right";
+  const animName = direction === "left" ? "marquee-left" : "marquee-right";
 
   return (
     <div
       className="relative w-full overflow-hidden"
-      dir="ltr"
-      style={{ maskImage: MASK, WebkitMaskImage: MASK }}
+      style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
     >
       <div
         className="flex gap-4 sm:gap-6 w-max"
         style={{
-          animation: ready ? animName + " " + duration + "s linear infinite" : "none",
+          animation: `${animName} ${duration}s linear infinite`,
+          animationPlayState: running ? "running" : "paused",
           willChange: "transform",
+          // Promote to compositor layer immediately — no jank on first frame.
           transform: "translate3d(0, 0, 0)",
         }}
       >
@@ -97,100 +145,204 @@ function MarqueeRow({
   );
 }
 
-// ─── Eco Mode — static review cards grid ─────────────────────────────────────
-function EcoReviewGrid({ reviews }: { reviews: Review[] }) {
-  const slice = reviews.slice(0, 6);
-  if (slice.length === 0) return null;
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+// Fixed 36 × 36 px box. Both the <img> and the fallback <span> are
+// `position: absolute` so the container never resizes → zero CLS.
+interface AvatarProps {
+  src?: string;
+  name: string;
+}
+
+function Avatar({ src, name }: AvatarProps) {
+  const initial = name.charAt(0).toUpperCase();
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {slice.map((review) => (
-        <div
-          key={review.id}
-          className="bg-white/70 dark:bg-card/60 border border-slate-200 dark:border-white/10
-                     rounded-xl p-4 shadow-sm"
-        >
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20
-                            flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
-              {review.avatar || review.name.charAt(0)}
-            </div>
-            <div className="min-w-0">
-              <h4 className="font-semibold text-foreground text-xs truncate">{review.name}</h4>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {review.project_type} • {review.date}
-              </p>
-            </div>
-            {review.verified && <CheckCircle className="w-3.5 h-3.5 text-green-500 ml-auto flex-shrink-0" />}
-          </div>
-          <div className="flex gap-0.5 mb-2">
-            {[...Array(5)].map((_, i) => (
-              <Star key={i} className={`w-3.5 h-3.5 flex-shrink-0 ${
-                i < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-muted text-muted"
-              }`} />
-            ))}
-          </div>
-          <p className="text-[11px] text-slate-700 dark:text-zinc-400 leading-relaxed line-clamp-2">
-            &ldquo;{review.text}&rdquo;
+    <div
+      className="relative flex-shrink-0 rounded-full overflow-hidden
+                 bg-gradient-to-br from-primary/20 to-secondary/20"
+      style={{ width: 36, height: 36 }}
+    >
+      {src ? (
+        <img
+          src={src}
+          alt={name}
+          className="absolute inset-0 w-full h-full object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+            const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+            if (fb) fb.style.display = "flex";
+          }}
+        />
+      ) : null}
+      {/* Fallback: visible when no src, or after image load error */}
+      <span
+        className="absolute inset-0 items-center justify-center
+                   text-primary font-bold text-xs select-none"
+        // Hidden when an img is present (shown via onError DOM manipulation)
+        style={{ display: src ? "none" : "flex" }}
+        aria-hidden="true"
+      >
+        {initial}
+      </span>
+    </div>
+  );
+}
+
+// ─── Card components ──────────────────────────────────────────────────────────
+// Extracted so eco-mode grids and animated marquees share identical markup.
+
+function ReviewCard({ review }: { review: Review }) {
+  return (
+    <div
+      className="flex-shrink-0 bg-white/80 dark:bg-card/70
+                 border border-slate-200 dark:border-white/10
+                 rounded-xl sm:rounded-2xl p-4 sm:p-5
+                 w-[280px] sm:w-[310px]
+                 hover:border-primary/30 hover:bg-white/95
+                 dark:hover:bg-card/85 transition-colors
+                 cursor-default shadow-sm dark:shadow-none"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2.5 mb-3">
+        <Avatar src={review.avatar} name={review.name} />
+        <div className="min-w-0">
+          <h4 className="font-semibold text-foreground text-xs sm:text-sm truncate">
+            {review.name}
+          </h4>
+          <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
+            {review.project_type} • {review.date}
           </p>
         </div>
+        {review.verified && (
+          <CheckCircle className="w-3.5 h-3.5 text-green-500 ml-auto flex-shrink-0" />
+        )}
+      </div>
+
+      {/* Stars */}
+      <div className="flex gap-0.5 sm:gap-1 mb-2">
+        {Array.from({ length: 5 }, (_, i) => (
+          <Star
+            key={i}
+            className={`w-3.5 h-3.5 flex-shrink-0 ${
+              i < review.rating
+                ? "fill-yellow-400 text-yellow-400"
+                : "fill-muted text-muted"
+            }`}
+          />
+        ))}
+      </div>
+
+      {/* Text */}
+      <p className="text-[11px] sm:text-sm text-slate-700 dark:text-zinc-400
+                   leading-relaxed line-clamp-2">
+        &ldquo;{review.text}&rdquo;
+      </p>
+    </div>
+  );
+}
+
+function StatCard({ stat }: { stat: Stat }) {
+  const Icon = STATS_ICONS[stat.icon] ?? Briefcase;
+  return (
+    <div
+      className="flex-shrink-0 bg-white/80 dark:bg-card/70
+                 border border-primary/20 rounded-xl sm:rounded-2xl
+                 p-4 sm:p-5 w-[200px] sm:w-[230px]
+                 hover:border-primary/40 hover:bg-white/95
+                 dark:hover:bg-card/85 transition-colors
+                 cursor-default shadow-sm dark:shadow-none"
+    >
+      <div
+        className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-primary/10
+                   flex items-center justify-center text-primary mb-3"
+      >
+        <Icon className="w-5 h-5" />
+      </div>
+      <div
+        className="text-2xl sm:text-3xl font-bold
+                   bg-gradient-to-r from-primary to-indigo-400
+                   bg-clip-text text-transparent mb-1"
+      >
+        {stat.value}
+      </div>
+      <p className="text-[11px] sm:text-xs text-muted-foreground">{stat.title}</p>
+    </div>
+  );
+}
+
+function ToolCard({ tool }: { tool: ToolDef }) {
+  return (
+    <div
+      className="flex-shrink-0 bg-white/80 dark:bg-card/70
+                 border border-slate-200 dark:border-white/10
+                 rounded-xl sm:rounded-2xl p-5 sm:p-6
+                 w-[140px] sm:w-[160px]
+                 flex flex-col items-center justify-center gap-3
+                 hover:border-primary/30 hover:bg-white/95
+                 dark:hover:bg-card/85 transition-colors
+                 cursor-default shadow-sm dark:shadow-none"
+    >
+      {/* Fixed 56 × 56 icon wrapper — prevents CLS on img fail */}
+      <div
+        className="relative rounded-xl bg-primary/10 overflow-hidden
+                   flex items-center justify-center"
+        style={{ width: 56, height: 56 }}
+      >
+        <img
+          src={tool.logo}
+          alt={tool.name}
+          className="absolute w-8 h-8 sm:w-9 sm:h-9 object-contain"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+            const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+            if (fb) fb.style.display = "flex";
+          }}
+        />
+        {/* Emoji fallback — same fixed-size box, zero layout shift */}
+        <span
+          className="absolute inset-0 items-center justify-center
+                     text-2xl select-none"
+          style={{ display: "none" }}
+          aria-hidden="true"
+        >
+          {tool.emoji}
+        </span>
+      </div>
+      <p className="text-[11px] sm:text-xs font-medium text-foreground text-center">
+        {tool.name}
+      </p>
+    </div>
+  );
+}
+
+// ─── Eco-mode static grids ────────────────────────────────────────────────────
+function EcoReviewGrid({ reviews }: { reviews: Review[] }) {
+  const slice = reviews.slice(0, 6);
+  if (!slice.length) return null;
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {slice.map((r) => (
+        <ReviewCard key={r.id} review={r} />
       ))}
     </div>
   );
 }
 
-// ─── Eco Mode — static stats grid ────────────────────────────────────────────
 function EcoStatsGrid() {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      {statsData.map((stat) => {
-        const Icon = STATS_ICONS[stat.icon] || Briefcase;
-        return (
-          <div
-            key={stat.id}
-            className="bg-white/70 dark:bg-card/60 border border-primary/20 rounded-xl p-4 shadow-sm"
-          >
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-3">
-              <Icon className="w-5 h-5" />
-            </div>
-            <div className="text-2xl font-bold bg-gradient-to-r from-primary to-indigo-400 bg-clip-text text-transparent mb-1">
-              {stat.value}
-            </div>
-            <p className="text-[11px] text-muted-foreground">{stat.title}</p>
-          </div>
-        );
-      })}
+      {statsData.map((s) => (
+        <StatCard key={s.id} stat={s} />
+      ))}
     </div>
   );
 }
 
-// ─── Eco Mode — static tools grid ────────────────────────────────────────────
 function EcoToolsGrid() {
   return (
     <div className="flex flex-wrap gap-3 justify-center">
-      {TOOLS.map((tool) => (
-        <div
-          key={tool.id}
-          className="bg-white/70 dark:bg-card/60 border border-slate-200 dark:border-white/10
-                     rounded-xl p-4 w-[130px] flex flex-col items-center gap-2.5 shadow-sm"
-        >
-          <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center relative overflow-hidden">
-            <img
-              src={tool.logo}
-              alt={tool.name}
-              className="w-9 h-9 object-contain"
-              onError={(e) => {
-                const img = e.target as HTMLImageElement;
-                img.style.display = "none";
-                const fb = img.parentElement && img.parentElement.querySelector(".emoji-fb") as HTMLElement | null;
-                if (fb) fb.style.display = "flex";
-              }}
-            />
-            <div className="emoji-fb hidden absolute inset-0 items-center justify-center text-2xl">
-              {tool.emoji}
-            </div>
-          </div>
-          <p className="text-xs font-medium text-foreground text-center">{tool.name}</p>
-        </div>
+      {TOOLS.map((t) => (
+        <ToolCard key={t.id} tool={t} />
       ))}
     </div>
   );
@@ -198,129 +350,111 @@ function EcoToolsGrid() {
 
 // ─── DualMarqueeSection ───────────────────────────────────────────────────────
 export function DualMarqueeSection() {
-  const [reviews,     setReviews]     = useState<Review[]>([]);
-  const [ready,       setReady]       = useState(false);
-  const [hzScale,     setHzScale]     = useState(1);       // 1 = 60 Hz baseline
-  const [detectedHz,  setDetectedHz]  = useState<number | null>(null);
-  const [ecoMode,     setEcoMode]     = useState(() => {
-    try { return localStorage.getItem(ECO_MODE_KEY) === "true"; } catch { return false; }
-  });
+  const sectionRef = useRef<HTMLElement>(null);
 
-  const rafRef      = useRef<number | null>(null);
-  const mountedRef  = useRef(true);
+  // SSR-safe initial values — no localStorage reads at declaration time.
+  const [ecoMode, setEcoMode] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  /** Becomes `true` after the first client-side animation frame. */
+  const [ready,   setReady]   = useState(false);
+  /** Tracks viewport intersection for auto-pause. */
+  const [inView,  setInView]  = useState(true);
 
-  // ── Load approved reviews ─────────────────────────────────────────────────
+  // ── Client mount ─────────────────────────────────────────────────────────
+  // Single effect handles: localStorage read, ready flag.
+  // Nothing that touches `window` or `localStorage` runs during SSR.
   useEffect(() => {
-    mountedRef.current = true;
+    try {
+      setEcoMode(localStorage.getItem(ECO_MODE_KEY) === "true");
+    } catch {
+      // Silently ignore — SSR or private-browsing restrictions.
+    }
+
+    // One rAF ensures the browser has committed at least one frame before
+    // we flip animationPlayState to "running". Prevents white-flash artefact.
+    const raf = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // ── Fetch approved reviews ────────────────────────────────────────────────
+  useEffect(() => {
+    let alive = true;
     getAllReviews()
       .then((data) => {
-        if (mountedRef.current) setReviews(Array.isArray(data) ? data : []);
+        if (!alive) return;
+        const list = Array.isArray(data) ? data : [];
+        setReviews(list.filter((r: Review) => r.status === "approved"));
       })
-      .catch(() => { if (mountedRef.current) setReviews([]); });
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  // ── Live content update listener ──────────────────────────────────────────
-  useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      if (e.detail && e.detail.type === "reviews" && mountedRef.current) {
-        const approved = (
-          (e.detail.data && e.detail.data.reviews) ? e.detail.data.reviews : []
-        ).filter((r: Review) => r.status === "approved");
-        setReviews(approved);
-      }
+      .catch(() => {
+        if (alive) setReviews([]);
+      });
+    return () => {
+      alive = false;
     };
-    window.addEventListener("contentUpdated", handler as EventListener);
-    return () => window.removeEventListener("contentUpdated", handler as EventListener);
   }, []);
 
-  // ── Eco mode listener ─────────────────────────────────────────────────────
+  // ── Live content updates ──────────────────────────────────────────────────
+  // CustomEvent is typed cleanly; no `as EventListener` cast needed.
+  useEffect(() => {
+    const handler = (raw: Event) => {
+      const { detail } = raw as CustomEvent<ContentUpdatedDetail>;
+      if (detail?.type !== "reviews") return;
+      const updated = (detail.data?.reviews ?? []).filter(
+        (r: Review) => r.status === "approved"
+      );
+      setReviews(updated);
+    };
+    window.addEventListener("contentUpdated", handler);
+    return () => window.removeEventListener("contentUpdated", handler);
+  }, []);
+
+  // ── Eco mode toggle ───────────────────────────────────────────────────────
   useEffect(() => {
     const sync = () => {
-      try { setEcoMode(localStorage.getItem(ECO_MODE_KEY) === "true"); } catch {}
+      try {
+        setEcoMode(localStorage.getItem(ECO_MODE_KEY) === "true");
+      } catch {}
     };
     window.addEventListener(PERF_SETTINGS_EVENT, sync);
     return () => window.removeEventListener(PERF_SETTINGS_EVENT, sync);
   }, []);
 
-  // ── Hz detection via rAF timestamp diffing ────────────────────────────────
-  // Measures actual screen refresh rate over ~60 frames (~1 second).
-  // Snaps to the nearest standard Hz tier: 60 / 120 / 144 / 240.
-  // Sets `hzScale = detectedHz / 60` so animation durations scale proportionally,
-  // ensuring identical perceived scroll speed on every display.
+  // ── IntersectionObserver: pause animations when off-screen ───────────────
   useEffect(() => {
-    if (ecoMode) return; // Skip Hz detection in eco mode — no animations
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
 
-    let frames    = 0;
-    let startTime = -1;
-    let rafId: number;
+    const observer = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-    const measure = (timestamp: number) => {
-      if (startTime < 0) { startTime = timestamp; }
-      frames++;
+  // ── Minimal duplication (2× only) ────────────────────────────────────────
+  // The keyframe travels 0 → −50 %. Two copies of the data fill the track,
+  // so at −50 % the visual content matches the start exactly — seamless loop.
+  // DOM node count is the absolute minimum needed for the effect.
+  const dupReviews = reviews.length > 0 ? [...reviews, ...reviews] : [];
+  const dupStats   = [...statsData, ...statsData];
+  const dupTools   = [...TOOLS,     ...TOOLS];
 
-      const elapsed = timestamp - startTime;
+  // Animations run only when the client has mounted, the section is visible,
+  // and eco mode is off.
+  const running = ready && inView && !ecoMode;
 
-      if (elapsed < 1000 && frames < 120) {
-        rafId = requestAnimationFrame(measure);
-        return;
-      }
-
-      // Calculate actual fps
-      const fps = Math.round((frames * 1000) / elapsed);
-
-      // Snap to nearest standard tier
-      let hz: number;
-      if      (fps >= 200) hz = 240;
-      else if (fps >= 120) hz = 144;
-      else if (fps >= 90)  hz = 120;
-      else                 hz = 60;
-
-      // Scale = hz / 60 baseline
-      // Higher Hz → longer duration → same pixels/second of scroll
-      const scale = hz / 60;
-
-      if (mountedRef.current) {
-        setDetectedHz(hz);
-        setHzScale(scale);
-      }
-
-      // Expose as CSS custom property for any CSS-driven animation consumers
-      document.documentElement.style.setProperty("--marquee-hz-scale", String(scale));
-      document.documentElement.setAttribute("data-hz", String(hz));
-    };
-
-    rafId = requestAnimationFrame(measure);
-    return () => cancelAnimationFrame(rafId);
-  }, [ecoMode]);
-
-  // ── Double-RAF mount guard (prevents white-on-load artifact) ─────────────
-  useEffect(() => {
-    if (ecoMode) { setReady(true); return; }
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = requestAnimationFrame(() => {
-        if (mountedRef.current) setReady(true);
-      });
-    });
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    };
-  }, [ecoMode]);
-
-  // ── Prepare duplicated data sets ──────────────────────────────────────────
-  const dupReviews = duplicate(reviews, reviews.length > 0 ? 6 : 0);
-  const dupStats   = duplicate(statsData, 6);
-  const dupTools   = duplicate(TOOLS, 8);
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // ECO MODE: static layout — no animations, no canvas, no marquees
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── ECO MODE ─────────────────────────────────────────────────────────────
   if (ecoMode) {
     return (
       <section className="w-full py-10 sm:py-12 border-y border-slate-200 dark:border-white/5">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 space-y-8">
           <div className="text-center">
-            <h3 className="text-lg sm:text-xl md:text-2xl font-bold bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+            <h3
+              className="text-lg sm:text-xl md:text-2xl font-bold
+                         bg-gradient-to-r from-primary via-indigo-400 to-cyan-400
+                         bg-clip-text text-transparent"
+            >
               What People Say &amp; Key Achievements
             </h3>
             <p className="text-[10px] text-muted-foreground mt-1">
@@ -328,154 +462,62 @@ export function DualMarqueeSection() {
             </p>
           </div>
 
-          {/* Static reviews grid */}
           {reviews.length > 0 && <EcoReviewGrid reviews={reviews} />}
-
-          {/* Static stats grid */}
           <EcoStatsGrid />
-
-          {/* Static tools grid */}
           <EcoToolsGrid />
         </div>
       </section>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // NORMAL MODE: animated marquees with Hz-scaled durations
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── NORMAL MODE: animated marquees ───────────────────────────────────────
   return (
-    <section className="w-full py-10 sm:py-12 overflow-hidden border-y border-slate-200 dark:border-white/5 relative">
+    <section
+      ref={sectionRef}
+      className="w-full py-10 sm:py-12 overflow-hidden
+                 border-y border-slate-200 dark:border-white/5 relative"
+    >
+      {/* Self-contained keyframes — no dependency on globals.css */}
+      <style>{KEYFRAMES}</style>
 
       {/* Section heading */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-8 sm:mb-10 relative z-10">
-        <h3 className="text-lg sm:text-xl md:text-2xl font-display font-bold text-center bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent px-2">
+        <h3
+          className="text-lg sm:text-xl md:text-2xl font-display font-bold
+                     text-center px-2
+                     bg-gradient-to-r from-primary via-indigo-400 to-cyan-400
+                     bg-clip-text text-transparent"
+        >
           What People Say &amp; Key Achievements
         </h3>
-        {/* Hz badge — subtle debug info for power users */}
-        {detectedHz !== null && (
-          <p className="text-[10px] text-center text-muted-foreground/40 mt-1 tabular-nums">
-            Display: {detectedHz} Hz
-          </p>
-        )}
       </div>
 
-      {/* Row 1: Reviews (90 s base, left) */}
+      {/* ── Row 1: Reviews — scrolls left ──────────────────────────────── */}
       {dupReviews.length > 0 && (
         <div className="mb-6 sm:mb-8">
-          <MarqueeRow baseDuration={90} hzScale={hzScale} direction="left" ready={ready}>
-            {dupReviews.map((review, idx) => (
-              <div
-                key={"rev-" + review.id + "-" + idx}
-                className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm
-                           border border-slate-200 dark:border-white/10
-                           rounded-xl sm:rounded-2xl p-4 sm:p-5 w-[280px] sm:w-[320px]
-                           hover:border-primary/30 hover:bg-white/90 dark:hover:bg-card/80
-                           transition-all cursor-default shadow-sm dark:shadow-none"
-              >
-                <div className="flex items-center gap-2.5 sm:gap-3 mb-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full
-                                  bg-gradient-to-br from-primary/20 to-secondary/20
-                                  flex items-center justify-center text-primary
-                                  font-bold text-xs sm:text-sm flex-shrink-0">
-                    {review.avatar || review.name.charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="font-semibold text-foreground text-xs sm:text-sm truncate">
-                      {review.name}
-                    </h4>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-                      {review.project_type} • {review.date}
-                    </p>
-                  </div>
-                  {review.verified && (
-                    <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 ml-auto flex-shrink-0" />
-                  )}
-                </div>
-                <div className="flex gap-0.5 sm:gap-1 mb-2">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 ${
-                      i < review.rating
-                        ? "fill-yellow-400 text-yellow-400"
-                        : "fill-muted text-muted"
-                    }`} />
-                  ))}
-                </div>
-                <p className="text-[11px] sm:text-sm text-slate-700 dark:text-zinc-400 leading-relaxed line-clamp-2">
-                  &ldquo;{review.text}&rdquo;
-                </p>
-              </div>
+          <MarqueeRow duration={90} direction="left" running={running}>
+            {dupReviews.map((r, i) => (
+              <ReviewCard key={`rev-${r.id}-${i}`} review={r} />
             ))}
           </MarqueeRow>
         </div>
       )}
 
-      {/* Row 2: Stats (80 s base, left) */}
+      {/* ── Row 2: Stats — scrolls left ────────────────────────────────── */}
       <div className="mb-6 sm:mb-8">
-        <MarqueeRow baseDuration={80} hzScale={hzScale} direction="left" ready={ready}>
-          {dupStats.map((stat, idx) => {
-            const Icon = STATS_ICONS[stat.icon] || Briefcase;
-            return (
-              <div
-                key={"stat-" + stat.id + "-" + idx}
-                className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm
-                           border border-primary/20 rounded-xl sm:rounded-2xl
-                           p-4 sm:p-5 w-[200px] sm:w-[240px]
-                           hover:border-primary/40 hover:bg-white/90 dark:hover:bg-card/80
-                           transition-all cursor-default shadow-sm dark:shadow-none"
-              >
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10
-                                flex items-center justify-center text-primary mb-3 sm:mb-4">
-                  <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
-                </div>
-                <div className="text-2xl sm:text-3xl font-display font-bold
-                                bg-gradient-to-r from-primary to-indigo-400
-                                bg-clip-text text-transparent mb-1 sm:mb-2">
-                  {stat.value}
-                </div>
-                <p className="text-[11px] sm:text-xs text-muted-foreground">{stat.title}</p>
-              </div>
-            );
-          })}
+        <MarqueeRow duration={80} direction="left" running={running}>
+          {dupStats.map((s, i) => (
+            <StatCard key={`stat-${s.id}-${i}`} stat={s} />
+          ))}
         </MarqueeRow>
       </div>
 
-      {/* Row 3: Tools (80 s base, right) */}
-      <MarqueeRow baseDuration={80} hzScale={hzScale} direction="right" ready={ready}>
-        {dupTools.map((tool, idx) => (
-          <div
-            key={"tool-" + tool.name + "-" + idx}
-            className="flex-shrink-0 bg-white/70 dark:bg-card/60 backdrop-blur-sm
-                       border border-slate-200 dark:border-white/10
-                       rounded-xl sm:rounded-2xl p-5 sm:p-6 w-[140px] sm:w-[160px]
-                       hover:border-primary/30 hover:bg-white/90 dark:hover:bg-card/80
-                       transition-all cursor-default flex flex-col items-center
-                       justify-center gap-3 shadow-sm dark:shadow-none"
-          >
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-primary/10
-                            flex items-center justify-center relative overflow-hidden">
-              <img
-                src={tool.logo}
-                alt={tool.name}
-                className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement;
-                  img.style.display = "none";
-                  const fb = img.parentElement && img.parentElement.querySelector(".emoji-fb") as HTMLElement | null;
-                  if (fb) fb.style.display = "flex";
-                }}
-              />
-              <div className="emoji-fb hidden absolute inset-0 items-center justify-center text-2xl sm:text-3xl">
-                {tool.emoji}
-              </div>
-            </div>
-            <p className="text-[11px] sm:text-xs font-medium text-foreground text-center">
-              {tool.name}
-            </p>
-          </div>
+      {/* ── Row 3: Tools — scrolls right ───────────────────────────────── */}
+      <MarqueeRow duration={80} direction="right" running={running}>
+        {dupTools.map((t, i) => (
+          <ToolCard key={`tool-${t.id}-${i}`} tool={t} />
         ))}
       </MarqueeRow>
-
     </section>
   );
 }
