@@ -1,35 +1,27 @@
 // ═══════════════════════════════════════════════════════════════
-// TOAST HOOK & MANAGER
+// TOAST HOOK & MANAGER — PRODUCTION REFACTOR
 // src/hooks/use-toast.ts
-// Based on shadcn/ui toast implementation
-// Last Updated: 2026
+//
+// Changelog vs. original:
+//   [FIX-4] Memory leak guard: when the last useToast subscriber
+//           unmounts, all pending removal timeouts are cleared via
+//           clearAllToastTimeouts() so no orphaned timers remain.
+//   [FIX-5] Persistent notification logic: duration === 0 is now
+//           treated as "keep forever" — addToRemoveQueue is never
+//           called for that toast, and it will only leave via an
+//           explicit dismiss() call.
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from "react";
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
-// ═══════════════════════════════════════════════════════════════
-// CONFIGURATION
-// ═══════════════════════════════════════════════════════════════
+// ─── Configuration ────────────────────────────────────────────────────────────
 
-/**
- * Maximum number of toasts to display at once
- */
 export const TOAST_LIMIT = 1;
+export const TOAST_REMOVE_DELAY = 5_000;
 
-/**
- * Default duration for toasts before auto-dismiss (in milliseconds)
- * 5 seconds is a good balance between visibility and non-intrusiveness
- */
-export const TOAST_REMOVE_DELAY = 5000;
+// ─── Type Definitions ─────────────────────────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════════════
-// TYPE DEFINITIONS
-// ═══════════════════════════════════════════════════════════════
-
-/**
- * Extended toast props with unique ID and callbacks
- */
 export type ToasterToast = ToastProps & {
   id: string;
   title?: React.ReactNode;
@@ -38,9 +30,6 @@ export type ToasterToast = ToastProps & {
   onOpenChange?: (open: boolean) => void;
 };
 
-/**
- * Action types for toast reducer (using const assertion for type safety)
- */
 export const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
   UPDATE_TOAST: "UPDATE_TOAST",
@@ -50,117 +39,86 @@ export const actionTypes = {
 
 export type ActionType = typeof actionTypes;
 
-/**
- * Union type for all possible toast actions
- */
 export type Action =
-  | {
-      type: ActionType["ADD_TOAST"];
-      toast: ToasterToast;
-    }
-  | {
-      type: ActionType["UPDATE_TOAST"];
-      toast: Partial<ToasterToast>;
-    }
-  | {
-      type: ActionType["DISMISS_TOAST"];
-      toastId?: ToasterToast["id"];
-    }
-  | {
-      type: ActionType["REMOVE_TOAST"];
-      toastId?: ToasterToast["id"];
-    };
+  | { type: ActionType["ADD_TOAST"]; toast: ToasterToast }
+  | { type: ActionType["UPDATE_TOAST"]; toast: Partial<ToasterToast> }
+  | { type: ActionType["DISMISS_TOAST"]; toastId?: ToasterToast["id"] }
+  | { type: ActionType["REMOVE_TOAST"]; toastId?: ToasterToast["id"] };
 
-/**
- * Internal state interface for toast manager
- */
 export interface State {
   toasts: ToasterToast[];
 }
 
-/**
- * Return type for the toast() function
- */
 export type ToastReturn = {
   id: string;
   dismiss: () => void;
   update: (props: ToasterToast) => void;
 };
 
-/**
- * Input type for creating a new toast (without ID)
- */
 export type ToastInput = Omit<ToasterToast, "id">;
 
-/**
- * Return type for useToast hook
- */
 export type UseToastReturn = State & {
   toast: (props: ToastInput) => ToastReturn;
   dismiss: (toastId?: string) => void;
 };
 
-// ═══════════════════════════════════════════════════════════════
-// INTERNAL STATE & HELPERS
-// ═══════════════════════════════════════════════════════════════
+// ─── Internal State & Helpers ─────────────────────────────────────────────────
 
 let count = 0;
 
-/**
- * Generate unique ID for toast
- * Uses modulo to prevent overflow while maintaining uniqueness per session
- */
 function genId(): string {
   count = (count + 1) % Number.MAX_SAFE_INTEGER;
   return count.toString();
 }
 
 /**
- * Map to track timeout IDs for auto-dismissing toasts
- * Prevents duplicate timeouts and allows cleanup
+ * Module-level map of pending removal timeouts.
+ * Entries are created by addToRemoveQueue and cleared either when
+ * the toast is removed or when all subscribers unmount.
  */
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
- * Schedule a toast for removal after delay
- * @param toastId - ID of the toast to remove
- * @param delay - Optional custom delay (uses TOAST_REMOVE_DELAY if not provided)
+ * Schedule a toast for removal after `delay` milliseconds.
+ *
+ * [FIX-5] If `delay` is exactly 0, the toast is treated as persistent
+ * and NO timeout is scheduled. Only an explicit dismiss() removes it.
  */
-export const addToRemoveQueue = (toastId: string, delay = TOAST_REMOVE_DELAY): void => {
-  // Clear existing timeout if any
+export const addToRemoveQueue = (
+  toastId: string,
+  delay = TOAST_REMOVE_DELAY
+): void => {
+  // [FIX-5] duration === 0 → persistent toast; do nothing.
+  if (delay === 0) return;
+
+  // Prevent double-scheduling
   if (toastTimeouts.has(toastId)) {
-    clearTimeout(toastTimeouts.get(toastId));
+    clearTimeout(toastTimeouts.get(toastId)!);
     toastTimeouts.delete(toastId);
   }
 
   const timeout = setTimeout(() => {
     toastTimeouts.delete(toastId);
-    dispatch({
-      type: actionTypes.REMOVE_TOAST,
-      toastId: toastId,
-    });
+    dispatch({ type: actionTypes.REMOVE_TOAST, toastId });
   }, delay);
 
   toastTimeouts.set(toastId, timeout);
 };
 
 /**
- * Clear all pending toast timeouts
- * Call this on app unmount to prevent memory leaks
+ * Cancel all queued removal timers.
+ *
+ * [FIX-4] Called by useToast's cleanup when the last subscriber
+ * unmounts, preventing orphaned timers from firing against a
+ * detached React tree.
  */
 export const clearAllToastTimeouts = (): void => {
   toastTimeouts.forEach((timeout) => clearTimeout(timeout));
   toastTimeouts.clear();
 };
 
-// ═══════════════════════════════════════════════════════════════
-// REDUCER
-// ═══════════════════════════════════════════════════════════════
+// ─── Reducer ──────────────────────────────────────────────────────────────────
 
-/**
- * Reducer function for managing toast state
- * Handles adding, updating, dismissing, and removing toasts
- */
 export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case actionTypes.ADD_TOAST:
@@ -179,17 +137,11 @@ export const reducer = (state: State, action: Action): State => {
 
     case actionTypes.DISMISS_TOAST: {
       const { toastId } = action;
-
-      // Add to removal queue
       if (toastId) {
         addToRemoveQueue(toastId);
       } else {
-        // Dismiss all toasts
-        state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id);
-        });
+        state.toasts.forEach((t) => addToRemoveQueue(t.id));
       }
-
       return {
         ...state,
         toasts: state.toasts.map((t) =>
@@ -201,9 +153,7 @@ export const reducer = (state: State, action: Action): State => {
     }
 
     case actionTypes.REMOVE_TOAST:
-      if (action.toastId === undefined) {
-        return { ...state, toasts: [] };
-      }
+      if (action.toastId === undefined) return { ...state, toasts: [] };
       return {
         ...state,
         toasts: state.toasts.filter((t) => t.id !== action.toastId),
@@ -214,61 +164,29 @@ export const reducer = (state: State, action: Action): State => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
-// PUB/SUB SYSTEM
-// ═══════════════════════════════════════════════════════════════
+// ─── Pub/Sub ──────────────────────────────────────────────────────────────────
 
-/**
- * Listeners array for state subscriptions
- * Components subscribe via useToast hook
- */
 const listeners: Array<(state: State) => void> = [];
-
-/**
- * In-memory state holder
- * Acts as single source of truth for toast state
- */
 let memoryState: State = { toasts: [] };
 
-/**
- * Dispatch action to reducer and notify all listeners
- * @param action - Action to dispatch
- */
 function dispatch(action: Action): void {
   memoryState = reducer(memoryState, action);
   listeners.forEach((listener) => {
     try {
       listener(memoryState);
-    } catch (error) {
+    } catch {
+      // individual listener errors must not break the pipeline
     }
   });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// PUBLIC API
-// ═══════════════════════════════════════════════════════════════
+// ─── Public toast() API ───────────────────────────────────────────────────────
 
-/**
- * Create and display a new toast
- * @param props - Toast properties (title, description, action, etc.)
- * @returns Object with id, dismiss(), and update() methods
- * 
- * @example
- * toast({ title: "Success!", description: "Saved successfully" })
- * 
- * @example
- * const { dismiss, update } = toast({ title: "Loading..." })
- * // Later: update({ title: "Done!", variant: "success" })
- * // Or: dismiss()
- */
 export function toast({ ...props }: ToastInput): ToastReturn {
   const id = genId();
 
   const update = (updateProps: ToasterToast): void => {
-    dispatch({
-      type: actionTypes.UPDATE_TOAST,
-      toast: { ...updateProps, id },
-    });
+    dispatch({ type: actionTypes.UPDATE_TOAST, toast: { ...updateProps, id } });
   };
 
   const dismiss = (): void => {
@@ -288,39 +206,41 @@ export function toast({ ...props }: ToastInput): ToastReturn {
     },
   });
 
-  // Auto-dismiss after delay (unless duration is explicitly set to null/infinity)
-  if (props.duration !== Infinity && props.duration !== null) {
-    addToRemoveQueue(id, props.duration ?? TOAST_REMOVE_DELAY);
+  // [FIX-5] duration === 0 → persistent; addToRemoveQueue handles the guard.
+  // Infinity / null / undefined → also skip scheduling.
+  if (
+    props.duration !== Infinity &&
+    props.duration !== null &&
+    props.duration !== undefined
+  ) {
+    addToRemoveQueue(id, props.duration);
+  } else if (props.duration === undefined) {
+    // Default: schedule with TOAST_REMOVE_DELAY
+    addToRemoveQueue(id, TOAST_REMOVE_DELAY);
   }
 
   return { id, dismiss, update };
 }
 
-/**
- * React hook for accessing toast state and methods
- * @returns State and methods for managing toasts
- * 
- * @example
- * const { toast, dismiss } = useToast()
- * 
- * @example
- * const { toasts } = useToast() // Access list of active toasts
- */
+// ─── useToast Hook ────────────────────────────────────────────────────────────
+
 export function useToast(): UseToastReturn {
   const [state, setState] = React.useState<State>(memoryState);
 
   React.useEffect(() => {
-    // Subscribe to state changes
     listeners.push(setState);
-    
-    // Cleanup: unsubscribe on unmount
+
     return () => {
+      // Remove this component's listener
       const index = listeners.indexOf(setState);
-      if (index > -1) {
-        listeners.splice(index, 1);
+      if (index > -1) listeners.splice(index, 1);
+
+      // [FIX-4] When the last subscriber unmounts, clear all pending
+      // removal timers to prevent memory leaks and phantom dispatches.
+      if (listeners.length === 0) {
+        clearAllToastTimeouts();
       }
     };
-    // Empty dependency array - we only want to subscribe once
   }, []);
 
   return {
@@ -332,84 +252,24 @@ export function useToast(): UseToastReturn {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CONVENIENCE FUNCTIONS
-// ═══════════════════════════════════════════════════════════════
+// ─── Convenience Functions ────────────────────────────────────────────────────
 
-/**
- * Show a success toast
- */
 export function toastSuccess(title: string, description?: string): ToastReturn {
-  return toast({
-    title,
-    description,
-    variant: "default", // or "success" if your toast component supports it
-  });
+  return toast({ title, description, variant: "default" });
 }
 
-/**
- * Show an error toast
- */
 export function toastError(title: string, description?: string): ToastReturn {
-  return toast({
-    title,
-    description,
-    variant: "destructive",
-  });
+  return toast({ title, description, variant: "destructive" });
 }
 
-/**
- * Show an info toast
- */
 export function toastInfo(title: string, description?: string): ToastReturn {
-  return toast({
-    title,
-    description,
-    variant: "default",
-  });
+  return toast({ title, description, variant: "default" });
 }
 
-/**
- * Show a warning toast
- */
 export function toastWarning(title: string, description?: string): ToastReturn {
-  return toast({
-    title,
-    description,
-    variant: "default", // or "warning" if supported
-  });
+  return toast({ title, description, variant: "default" });
 }
 
-/**
- * Dismiss all active toasts
- */
 export function dismissAllToasts(): void {
   dispatch({ type: actionTypes.DISMISS_TOAST });
 }
-
-// ═══════════════════════════════════════════════════════════════
-// EXPORTS SUMMARY
-// ═══════════════════════════════════════════════════════════════
-
-/**
- * Main exports:
- * 
- * Constants:
- * - TOAST_LIMIT: Max toasts to display
- * - TOAST_REMOVE_DELAY: Default auto-dismiss delay (ms)
- * 
- * Types:
- * - ToasterToast, ToastInput, ToastReturn, UseToastReturn
- * - ActionType, Action, State
- * 
- * Functions:
- * - toast(): Create and show a toast
- * - useToast(): Hook for accessing toast state
- * - dismissAllToasts(): Dismiss all active toasts
- * - toastSuccess/Error/Info/Warning(): Convenience functions
- * - addToRemoveQueue(), clearAllToastTimeouts(): Internal helpers
- * 
- * Reducer:
- * - reducer(): State reducer for toast management
- * - actionTypes: Action type constants
- */

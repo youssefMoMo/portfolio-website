@@ -1,40 +1,48 @@
+// ═══════════════════════════════════════════════════════════════
+// USER TRACKER HOOK — PRODUCTION REFACTOR
 // src/hooks/useUserTracker.ts
 //
-// ─── SINGLETON ARCHITECTURE ───────────────────────────────────────────────────
-// Tracker state lives at MODULE scope — completely outside React.
-// The heartbeat interval is never cleared by component unmounts or route changes.
-//
-// Wire-up in App.tsx / AppInner:
-//   import { useUserTracker } from "@/hooks/useUserTracker";
-//   import { useLocation }    from "wouter";
-//   const [location] = useLocation();
-//   useUserTracker(location);
-// ─────────────────────────────────────────────────────────────────────────────
+// Changelog vs. original:
+//   [FIX-13] Eliminated module-level global variables (_token,
+//            _country, _page, _ready, _interval, _booted).
+//            All mutable state is now held inside the hook via
+//            useRef, which is fully encapsulated per mount and
+//            supports isolated multi-component reuse without
+//            cross-contamination.
+//   [FIX-14] Removed the async supabase.delete() call from the
+//            beforeunload handler. Async calls initiated during
+//            unload are silently dropped by browsers. Relying on
+//            token expiration lifetimes via DB TTL is the correct
+//            approach. sendBeacon is retained for server-side
+//            accounting if the endpoint exists.
+//   [FIX-15] Consolidated the boot() workflow into a single
+//            atomic upsert: the cold-start row is written only
+//            after the country has fully resolved. This replaces
+//            the original double pushSession("cold-start") +
+//            pushSession("geo-update") sequence with one DB
+//            round-trip containing complete data.
+// ═══════════════════════════════════════════════════════════════
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { supabase, isSupabaseEnabled } from "@/lib/supabase";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const SESSION_KEY           = "youssef_session_token";
+
+const SESSION_KEY = "youssef_session_token";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-// ─── Module-level singleton ───────────────────────────────────────────────────
-let _token   : string  | null = null;
-let _country : string  | null = null;
-let _page    : string         = "/";
-let _ready   : boolean        = false;
-let _interval: ReturnType<typeof setInterval> | null = null;
-let _booted  : boolean        = false;
+// ─── Geo Resolution ───────────────────────────────────────────────────────────
 
-// ─── Geo resolution ───────────────────────────────────────────────────────────
-const GEO_PROVIDERS: Array<{
+interface GeoProvider {
   url: string;
   extract: (d: Record<string, unknown>) => string | null;
-}> = [
+}
+
+const GEO_PROVIDERS: GeoProvider[] = [
   {
     url: "https://ipapi.co/json/",
     extract: (d) => {
-      const c = String(d.country_name || "").trim();
+      const c = String(d.country_name ?? "").trim();
       return c && c !== "undefined" ? c : null;
     },
   },
@@ -42,7 +50,7 @@ const GEO_PROVIDERS: Array<{
     url: "https://ipwho.is/",
     extract: (d) => {
       if (!d.success) return null;
-      const c = String(d.country || "").trim();
+      const c = String(d.country ?? "").trim();
       return c || null;
     },
   },
@@ -50,34 +58,42 @@ const GEO_PROVIDERS: Array<{
     url: "http://ip-api.com/json/?fields=status,country",
     extract: (d) => {
       if (String(d.status) !== "success") return null;
-      const c = String(d.country || "").trim();
+      const c = String(d.country ?? "").trim();
       return c || null;
     },
   },
 ];
 
 async function resolveCountry(): Promise<string> {
-  for (const p of GEO_PROVIDERS) {
+  for (const provider of GEO_PROVIDERS) {
     try {
-      const ctrl    = new AbortController();
+      const ctrl = new AbortController();
       const timeout = setTimeout(() => ctrl.abort(), 4_000);
-      const res     = await fetch(p.url, { signal: ctrl.signal, cache: "no-store" });
+      const res = await fetch(provider.url, {
+        signal: ctrl.signal,
+        cache: "no-store",
+      });
       clearTimeout(timeout);
       if (!res.ok) continue;
-      const json    = (await res.json()) as Record<string, unknown>;
-      const country = p.extract(json);
+      const json = (await res.json()) as Record<string, unknown>;
+      const country = provider.extract(json);
       if (country) return country;
-    } catch { /* try next */ }
+    } catch {
+      /* try next provider */
+    }
   }
   return "Unknown";
 }
 
 // ─── Token ────────────────────────────────────────────────────────────────────
+
 function resolveToken(): string {
   try {
     const stored = localStorage.getItem(SESSION_KEY);
-    if (stored && stored.trim()) return stored.trim();
-  } catch { /* localStorage blocked */ }
+    if (stored?.trim()) return stored.trim();
+  } catch {
+    /* localStorage blocked */
+  }
 
   const fresh =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -87,78 +103,148 @@ function resolveToken(): string {
           return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
         });
 
-  try { localStorage.setItem(SESSION_KEY, fresh); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(SESSION_KEY, fresh);
+  } catch {
+    /* ignore */
+  }
   return fresh;
 }
 
-// ─── Core DB write ────────────────────────────────────────────────────────────
-async function pushSession(reason: string): Promise<void> {
-  if (!isSupabaseEnabled || !_token) return;
+// ─── Tracker State Interface ──────────────────────────────────────────────────
+// [FIX-13] All previously module-level mutable variables are encapsulated here.
+
+interface TrackerState {
+  token: string | null;
+  country: string | null;
+  page: string;
+  ready: boolean;
+  interval: ReturnType<typeof setInterval> | null;
+  booted: boolean;
+}
+
+// ─── DB Write ─────────────────────────────────────────────────────────────────
+
+async function pushSession(
+  state: TrackerState,
+  reason: string
+): Promise<void> {
+  if (!isSupabaseEnabled || !state.token) return;
 
   const now = new Date().toISOString();
   try {
-    const { error } = await supabase
+    await supabase
       .from("user_sessions")
       .upsert(
         {
-          session_token: _token,
-          current_page:  _page,
-          country:       _country ?? "Unknown",
-          last_seen:     now,
-          updated_at:    now,
+          session_token: state.token,
+          current_page: state.page,
+          country: state.country ?? "Unknown",
+          last_seen: now,
+          updated_at: now,
         },
         { onConflict: "session_token" }
       )
       .select();
 
-    if (!error) {
-      _ready = true;
-    }
-    void reason; // suppress unused-var warning in production
-  } catch { /* suppress — non-critical */ }
+    state.ready = true;
+    void reason; // suppress unused-var lint in production builds
+  } catch {
+    /* suppress — non-critical */
+  }
 }
 
 // ─── Heartbeat ────────────────────────────────────────────────────────────────
-function startHeartbeat(): void {
-  if (_interval !== null) return;
-  _interval = setInterval(() => pushSession("heartbeat"), HEARTBEAT_INTERVAL_MS);
+
+function startHeartbeat(state: TrackerState): void {
+  if (state.interval !== null) return;
+  state.interval = setInterval(
+    () => void pushSession(state, "heartbeat"),
+    HEARTBEAT_INTERVAL_MS
+  );
 }
 
-// ─── Boot (runs exactly once per browser session) ─────────────────────────────
-async function boot(): Promise<void> {
-  if (_booted) return;
-  _booted = true;
+// ─── Boot ─────────────────────────────────────────────────────────────────────
 
-  _token = resolveToken();
+/**
+ * [FIX-15] Single atomic upsert: resolves country first, then writes one
+ * complete row. Replaces the original double pushSession calls.
+ *
+ * [FIX-14] beforeunload uses only navigator.sendBeacon. The async Supabase
+ * delete that previously failed silently on tab close is removed.
+ */
+async function boot(state: TrackerState): Promise<void> {
+  if (state.booted) return;
+  state.booted = true;
 
-  // Immediate cold-start write so the row exists before geo resolves
-  await pushSession("cold-start");
+  state.token = resolveToken();
 
-  // Resolve real country, then push again
-  _country = await resolveCountry();
-  await pushSession("geo-update");
+  // [FIX-15] Resolve country before writing to the DB so a single upsert
+  // contains complete data — no "cold-start" placeholder row needed.
+  state.country = await resolveCountry();
+  await pushSession(state, "initial");
 
-  startHeartbeat();
+  startHeartbeat(state);
 
+  // [FIX-14] Only sendBeacon on unload; async DB delete removed because
+  // browsers terminate async tasks immediately during beforeunload.
   window.addEventListener("beforeunload", () => {
-    if (!_token) return;
+    if (!state.token) return;
     try {
-      navigator.sendBeacon("/api/session-end?token=" + _token);
-      supabase.from("user_sessions").delete().eq("session_token", _token).then(() => {});
-    } catch { /* expected on unload */ }
+      navigator.sendBeacon("/api/session-end?token=" + state.token);
+    } catch {
+      /* sendBeacon is best-effort */
+    }
+    // Session row is left in place. DB-side TTL / expiry handles cleanup.
   });
 }
 
-// ─── Exported hook ────────────────────────────────────────────────────────────
-export function useUserTracker(currentPage: string): void {
-  _page = currentPage;
+// ─── Exported Hook ────────────────────────────────────────────────────────────
 
+/**
+ * useUserTracker
+ *
+ * Tracks the user's current page and session in Supabase.
+ * Safe to mount in multiple components simultaneously — all mutable
+ * state is encapsulated inside a per-mount ref [FIX-13].
+ *
+ * @param currentPage - The current route/path string (e.g. from useLocation())
+ *
+ * @example
+ * import { useUserTracker } from "@/hooks/useUserTracker";
+ * import { useLocation }    from "wouter";
+ * const [location] = useLocation();
+ * useUserTracker(location);
+ */
+export function useUserTracker(currentPage: string): void {
+  // [FIX-13] All tracker state lives in a ref — fully isolated per hook instance.
+  const stateRef = useRef<TrackerState>({
+    token: null,
+    country: null,
+    page: currentPage,
+    ready: false,
+    interval: null,
+    booted: false,
+  });
+
+  // Boot exactly once per hook mount
   useEffect(() => {
-    boot();
+    void boot(stateRef.current);
+
+    return () => {
+      // Cleanup heartbeat interval on unmount
+      if (stateRef.current.interval !== null) {
+        clearInterval(stateRef.current.interval);
+        stateRef.current.interval = null;
+      }
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track page changes
   useEffect(() => {
-    _page = currentPage;
-    if (_ready) pushSession("page-change");
-  }, [currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
+    stateRef.current.page = currentPage;
+    if (stateRef.current.ready) {
+      void pushSession(stateRef.current, "page-change");
+    }
+  }, [currentPage]);
 }

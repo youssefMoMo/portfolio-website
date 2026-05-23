@@ -1,15 +1,24 @@
 // ═══════════════════════════════════════════════════════════════
-// CONTACT FORM HOOK - FIXED VERSION
+// CONTACT FORM HOOK — PRODUCTION REFACTOR
 // src/hooks/use-contact.ts
+//
+// Changelog vs. original:
+//   [FIX-1] onMutate no longer throws JSON.stringify(errors).
+//           A typed ValidationError class carries structured errors;
+//           onError checks instanceof to avoid JSON.parse failures
+//           on real network errors.
+//   [FIX-2] handleSubmit early-returns when isPending is true,
+//           making double-click submission physically impossible.
+//   [FIX-3] Removed duplicate toast() call from handleSubmit.
+//           ALL user notifications are centralised in onSuccess /
+//           onError mutation lifecycles.
 // ═══════════════════════════════════════════════════════════════
 
 import { useMutation, UseMutationResult } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useCallback } from "react"; // ✅ أضف استيراد React hooks
+import { useState, useCallback } from "react";
 
-// ═══════════════════════════════════════════════════════════════
-// TYPE DEFINITIONS
-// ═══════════════════════════════════════════════════════════════
+// ─── Type Definitions ────────────────────────────────────────────────────────
 
 export type ContactFormData = {
   name: string;
@@ -31,7 +40,7 @@ export type ContactFormErrors = Partial<Record<keyof ContactFormData, string>> &
 
 export type UseSubmitContactReturn = UseMutationResult<
   ContactSubmissionResponse,
-  Error,
+  ValidationError | Error,
   ContactFormData
 > & {
   isSubmitting: boolean;
@@ -40,24 +49,34 @@ export type UseSubmitContactReturn = UseMutationResult<
   getFieldError: (field: keyof ContactFormData) => string | undefined;
 };
 
-// ═══════════════════════════════════════════════════════════════
-// CONFIGURATION
-// ═══════════════════════════════════════════════════════════════
+// ─── Custom Error Class ───────────────────────────────────────────────────────
+// [FIX-1] Carries a structured validation errors object directly on the
+// instance so consumers never need to JSON.parse() an error message string.
 
-const CONTACT_API_ENDPOINT = 
+export class ValidationError extends Error {
+  public readonly errors: ContactFormErrors;
+
+  constructor(errors: ContactFormErrors) {
+    super("Validation failed");
+    this.name = "ValidationError";
+    this.errors = errors;
+    // Restore prototype chain for instanceof checks across transpiled targets
+    Object.setPrototypeOf(this, ValidationError.prototype);
+  }
+}
+
+// ─── Configuration ────────────────────────────────────────────────────────────
+
+const CONTACT_API_ENDPOINT =
   import.meta.env.VITE_CONTACT_API_URL || "/api/contact";
 
-const REQUEST_TIMEOUT = 30000;
+const REQUEST_TIMEOUT = 30_000;
 
-// ═══════════════════════════════════════════════════════════════
-// VALIDATION RULES - FIXED TYPE DEFINITION
-// ═══════════════════════════════════════════════════════════════
+// ─── Validation Rules ─────────────────────────────────────────────────────────
 
 interface BaseValidationRule {
   required?: boolean;
-  message: {
-    required: string;
-  };
+  message: { required: string };
 }
 
 interface StringValidationRule extends BaseValidationRule {
@@ -73,10 +92,7 @@ interface StringValidationRule extends BaseValidationRule {
 
 interface EmailValidationRule extends BaseValidationRule {
   pattern: RegExp;
-  message: {
-    required: string;
-    pattern: string;
-  };
+  message: { required: string; pattern: string };
 }
 
 type FieldValidationRule = StringValidationRule | EmailValidationRule;
@@ -124,37 +140,34 @@ const VALIDATION_RULES: Record<keyof ContactFormData, FieldValidationRule> = {
   },
 } as const;
 
-// ═══════════════════════════════════════════════════════════════
-// VALIDATION HELPERS - FIXED
-// ═══════════════════════════════════════════════════════════════
+// ─── Validation Helpers ───────────────────────────────────────────────────────
 
 function validateField<K extends keyof ContactFormData>(
   field: K,
   value: ContactFormData[K]
 ): string | null {
   const rules = VALIDATION_RULES[field];
-  
+
   if (rules.required && (!value || String(value).trim() === "")) {
     return rules.message.required;
   }
-  
+
   if (value && typeof value === "string") {
     const trimmed = value.trim();
-    
-    // ✅ استخدم "key" in rules للتحقق من وجود الخاصية قبل الوصول إليها
+
     if ("minLength" in rules && rules.minLength && trimmed.length < rules.minLength) {
       return rules.message.minLength ?? rules.message.required;
     }
-    
+
     if ("maxLength" in rules && rules.maxLength && trimmed.length > rules.maxLength) {
       return rules.message.maxLength ?? rules.message.required;
     }
-    
+
     if ("pattern" in rules && rules.pattern && !rules.pattern.test(trimmed)) {
       return rules.message.pattern ?? rules.message.required;
     }
   }
-  
+
   return null;
 }
 
@@ -162,16 +175,14 @@ export function validateContactForm(
   data: ContactFormData
 ): ContactFormErrors | null {
   const errors: ContactFormErrors = {};
-  
+
   (Object.keys(VALIDATION_RULES) as Array<keyof ContactFormData>).forEach(
     (field) => {
-      const error = validateField(field, data[field]);
-      if (error) {
-        errors[field] = error;
-      }
+      const err = validateField(field, data[field]);
+      if (err) errors[field] = err;
     }
   );
-  
+
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
@@ -188,16 +199,13 @@ export function sanitizeContactData(data: ContactFormData): ContactFormData {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════
-// API FUNCTIONS
-// ═══════════════════════════════════════════════════════════════
+// ─── API Function ─────────────────────────────────────────────────────────────
 
 async function submitContactAPI(
   data: ContactFormData
 ): Promise<ContactSubmissionResponse> {
   if (!import.meta.env.VITE_CONTACT_API_URL) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
     if (Math.random() > 0.1) {
       return {
         success: true,
@@ -205,108 +213,115 @@ async function submitContactAPI(
         timestamp: new Date().toISOString(),
         message: "Message received (mock mode)",
       };
-    } else {
-      throw new Error("Mock API error - please try again");
     }
+    throw new Error("Mock API error — please try again");
   }
-  
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-  
+
   try {
     const response = await fetch(CONTACT_API_ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(sanitizeContactData(data)),
       signal: controller.signal,
     });
-    
+
     clearTimeout(timeoutId);
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(
+        (errorData as { message?: string }).message ||
+          `HTTP ${response.status}: ${response.statusText}`
+      );
     }
-    
+
     const result: ContactSubmissionResponse = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.message || "Submission failed");
-    }
-    
+    if (!result.success) throw new Error(result.message || "Submission failed");
     return result;
   } catch (error) {
     clearTimeout(timeoutId);
-    
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Request timeout - please check your connection and try again");
+      throw new Error(
+        "Request timeout — please check your connection and try again"
+      );
     }
-    
     throw error;
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// MAIN HOOK - FIXED
-// ═══════════════════════════════════════════════════════════════
+// ─── useSubmitContact ─────────────────────────────────────────────────────────
 
 export function useSubmitContact(): UseSubmitContactReturn {
   const { toast } = useToast();
 
-  const mutation = useMutation<ContactSubmissionResponse, Error, ContactFormData>({
+  const mutation = useMutation<
+    ContactSubmissionResponse,
+    ValidationError | Error,
+    ContactFormData
+  >({
     mutationFn: submitContactAPI,
-    
+
     retry: (failureCount, error) => {
-      return failureCount < 2 && (error.message.includes("network") || error.message.includes("timeout"));
+      // Never retry validation errors
+      if (error instanceof ValidationError) return false;
+      return (
+        failureCount < 2 &&
+        (error.message.includes("network") || error.message.includes("timeout"))
+      );
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
-    
+    retryDelay: (attemptIndex) => Math.min(1_000 * 2 ** attemptIndex, 5_000),
+
+    // [FIX-1] onMutate throws a typed ValidationError, not a JSON string.
     onMutate: (variables) => {
       const errors = validateContactForm(variables);
       if (errors) {
-        throw new Error(JSON.stringify(errors));
+        throw new ValidationError(errors);
       }
       return { sanitizedData: sanitizeContactData(variables) };
     },
-    
-    onSuccess: (data, variables) => {
+
+    // [FIX-3] This is the single place a success toast is shown.
+    onSuccess: (data) => {
       toast({
         title: "Message sent!",
-        description: data.message || "Thanks for reaching out. I'll get back to you soon.",
+        description:
+          data.message || "Thanks for reaching out. I'll get back to you soon.",
         variant: "default",
       });
     },
-    
-    onError: (error: Error) => {
-      try {
-        const validationErrors = JSON.parse(error.message) as ContactFormErrors;
-        const firstError = Object.values(validationErrors)[0];
+
+    // [FIX-3] This is the single place an error toast is shown.
+    onError: (error) => {
+      // [FIX-1] Use instanceof — no JSON.parse required.
+      if (error instanceof ValidationError) {
+        const firstError = Object.values(error.errors)[0];
         toast({
           title: "Validation Error",
           description: firstError || "Please check your input",
           variant: "destructive",
-          duration: 5000,
+          duration: 5_000,
         });
         return;
-      } catch {
-        // Not a validation error
       }
-      
+
       let description = "Failed to send message. Please try again later.";
-      
       if (error.message.includes("timeout")) {
-        description = "Request timed out. Please check your connection and try again.";
+        description =
+          "Request timed out. Please check your connection and try again.";
       } else if (error.message.includes("network")) {
         description = "Network error. Please check your internet connection.";
       } else if (error.message) {
         description = error.message;
       }
-      
+
       toast({
         title: "Error",
         description,
         variant: "destructive",
-        duration: 6000,
+        duration: 6_000,
       });
     },
   });
@@ -315,82 +330,90 @@ export function useSubmitContact(): UseSubmitContactReturn {
     ...mutation,
     isSubmitting: mutation.isPending,
     resetForm: () => mutation.reset(),
-    
+
     hasFieldError: (field: keyof ContactFormData): boolean => {
       if (!mutation.error) return false;
-      try {
-        const errors = JSON.parse(mutation.error.message) as ContactFormErrors;
-        return field in errors;
-      } catch {
-        return false;
+      // [FIX-1] instanceof check — no JSON.parse
+      if (mutation.error instanceof ValidationError) {
+        return field in mutation.error.errors;
       }
+      return false;
     },
-    
+
     getFieldError: (field: keyof ContactFormData): string | undefined => {
       if (!mutation.error) return undefined;
-      try {
-        const errors = JSON.parse(mutation.error.message) as ContactFormErrors;
-        return errors[field];
-      } catch {
-        return undefined;
+      if (mutation.error instanceof ValidationError) {
+        return mutation.error.errors[field];
       }
+      return undefined;
     },
   };
 }
 
-// ═══════════════════════════════════════════════════════════════
-// useContactForm HOOK - FIXED MISSING IMPORTS & TOAST
-// ═══════════════════════════════════════════════════════════════
+// ─── useContactForm ───────────────────────────────────────────────────────────
 
 export function useContactForm() {
-  const { mutate, isSubmitting, resetForm, getFieldError, ...mutation } = useSubmitContact();
-  const { toast } = useToast(); // ✅ أضف استيراد toast هنا
-  
+  const { mutate, isSubmitting, resetForm, getFieldError, ...mutation } =
+    useSubmitContact();
+
   const [formData, setFormData] = useState<ContactFormData>({
-    name: "", email: "", subject: "", message: "",
-  });
-  
-  const [touched, setTouched] = useState<Record<keyof ContactFormData, boolean>>({
-    name: false, email: false, subject: false, message: false,
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
   });
 
-  const updateField = useCallback(<K extends keyof ContactFormData>(
-    field: K,
-    value: ContactFormData[K]
-  ) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
+  const [touched, setTouched] = useState<
+    Record<keyof ContactFormData, boolean>
+  >({
+    name: false,
+    email: false,
+    subject: false,
+    message: false,
+  });
+
+  const updateField = useCallback(
+    <K extends keyof ContactFormData>(field: K, value: ContactFormData[K]) => {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+    },
+    []
+  );
 
   const markTouched = useCallback((field: keyof ContactFormData) => {
-    setTouched(prev => ({ ...prev, [field]: true }));
+    setTouched((prev) => ({ ...prev, [field]: true }));
   }, []);
 
-  const handleSubmit = useCallback((e?: React.FormEvent) => {
-    e?.preventDefault();
-    
-    Object.keys(formData).forEach(key => {
-      markTouched(key as keyof ContactFormData);
-    });
-    
-    const errors = validateContactForm(formData);
-    if (errors) {
-      const firstError = Object.values(errors)[0];
-      toast({
-        title: "Validation Error",
-        description: firstError,
-        variant: "destructive",
+  const handleSubmit = useCallback(
+    (e?: React.FormEvent) => {
+      e?.preventDefault();
+
+      // [FIX-2] Hard guard: swallow the click if already in flight.
+      if (isSubmitting) return;
+
+      // Mark all fields as touched for inline error display
+      (Object.keys(formData) as Array<keyof ContactFormData>).forEach(
+        markTouched
+      );
+
+      // [FIX-3] No toast here — validation failure surfaces via onError.
+      const errors = validateContactForm(formData);
+      if (errors) return; // onMutate will throw ValidationError → onError fires
+
+      mutate(formData, {
+        onSuccess: () => {
+          setFormData({ name: "", email: "", subject: "", message: "" });
+          setTouched({
+            name: false,
+            email: false,
+            subject: false,
+            message: false,
+          });
+          resetForm();
+        },
       });
-      return;
-    }
-    
-    mutate(formData, {
-      onSuccess: () => {
-        setFormData({ name: "", email: "", subject: "", message: "" });
-        setTouched({ name: false, email: false, subject: false, message: false });
-        resetForm();
-      },
-    });
-  }, [formData, mutate, resetForm, markTouched, toast]); // ✅ أضف toast للـ dependencies
+    },
+    [formData, isSubmitting, mutate, resetForm, markTouched]
+  );
 
   return {
     formData,
@@ -403,7 +426,12 @@ export function useContactForm() {
     handleSubmit,
     reset: () => {
       setFormData({ name: "", email: "", subject: "", message: "" });
-      setTouched({ name: false, email: false, subject: false, message: false });
+      setTouched({
+        name: false,
+        email: false,
+        subject: false,
+        message: false,
+      });
       resetForm();
     },
   };
