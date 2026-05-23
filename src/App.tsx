@@ -1,21 +1,25 @@
 import { useEffect, useState, useCallback } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Switch, Route } from "wouter";
 import { supabase } from "./lib/supabase";
+import { Layout } from "./components/layout/Layout";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 // ─── Pages ────────────────────────────────────────────────────────────────────
-import HomePage from "./pages/HomePage";
-import PortfolioPage from "./pages/PortfolioPage";
-import GamesPage from "./pages/GamesPage";
-import PricingPage from "./pages/PricingPage";
-import ReviewsPage from "./pages/ReviewsPage";
-import PoliciesPage from "./pages/PoliciesPage";
+import Home from "./pages/Home";
+import Portfolio from "./pages/Portfolio";
+import Games from "./pages/Games";
+import Pricing from "./pages/Pricing";
+import Reviews from "./pages/Reviews";
+import Policies from "./pages/Policies";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
+import NotFound from "./pages/not-found";
 
-// ─── Native UUID ───────────────────────────────────────────────────────────────
+// ─── Native UUID (no external packages) ──────────────────────────────────────
 function generateUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  // Fallback for older environments
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
@@ -36,7 +40,7 @@ function getOrCreateSessionToken(): string {
   }
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface AlertState {
   id: string;
   message: string;
@@ -46,7 +50,7 @@ interface BanState {
   reason: string;
 }
 
-// ─── ALERT BANNER ──────────────────────────────────────────────────────────────
+// ─── ALERT BANNER — z-index 99999, inline style, purge-proof ─────────────────
 function AlertBanner({
   alert,
   onDismiss,
@@ -78,7 +82,7 @@ function AlertBanner({
   );
 }
 
-// ─── BAN OVERLAY ───────────────────────────────────────────────────────────────
+// ─── BAN OVERLAY — z-index 999999, full blackout, unbypassable ───────────────
 function BanOverlay({ reason }: { reason: string }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -141,13 +145,13 @@ function BanOverlay({ reason }: { reason: string }) {
   );
 }
 
-// ─── APP ───────────────────────────────────────────────────────────────────────
+// ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [sessionToken] = useState<string>(getOrCreateSessionToken);
-  const [alert, setAlert] = useState<AlertState | null>(null);
-  const [ban, setBan] = useState<BanState | null>(null);
+  const [alert, setAlert]   = useState<AlertState | null>(null);
+  const [ban,   setBan]     = useState<BanState   | null>(null);
 
-  // ── Register / heartbeat session ───────────────────────────────────────────
+  // ── Register + heartbeat ────────────────────────────────────────────────────
   useEffect(() => {
     const register = async () => {
       try {
@@ -166,15 +170,10 @@ export default function App() {
         } else {
           await supabase
             .from("sessions")
-            .update({
-              page: window.location.pathname,
-              last_seen: new Date().toISOString(),
-            })
+            .update({ page: window.location.pathname, last_seen: new Date().toISOString() })
             .eq("token", sessionToken);
         }
-      } catch {
-        // non-critical
-      }
+      } catch { /* non-critical */ }
     };
 
     register();
@@ -183,43 +182,31 @@ export default function App() {
       try {
         await supabase
           .from("sessions")
-          .update({
-            page: window.location.pathname,
-            last_seen: new Date().toISOString(),
-          })
+          .update({ page: window.location.pathname, last_seen: new Date().toISOString() })
           .eq("token", sessionToken);
-      } catch {
-        // non-critical
-      }
+      } catch { /* non-critical */ }
     }, 15_000);
 
     return () => clearInterval(interval);
   }, [sessionToken]);
 
-  // ── Check existing ban on mount ────────────────────────────────────────────
+  // ── Ban check on mount ──────────────────────────────────────────────────────
   useEffect(() => {
-    const checkBan = async () => {
+    (async () => {
       try {
         const { data } = await supabase
           .from("sessions")
           .select("is_banned, ban_reason")
           .eq("token", sessionToken)
           .maybeSingle();
-
-        if (data?.is_banned) {
-          setBan({ reason: data.ban_reason ?? "" });
-        }
-      } catch {
-        // non-critical
-      }
-    };
-
-    checkBan();
+        if (data?.is_banned) setBan({ reason: data.ban_reason ?? "" });
+      } catch { /* non-critical */ }
+    })();
   }, [sessionToken]);
 
-  // ── Check active alert on mount ────────────────────────────────────────────
+  // ── Active alert check on mount ─────────────────────────────────────────────
   useEffect(() => {
-    const checkAlert = async () => {
+    (async () => {
       try {
         const { data } = await supabase
           .from("site_alerts")
@@ -228,101 +215,98 @@ export default function App() {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
-
-        if (data?.message) {
-          setAlert({ id: data.id, message: data.message });
-        }
-      } catch {
-        // non-critical
-      }
-    };
-
-    checkAlert();
+        if (data?.message) setAlert({ id: data.id, message: data.message });
+      } catch { /* non-critical */ }
+    })();
   }, []);
 
-  // ── Real-time: ban/unban for this session ──────────────────────────────────
+  // ── Realtime: ban / unban this session ──────────────────────────────────────
   useEffect(() => {
-    const channel = supabase
+    const ch = supabase
       .channel(`session:${sessionToken}`)
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "sessions",
-          filter: `token=eq.${sessionToken}`,
-        },
+        { event: "UPDATE", schema: "public", table: "sessions", filter: `token=eq.${sessionToken}` },
         (payload) => {
           const row = payload.new as { is_banned?: boolean; ban_reason?: string };
-          if (row.is_banned === true) {
-            setBan({ reason: row.ban_reason ?? "" });
-          } else if (row.is_banned === false) {
-            setBan(null);
-          }
+          if (row.is_banned === true)  setBan({ reason: row.ban_reason ?? "" });
+          if (row.is_banned === false) setBan(null);
         }
       )
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(ch); };
   }, [sessionToken]);
 
-  // ── Real-time: global site alerts ─────────────────────────────────────────
+  // ── Realtime: global site alerts ────────────────────────────────────────────
   useEffect(() => {
-    const channel = supabase
+    const ch = supabase
       .channel("global:alerts")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "site_alerts",
-        },
+        { event: "*", schema: "public", table: "site_alerts" },
         (payload) => {
           if (payload.eventType === "DELETE") {
-            setAlert((prev) =>
-              prev?.id === (payload.old as { id: string }).id ? null : prev
-            );
+            setAlert((prev) => prev?.id === (payload.old as { id: string }).id ? null : prev);
             return;
           }
           const row = payload.new as { id: string; message: string; active: boolean };
-          if (row.active && row.message) {
-            setAlert({ id: row.id, message: row.message });
-          } else {
-            setAlert((prev) => (prev?.id === row.id ? null : prev));
-          }
+          if (row.active && row.message) setAlert({ id: row.id, message: row.message });
+          else setAlert((prev) => prev?.id === row.id ? null : prev);
         }
       )
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
   const dismissAlert = useCallback(() => setAlert(null), []);
 
   return (
     <>
+      {/* BAN OVERLAY — outside all routing, nothing can render above it */}
       {ban !== null && <BanOverlay reason={ban.reason} />}
 
+      {/* ALERT BANNER — above navbar, below ban overlay */}
       {!ban && alert !== null && (
         <AlertBanner alert={alert} onDismiss={dismissAlert} />
       )}
 
-      <Router>
-        <div className={!ban && alert ? "pt-12" : ""}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/portfolio" element={<PortfolioPage />} />
-            <Route path="/games" element={<GamesPage />} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/reviews" element={<ReviewsPage />} />
-            <Route path="/policies" element={<PoliciesPage />} />
-          </Routes>
-        </div>
-      </Router>
+      {/* Push page content down when banner is visible */}
+      <div style={!ban && alert ? { paddingTop: "48px" } : undefined}>
+        <Switch>
+          {/* Public pages — wrapped in Layout (Navbar + Footer + background) */}
+          <Route path="/">
+            <Layout><Home /></Layout>
+          </Route>
+          <Route path="/portfolio">
+            <Layout><Portfolio /></Layout>
+          </Route>
+          <Route path="/games">
+            <Layout><Games /></Layout>
+          </Route>
+          <Route path="/pricing">
+            <Layout><Pricing /></Layout>
+          </Route>
+          <Route path="/reviews">
+            <Layout><Reviews /></Layout>
+          </Route>
+          <Route path="/policies">
+            <Layout><Policies /></Layout>
+          </Route>
+
+          {/* Admin — no Layout wrapper */}
+          <Route path="/admin">
+            <AdminLogin />
+          </Route>
+          <Route path="/admin/dashboard">
+            <ProtectedRoute><AdminDashboard /></ProtectedRoute>
+          </Route>
+
+          {/* 404 */}
+          <Route>
+            <Layout><NotFound /></Layout>
+          </Route>
+        </Switch>
+      </div>
     </>
   );
 }
