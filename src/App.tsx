@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { Switch, Route } from "wouter";
 import { supabase } from "./lib/supabase";
+import { ThemeProvider } from "./hooks/use-theme";
+import { LanguageProvider } from "./hooks/use-language";
 import { Layout } from "./components/layout/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -15,7 +17,7 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/not-found";
 
-// ─── Native UUID (no external packages) ──────────────────────────────────────
+// ─── Native UUID ──────────────────────────────────────────────────────────────
 function generateUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -50,7 +52,7 @@ interface BanState {
   reason: string;
 }
 
-// ─── ALERT BANNER — z-index 99999, inline style, purge-proof ─────────────────
+// ─── ALERT BANNER — z-index 99999 ────────────────────────────────────────────
 function AlertBanner({
   alert,
   onDismiss,
@@ -59,9 +61,7 @@ function AlertBanner({
   onDismiss: () => void;
 }) {
   return (
-    <div
-      style={{ zIndex: 99999, position: "fixed", top: 0, left: 0, width: "100%" }}
-    >
+    <div style={{ zIndex: 99999, position: "fixed", top: 0, left: 0, width: "100%" }}>
       <div className="w-full bg-yellow-400 text-black flex items-center justify-between px-4 py-3 shadow-2xl border-b-4 border-yellow-600">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <span className="relative flex h-3 w-3 shrink-0">
@@ -82,7 +82,7 @@ function AlertBanner({
   );
 }
 
-// ─── BAN OVERLAY — z-index 999999, full blackout, unbypassable ───────────────
+// ─── BAN OVERLAY — z-index 999999, full blackout ─────────────────────────────
 function BanOverlay({ reason }: { reason: string }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -145,13 +145,13 @@ function BanOverlay({ reason }: { reason: string }) {
   );
 }
 
-// ─── APP ──────────────────────────────────────────────────────────────────────
-export default function App() {
+// ─── INNER APP — lives inside providers, safe to use theme/language ───────────
+function AppInner() {
   const [sessionToken] = useState<string>(getOrCreateSessionToken);
-  const [alert, setAlert]   = useState<AlertState | null>(null);
-  const [ban,   setBan]     = useState<BanState   | null>(null);
+  const [alert, setAlert] = useState<AlertState | null>(null);
+  const [ban,   setBan]   = useState<BanState   | null>(null);
 
-  // ── Register + heartbeat ────────────────────────────────────────────────────
+  // ── Register + heartbeat ──────────────────────────────────────────────────
   useEffect(() => {
     const register = async () => {
       try {
@@ -190,7 +190,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [sessionToken]);
 
-  // ── Ban check on mount ──────────────────────────────────────────────────────
+  // ── Ban check on mount ────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -204,7 +204,7 @@ export default function App() {
     })();
   }, [sessionToken]);
 
-  // ── Active alert check on mount ─────────────────────────────────────────────
+  // ── Active alert check on mount ───────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -220,7 +220,7 @@ export default function App() {
     })();
   }, []);
 
-  // ── Realtime: ban / unban this session ──────────────────────────────────────
+  // ── Realtime: ban / unban ─────────────────────────────────────────────────
   useEffect(() => {
     const ch = supabase
       .channel(`session:${sessionToken}`)
@@ -237,7 +237,7 @@ export default function App() {
     return () => { supabase.removeChannel(ch); };
   }, [sessionToken]);
 
-  // ── Realtime: global site alerts ────────────────────────────────────────────
+  // ── Realtime: global alerts ───────────────────────────────────────────────
   useEffect(() => {
     const ch = supabase
       .channel("global:alerts")
@@ -262,18 +262,16 @@ export default function App() {
 
   return (
     <>
-      {/* BAN OVERLAY — outside all routing, nothing can render above it */}
+      {/* BAN OVERLAY — rendered first, nothing can paint above it */}
       {ban !== null && <BanOverlay reason={ban.reason} />}
 
-      {/* ALERT BANNER — above navbar, below ban overlay */}
+      {/* ALERT BANNER — above all page content, below ban overlay */}
       {!ban && alert !== null && (
         <AlertBanner alert={alert} onDismiss={dismissAlert} />
       )}
 
-      {/* Push page content down when banner is visible */}
       <div style={!ban && alert ? { paddingTop: "48px" } : undefined}>
         <Switch>
-          {/* Public pages — wrapped in Layout (Navbar + Footer + background) */}
           <Route path="/">
             <Layout><Home /></Layout>
           </Route>
@@ -292,21 +290,28 @@ export default function App() {
           <Route path="/policies">
             <Layout><Policies /></Layout>
           </Route>
-
-          {/* Admin — no Layout wrapper */}
           <Route path="/admin">
             <AdminLogin />
           </Route>
           <Route path="/admin/dashboard">
             <ProtectedRoute><AdminDashboard /></ProtectedRoute>
           </Route>
-
-          {/* 404 */}
           <Route>
             <Layout><NotFound /></Layout>
           </Route>
         </Switch>
       </div>
     </>
+  );
+}
+
+// ─── APP ROOT — providers wrap everything ─────────────────────────────────────
+export default function App() {
+  return (
+    <ThemeProvider defaultTheme="dark" storageKey="youssef-ui-theme">
+      <LanguageProvider>
+        <AppInner />
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }
