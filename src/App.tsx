@@ -5,6 +5,8 @@ import { ThemeProvider } from "./hooks/use-theme";
 import { LanguageProvider } from "./hooks/use-language";
 import { Layout } from "./components/layout/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { useUserTracker } from "./hooks/useUserTracker";
+import { useLocation } from "wouter";
 import Home          from "./pages/Home";
 import Portfolio     from "./pages/Portfolio";
 import Games         from "./pages/Games";
@@ -145,6 +147,10 @@ function AppInner() {
   const [sessionToken] = useState<string>(getOrCreateSessionToken);
   const [alert, setAlert] = useState<AlertState | null>(null);
   const [ban,   setBan]   = useState<BanState   | null>(null);
+
+  // ── Live user tracking — singleton heartbeat, survives all remounts ────
+  const [location] = useLocation();
+  useUserTracker(location);
 
   // ── Ban check on mount ────────────────────────────────────────────────────
   useEffect(() => {

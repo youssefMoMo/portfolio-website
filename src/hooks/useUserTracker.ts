@@ -1,314 +1,249 @@
 // src/hooks/useUserTracker.ts
-// ─── DIAGNOSTIC BUILD — verbose console logging on every step ─────────────────
-import { useEffect, useRef } from "react";
+//
+// ─── SINGLETON ARCHITECTURE ───────────────────────────────────────────────────
+// The tracker state lives at MODULE scope — completely outside React.
+// This means:
+//   • The heartbeat interval is NEVER cleared by component unmounts / remounts.
+//   • Route changes in wouter do not restart, re-init, or interrupt the loop.
+//   • Calling useUserTracker() from any component just updates the page ref.
+//   • The very first call immediately fires a DB write — no 30-second wait.
+//
+// HOW TO WIRE IT IN App.tsx (AppInner):
+//   import { useUserTracker } from "@/hooks/useUserTracker";
+//   import { useLocation } from "wouter";
+//   ...
+//   function AppInner() {
+//     const [location] = useLocation();
+//     useUserTracker(location);          // ← add this single line
+//     ...
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useEffect } from "react";
 import { supabase, isSupabaseEnabled } from "@/lib/supabase";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface GeoData {
-  country: string;
-}
-
-interface SessionMeta {
-  sessionToken: string;
-  country: string;
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const SESSION_KEY           = "youssef_session_token";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
-// ─── Geo providers ────────────────────────────────────────────────────────────
+// ─── Module-level singleton state ─────────────────────────────────────────────
+// These live for the entire browser session — no React lifecycle can touch them.
+let _token    : string  | null = null;   // session token (resolved once)
+let _country  : string  | null = null;   // geo country   (resolved once)
+let _page     : string         = "/";    // always the latest page
+let _ready    : boolean        = false;  // true after first DB write succeeds
+let _interval : ReturnType<typeof setInterval> | null = null;
+let _booted   : boolean        = false;  // ensures boot() runs exactly once
+
+// ─── Geo providers (tried in order) ──────────────────────────────────────────
 const GEO_PROVIDERS: Array<{
   url: string;
-  extract: (data: Record<string, unknown>) => GeoData | null;
+  extract: (d: Record<string, unknown>) => string | null;
 }> = [
   {
     url: "https://ipapi.co/json/",
-    extract(data) {
-      const country = String(data.country_name || "").trim();
-      if (!country || country === "undefined") return null;
-      return { country };
+    extract: (d) => {
+      const c = String(d.country_name || "").trim();
+      return c && c !== "undefined" ? c : null;
     },
   },
   {
     url: "https://ipwho.is/",
-    extract(data) {
-      if (!data.success) return null;
-      const country = String(data.country || "").trim();
-      if (!country) return null;
-      return { country };
+    extract: (d) => {
+      if (!d.success) return null;
+      const c = String(d.country || "").trim();
+      return c || null;
     },
   },
   {
     url: "http://ip-api.com/json/?fields=status,country",
-    extract(data) {
-      if (String(data.status) !== "success") return null;
-      const country = String(data.country || "").trim();
-      if (!country) return null;
-      return { country };
+    extract: (d) => {
+      if (String(d.status) !== "success") return null;
+      const c = String(d.country || "").trim();
+      return c || null;
     },
   },
 ];
 
-async function resolveGeoData(): Promise<GeoData> {
-  console.log("[Tracker Geo] Starting geo resolution, trying", GEO_PROVIDERS.length, "providers...");
-  for (const provider of GEO_PROVIDERS) {
+async function resolveCountry(): Promise<string> {
+  console.log("[Tracker Geo] Resolving country...");
+  for (const p of GEO_PROVIDERS) {
     try {
-      console.log("[Tracker Geo] Trying provider:", provider.url);
-      const controller = new AbortController();
-      const timeout    = setTimeout(() => controller.abort(), 4_000);
-      const res        = await fetch(provider.url, { signal: controller.signal, cache: "no-store" });
+      const ctrl    = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 4_000);
+      const res     = await fetch(p.url, { signal: ctrl.signal, cache: "no-store" });
       clearTimeout(timeout);
-      if (!res.ok) {
-        console.log("[Tracker Geo] Provider returned non-OK status:", res.status, provider.url);
-        continue;
+      if (!res.ok) continue;
+      const json    = (await res.json()) as Record<string, unknown>;
+      const country = p.extract(json);
+      if (country) {
+        console.log("[Tracker Geo] ✅ Country:", country, "via", p.url);
+        return country;
       }
-      const json = (await res.json()) as Record<string, unknown>;
-      const geo  = provider.extract(json);
-      if (geo && geo.country && geo.country !== "Unknown") {
-        console.log("[Tracker Geo] ✅ Resolved country:", geo.country, "via", provider.url);
-        return geo;
-      }
-      console.log("[Tracker Geo] Provider returned no usable country:", provider.url, json);
     } catch (err) {
-      console.log("[Tracker Geo] Provider threw:", provider.url, err);
+      console.log("[Tracker Geo] Provider failed:", p.url, err);
     }
   }
-  console.warn("[Tracker Geo] ⚠️ All geo providers failed — falling back to Unknown");
-  return { country: "Unknown" };
+  console.warn("[Tracker Geo] ⚠️ All providers failed — using Unknown");
+  return "Unknown";
 }
 
-// ─── UUID ─────────────────────────────────────────────────────────────────────
-function generateUUID(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-// ─── Session token ────────────────────────────────────────────────────────────
-function getOrCreateSessionToken(): { token: string; isNew: boolean } {
-  console.log("[Tracker Init] Checking token in localStorage (key:", SESSION_KEY, ")...");
+// ─── Token helper ─────────────────────────────────────────────────────────────
+function resolveToken(): string {
+  console.log("[Tracker Init] Checking localStorage for key:", SESSION_KEY);
   try {
-    const existing = localStorage.getItem(SESSION_KEY);
-    if (existing) {
-      console.log("[Tracker Init] ✅ Found existing token:", existing.slice(0, 8) + "...");
-      return { token: existing, isNew: false };
+    const stored = localStorage.getItem(SESSION_KEY);
+    if (stored && stored.trim()) {
+      console.log("[Tracker Init] ✅ Found existing token:", stored.slice(0, 8) + "...");
+      return stored.trim();
     }
-    const fresh = generateUUID();
-    localStorage.setItem(SESSION_KEY, fresh);
-    console.log("[Tracker Init] 🆕 Generated NEW token:", fresh.slice(0, 8) + "... → saved to localStorage");
-    return { token: fresh, isNew: true };
-  } catch (err) {
-    console.warn("[Tracker Init] ⚠️ localStorage unavailable (private mode?), generating ephemeral token. Error:", err);
-    return { token: generateUUID(), isNew: true };
-  }
-}
+  } catch { /* localStorage blocked */ }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-export function useUserTracker(currentPage: string) {
-  const sessionInfoRef = useRef<{ token: string; isNew: boolean }>(
-    getOrCreateSessionToken()
-  );
-
-  const metaRef        = useRef<SessionMeta | null>(null);
-  const currentPageRef = useRef<string>(currentPage);
-  const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const initialisedRef = useRef(false);
-
-  // Keep the page ref fresh on every navigation
-  useEffect(() => {
-    currentPageRef.current = currentPage;
-  }, [currentPage]);
-
-  // ── Hard INSERT — brand-new visitors only ─────────────────────────────────
-  async function hardInsertSession(page: string): Promise<void> {
-    console.log("[Tracker Status] isSupabaseEnabled:", isSupabaseEnabled);
-    if (!isSupabaseEnabled) {
-      console.error("[Tracker Error] ❌ Supabase is NOT enabled — check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY env vars!");
-      return;
-    }
-    if (!metaRef.current) {
-      console.error("[Tracker Error] ❌ hardInsertSession called but metaRef is null — geo not resolved yet");
-      return;
-    }
-
-    const now = new Date().toISOString();
-    console.log("[Tracker Ingest] 🚀 Triggering hard INSERT for token:", metaRef.current.sessionToken.slice(0, 8) + "...", "| page:", page, "| country:", metaRef.current.country, "| now:", now);
-
-    try {
-      const { data, error } = await supabase
-        .from("user_sessions")
-        .insert({
-          session_token: metaRef.current.sessionToken,
-          current_page:  page,
-          country:       metaRef.current.country,
-          last_seen:     now,
-          updated_at:    now,
-        })
-        .select();  // Forces PostgREST to return the row — confirms the write landed
-
-      if (error) {
-        if (error.code === "23505") {
-          // Row already exists — not fatal, heartbeat will refresh it
-          console.log("[Tracker Ingest] ℹ️ INSERT conflict (23505) — row already exists for this token. Will upsert instead.");
-          await upsertSession(page);
-        } else {
-          console.error("[Tracker Error] ❌ hard INSERT failed. Full error object:", JSON.stringify(error, null, 2));
-          console.error("[Tracker Error] error.message:", error.message, "| error.code:", error.code, "| error.details:", error.details, "| error.hint:", error.hint);
-        }
-      } else {
-        console.log("[Tracker Ingest] ✅ Hard INSERT succeeded. Returned row(s):", JSON.stringify(data, null, 2));
-      }
-    } catch (err) {
-      console.error("[Tracker Error] ❌ Catch block caught during hard INSERT:", err);
-      console.error("[Tracker Error] Stringified:", JSON.stringify(err, Object.getOwnPropertyNames(err as object)));
-    }
-  }
-
-  // ── Upsert — heartbeats and returning visitors ────────────────────────────
-  async function upsertSession(page: string): Promise<void> {
-    console.log("[Tracker Status] isSupabaseEnabled:", isSupabaseEnabled);
-    if (!isSupabaseEnabled) {
-      console.error("[Tracker Error] ❌ Supabase is NOT enabled — upsert aborted");
-      return;
-    }
-    if (!metaRef.current) {
-      console.warn("[Tracker Heartbeat] ⚠️ upsertSession called but metaRef is null — skipping");
-      return;
-    }
-
-    const now = new Date().toISOString();
-    console.log("[Tracker Heartbeat] 💓 Triggering upsert for token:", metaRef.current.sessionToken.slice(0, 8) + "...", "| page:", page, "| now:", now);
-
-    try {
-      const { data, error } = await supabase
-        .from("user_sessions")
-        .upsert(
-          {
-            session_token: metaRef.current.sessionToken,
-            current_page:  page,
-            country:       metaRef.current.country,
-            last_seen:     now,
-            updated_at:    now,
-          },
-          { onConflict: "session_token" }
-        )
-        .select();  // Confirms the upsert actually wrote to the DB
-
-      if (error) {
-        console.error("[Tracker Error] ❌ Upsert failed. Full error object:", JSON.stringify(error, null, 2));
-        console.error("[Tracker Error] error.message:", error.message, "| error.code:", error.code, "| error.details:", error.details, "| error.hint:", error.hint);
-      } else {
-        console.log("[Tracker Heartbeat] ✅ Upsert succeeded. Returned row(s):", JSON.stringify(data, null, 2));
-      }
-    } catch (err) {
-      console.error("[Tracker Error] ❌ Catch block caught during upsert:", err);
-      console.error("[Tracker Error] Stringified:", JSON.stringify(err, Object.getOwnPropertyNames(err as object)));
-    }
-  }
-
-  // ── Init once: geo → first write → heartbeat ─────────────────────────────
-  useEffect(() => {
-    if (initialisedRef.current) {
-      console.log("[Tracker Init] ⏩ Already initialised — skipping duplicate mount");
-      return;
-    }
-    initialisedRef.current = true;
-
-    console.log("[Tracker Init] 🟢 Mount on page:", currentPage);
-    console.log("[Tracker Init] Token info:", {
-      token: sessionInfoRef.current.token.slice(0, 8) + "...",
-      isNew: sessionInfoRef.current.isNew,
-    });
-
-    let cancelled = false;
-
-    async function init() {
-      try {
-        const geo = await resolveGeoData();
-        if (cancelled) {
-          console.log("[Tracker Init] Component unmounted before geo resolved — aborting init");
-          return;
-        }
-
-        metaRef.current = {
-          sessionToken: sessionInfoRef.current.token,
-          country:      geo.country,
-        };
-
-        console.log("[Tracker Init] Meta ready:", {
-          token:   metaRef.current.sessionToken.slice(0, 8) + "...",
-          country: metaRef.current.country,
-          isNew:   sessionInfoRef.current.isNew,
+  // Generate fresh
+  const fresh =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
         });
 
-        // New visitor → hard INSERT; returning visitor → upsert to refresh timestamps
-        if (sessionInfoRef.current.isNew) {
-          console.log("[Tracker Init] 🆕 New visitor path → hard INSERT");
-          await hardInsertSession(currentPageRef.current);
-        } else {
-          console.log("[Tracker Init] 🔄 Returning visitor path → upsert to refresh last_seen");
-          await upsertSession(currentPageRef.current);
-        }
+  try { localStorage.setItem(SESSION_KEY, fresh); } catch { /* ignore */ }
+  console.log("[Tracker Init] 🆕 New token generated:", fresh.slice(0, 8) + "...");
+  return fresh;
+}
 
-        if (cancelled) return;
+// ─── Core DB write ────────────────────────────────────────────────────────────
+// Single function handles both INSERT (new) and UPSERT (returning).
+// Always called with the latest _page and _country values from module scope.
+async function pushSession(reason: string): Promise<void> {
+  if (!isSupabaseEnabled) {
+    console.error("[Tracker Error] ❌ isSupabaseEnabled is false — env vars missing?");
+    return;
+  }
+  if (!_token) {
+    console.error("[Tracker Error] ❌ pushSession called before token resolved");
+    return;
+  }
 
-        console.log("[Tracker Init] ⏰ Starting heartbeat every", HEARTBEAT_INTERVAL_MS / 1000, "s");
-        heartbeatTimer.current = setInterval(() => {
-          console.log("[Tracker Heartbeat] ⏰ Interval fired — page:", currentPageRef.current);
-          upsertSession(currentPageRef.current);
-        }, HEARTBEAT_INTERVAL_MS);
+  const now = new Date().toISOString();
+  const country = _country ?? "Unknown";
 
-      } catch (err) {
-        console.error("[Tracker Error] ❌ Catch block caught during init:", err);
-        console.error("[Tracker Error] Stringified:", JSON.stringify(err, Object.getOwnPropertyNames(err as object)));
-      }
+  console.log(
+    `[Tracker Push] (${reason}) token: ${_token.slice(0, 8)}... | page: ${_page} | country: ${country} | now: ${now}`
+  );
+
+  try {
+    const { data, error } = await supabase
+      .from("user_sessions")
+      .upsert(
+        {
+          session_token: _token,
+          current_page:  _page,
+          country,
+          last_seen:     now,
+          updated_at:    now,
+        },
+        { onConflict: "session_token" }
+      )
+      .select();   // forces PostgREST to confirm the write returned data
+
+    if (error) {
+      console.error(
+        "[Tracker Error] ❌ DB write failed:",
+        error.message,
+        "| code:", error.code,
+        "| details:", error.details,
+        "| hint:", error.hint,
+        "| full:", JSON.stringify(error, null, 2)
+      );
+    } else {
+      _ready = true;
+      console.log(
+        `[Tracker Push] ✅ (${reason}) success — row:`,
+        JSON.stringify(data, null, 2)
+      );
     }
+  } catch (err) {
+    console.error(
+      "[Tracker Error] ❌ Exception during DB write:",
+      err,
+      JSON.stringify(err, Object.getOwnPropertyNames(err as object))
+    );
+  }
+}
 
-    init();
+// ─── Heartbeat loop ───────────────────────────────────────────────────────────
+// Starts once, runs forever. Never re-created, never cleared by React.
+function startHeartbeat(): void {
+  if (_interval !== null) return;  // already running
+  console.log("[Tracker Init] ⏰ Starting heartbeat every", HEARTBEAT_INTERVAL_MS / 1000, "s");
+  _interval = setInterval(() => {
+    console.log("[Tracker Heartbeat] ⏰ Interval fired — page:", _page);
+    pushSession("heartbeat");
+  }, HEARTBEAT_INTERVAL_MS);
+}
 
-    const handleUnload = () => {
-      if (!metaRef.current) return;
-      console.log("[Tracker Unload] Tab closing — sending beacon for token:", metaRef.current.sessionToken.slice(0, 8) + "...");
-      try {
-        navigator.sendBeacon("/api/session-end?token=" + metaRef.current.sessionToken);
-        supabase
-          .from("user_sessions")
-          .delete()
-          .eq("session_token", metaRef.current.sessionToken)
-          .then(() => {});
-      } catch {
-        // unload errors are expected
-      }
-    };
+// ─── Boot — runs exactly once per browser session ─────────────────────────────
+async function boot(): Promise<void> {
+  if (_booted) return;
+  _booted = true;
 
-    window.addEventListener("beforeunload", handleUnload);
+  console.log("[Tracker Init] 🟢 BOOT START");
+  console.log("[Tracker Status] isSupabaseEnabled:", isSupabaseEnabled);
 
-    return () => {
-      cancelled = true;
-      if (heartbeatTimer.current) {
-        clearInterval(heartbeatTimer.current);
-        console.log("[Tracker Cleanup] Heartbeat cleared");
-      }
-      window.removeEventListener("beforeunload", handleUnload);
-      console.log("[Tracker Cleanup] Event listener removed");
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // 1. Resolve token synchronously from localStorage
+  _token = resolveToken();
 
-  // ── Page-change: immediately push new page on navigation ─────────────────
+  // 2. Fire the FIRST write immediately with whatever country we have (Unknown)
+  //    so the row hits the DB right now, not after the geo round-trip.
+  console.log("[Tracker Init] Firing immediate cold-start push (country=Unknown placeholder)...");
+  await pushSession("cold-start");
+
+  // 3. Resolve country async, then push again with the real value
+  _country = await resolveCountry();
+  console.log("[Tracker Init] Country resolved — pushing updated row...");
+  await pushSession("geo-update");
+
+  // 4. Start the heartbeat loop (survives all remounts)
+  startHeartbeat();
+
+  // 5. Best-effort cleanup on tab close
+  window.addEventListener("beforeunload", () => {
+    if (!_token) return;
+    console.log("[Tracker Unload] Sending beacon for token:", _token.slice(0, 8) + "...");
+    try {
+      navigator.sendBeacon("/api/session-end?token=" + _token);
+      // Fire-and-forget delete (may not complete before unload — that's OK)
+      supabase.from("user_sessions").delete().eq("session_token", _token).then(() => {});
+    } catch { /* expected on unload */ }
+  });
+
+  console.log("[Tracker Init] 🏁 BOOT COMPLETE");
+}
+
+// ─── Exported hook ────────────────────────────────────────────────────────────
+// Call this once inside AppInner with the current wouter location.
+// It is safe to call from any depth — boot() is idempotent.
+export function useUserTracker(currentPage: string): void {
+  // Always keep the module-level page ref in sync — the heartbeat closure
+  // reads _page directly so it never captures a stale route.
+  _page = currentPage;
+
   useEffect(() => {
-    if (!metaRef.current) {
-      console.log("[Tracker Nav] Page changed to", currentPage, "but geo not ready yet — heartbeat will catch it");
+    // Boot the singleton (no-op on every call after the first)
+    boot();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // On every page navigation, push immediately so the admin sees the new
+  // route in real time — the heartbeat alone would take up to 30 s.
+  useEffect(() => {
+    _page = currentPage;
+    if (!_ready) {
+      // Boot hasn't finished yet — boot() will push the correct page anyway
+      console.log("[Tracker Nav] Page changed to", currentPage, "— boot still in progress, skipping immediate push");
       return;
     }
-    console.log("[Tracker Nav] 📍 Page changed to:", currentPage, "— pushing update immediately");
-    upsertSession(currentPage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
+    console.log("[Tracker Nav] 📍 Page changed to:", currentPage, "— pushing immediately");
+    pushSession("page-change");
+  }, [currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
 }
