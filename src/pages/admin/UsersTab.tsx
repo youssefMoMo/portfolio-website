@@ -40,7 +40,7 @@ const SAFE_SELECT = [
 // Heartbeat fires every 30 s → 90 s = 3 missed heartbeats of grace period.
 // This is timezone-safe: both Date.now() and new Date(isoUTC).getTime()
 // return UTC epoch milliseconds, so no Cairo / UTC offset problem exists.
-const ACTIVE_THRESHOLD_MS = 300_000; // 5 minutes
+const ACTIVE_THRESHOLD_MS = 600_000; // 10 minutes — generous window for timestamp skew
 
 // ─── useNow — ticks every 15 s so active dots repaint without a full fetch ────
 function useNow(intervalMs = 15_000): number {
@@ -54,14 +54,30 @@ function useNow(intervalMs = 15_000): number {
 
 // ─── Active check (pure, deterministic) ──────────────────────────────────────
 function checkActive(session: Session, nowMs: number): boolean {
+  // DIAGNOSTIC: log every active check so we can see exact ms delta in console
   // Use the more recent of last_seen / updated_at so a heartbeat that only
   // touches updated_at still keeps the user green.
-  const ts = Math.max(
-    session.last_seen  ? new Date(session.last_seen ).getTime() : 0,
-    session.updated_at ? new Date(session.updated_at).getTime() : 0,
-  );
-  if (!ts) return false;
-  return nowMs - ts < ACTIVE_THRESHOLD_MS;
+  const lsMs = session.last_seen  ? new Date(session.last_seen ).getTime() : 0;
+  const uaMs = session.updated_at ? new Date(session.updated_at).getTime() : 0;
+  const ts   = Math.max(lsMs, uaMs);
+  if (!ts) {
+    console.warn("[UsersTab checkActive] token", session.session_token.slice(0,8), "has NO timestamps — marking inactive");
+    return false;
+  }
+  const deltaMs = nowMs - ts;
+  const active  = deltaMs < ACTIVE_THRESHOLD_MS;
+  // Log only borderline cases (within 2× the threshold) to avoid spam
+  if (deltaMs < ACTIVE_THRESHOLD_MS * 2) {
+    console.log(
+      "[UsersTab checkActive] token", session.session_token.slice(0,8),
+      "| last_seen:", session.last_seen,
+      "| updated_at:", session.updated_at,
+      "| deltaMs:", deltaMs,
+      "| threshold:", ACTIVE_THRESHOLD_MS,
+      "| ACTIVE:", active
+    );
+  }
+  return active;
 }
 
 // ─── Country flags ────────────────────────────────────────────────────────────
@@ -396,10 +412,25 @@ export default function UsersTab() {
         .limit(200);
 
       if (qErr) {
+        console.error("[UsersTab fetch] ❌ Query error:", JSON.stringify(qErr, null, 2));
         setError("Could not load sessions: " + qErr.message);
         setSessions([]);
       } else {
-        setSessions((data || []) as unknown as Session[]);
+        const rows = (data || []) as unknown as Session[];
+        const nowMs = Date.now();
+        const activeCount = rows.filter(s => {
+          const ts = Math.max(
+            s.last_seen  ? new Date(s.last_seen ).getTime() : 0,
+            s.updated_at ? new Date(s.updated_at).getTime() : 0,
+          );
+          return ts && (nowMs - ts) < ACTIVE_THRESHOLD_MS;
+        }).length;
+        console.log("[UsersTab fetch] ✅ Loaded", rows.length, "sessions |", activeCount, "active | threshold:", ACTIVE_THRESHOLD_MS, "ms");
+        if (rows.length > 0) {
+          const sample = rows[0];
+          console.log("[UsersTab fetch] Sample row[0] — token:", sample.session_token.slice(0,8), "| last_seen:", sample.last_seen, "| updated_at:", sample.updated_at, "| age ms:", nowMs - new Date(sample.updated_at || sample.last_seen).getTime());
+        }
+        setSessions(rows);
       }
     } catch (err: unknown) {
       setError("Failed to connect: " + (err instanceof Error ? err.message : "Unknown error"));
