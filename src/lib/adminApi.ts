@@ -314,7 +314,7 @@ export const reviewsApi = {
 
   update: async (
     id: string,
-    data: Partial<Pick<Review, "name" | "text" | "rating" | "project_type">>
+    data: Partial<Pick<Review, "name" | "text" | "rating" | "project_type" | "date" | "verified" | "featured" | "avatar">>
   ): Promise<void> => {
     const { error } = await supabase
       .from("reviews")

@@ -204,27 +204,6 @@ console.error = new Proxy(console.error, {
   },
 } as ProxyHandler<typeof console.error>);
 
-// ─── Scroll performance class ─────────────────────────────────────────────────
-// Injects `.is-scrolling` on <body> while the user scrolls, which allows
-// index.css to pause heavy animations (stars, nebula, marquees) via
-// `animation-play-state: paused` — minimising repaints during scroll events.
-// Uses a passive listener so the browser can optimise touch scrolling freely.
-{
-  let _scrollTimer: ReturnType<typeof setTimeout> | null = null;
-
-  window.addEventListener(
-    "scroll",
-    () => {
-      document.body.classList.add("is-scrolling");
-      if (_scrollTimer !== null) clearTimeout(_scrollTimer);
-      _scrollTimer = setTimeout(() => {
-        document.body.classList.remove("is-scrolling");
-        _scrollTimer = null;
-      }, 150);
-    },
-    { passive: true }
-  );
-}
 
 // ─── App mounting ─────────────────────────────────────────────────────────────
 // Fail loudly with a clear message if #root is missing rather than crashing

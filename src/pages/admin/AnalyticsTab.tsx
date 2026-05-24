@@ -41,7 +41,7 @@ function Stars({ rating }: { rating: number }) {
   return (
     <span className="flex gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
-        <Star key={i} className={`w-3.5 h-3.5 ${i <= rating ? "fill-yellow-400 text-yellow-400" : "fill-muted text-muted"}`} />
+        <Star key={i} className={`w-3.5 h-3.5 ${i <= rating ? "fill-yellow-400 text-yellow-400" : "fill-neutral-400 text-neutral-500"}`} />
       ))}
     </span>
   );
@@ -57,8 +57,8 @@ export default function AnalyticsTab() {
     try {
       const res = await analyticsApi.get();
       setData(res);
-    } catch (err: any) {
-      toast({ title: "❌ Failed to load analytics", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "❌ Failed to load analytics", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setLoading(false);
     }

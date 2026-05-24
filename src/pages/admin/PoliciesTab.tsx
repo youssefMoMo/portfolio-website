@@ -158,7 +158,9 @@ export default function PoliciesTab() {
     try {
       // Re-apply display_order from current array position
       const ordered = faqs.map((f, i) => ({ ...f, display_order: i, is_published: true }));
-      const result = await saveContent("faqs", { items: ordered } as FaqsContent);
+      // Explicit typed variable — no unsafe cast needed since FaqsContent = { items: FaqItem[] }
+      const faqsPayload: FaqsContent = { items: ordered };
+      const result = await saveContent("faqs", faqsPayload);
       if (result.ok === false) throw new Error((result as any).error ?? "Save failed");
       setFaqs(ordered); // sync local state with saved order
       toast({ title: "✅ FAQs saved", description: "Live on the public Pricing & FAQ pages." });
@@ -297,8 +299,8 @@ export default function PoliciesTab() {
                     <AccordionRow
                       header={f.question || <span className="italic text-muted-foreground">Untitled question</span>}
                       onDelete={() => deleteFaq(i)}
-                      onMoveUp={() => setFaqs(a => moveItem(a, i, -1))}
-                      onMoveDown={() => setFaqs(a => moveItem(a, i, 1))}
+                      onMoveUp={() => setFaqs(prev => moveItem(prev, i, -1).map((f, idx) => ({ ...f, display_order: idx })))}
+                      onMoveDown={() => setFaqs(prev => moveItem(prev, i, 1).map((f, idx) => ({ ...f, display_order: idx })))}
                       disableUp={i === 0}
                       disableDown={i === faqs.length - 1}
                     >

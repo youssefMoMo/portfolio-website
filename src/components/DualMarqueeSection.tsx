@@ -117,6 +117,8 @@ function MarqueeRow({
           animationPlayState: running ? "running" : "paused",
           willChange: "transform",
           transform: "translate3d(0, 0, 0)",
+          backfaceVisibility: "hidden",
+          WebkitBackfaceVisibility: "hidden",
         }}
       >
         {children}
@@ -182,7 +184,7 @@ function ReviewCard({ review }: { review: Review }) {
           <Star
             key={i}
             className={`w-3.5 h-3.5 flex-shrink-0 ${
-              i < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-muted text-muted"
+              i < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-neutral-300 text-neutral-300 dark:fill-neutral-600 dark:text-neutral-600"
             }`}
           />
         ))}

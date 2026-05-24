@@ -67,9 +67,9 @@ const EMPTY_FORM: ReviewFormData = {
   project_type: "UI Design",
   avatar: "",
   date: new Date().toISOString().split("T")[0],
-  approved: true,
+  approved: false,   // new reviews start as pending — admin must explicitly approve
   featured: false,
-  verified: true,
+  verified: false,
 };
 
 function ReviewFormPanel({
@@ -202,7 +202,7 @@ function Stars({ rating }: { rating: number }) {
   return (
     <span className="flex gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
-        <Star key={i} className={`w-3.5 h-3.5 ${i <= rating ? "fill-yellow-400 text-yellow-400" : "text-muted"}`} />
+        <Star key={i} className={`w-3.5 h-3.5 ${i <= rating ? "fill-yellow-400 text-yellow-400" : "fill-neutral-300 text-neutral-400 dark:fill-neutral-600 dark:text-neutral-600"}`} />
       ))}
     </span>
   );
@@ -221,8 +221,8 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
       await reviewsApi[action](review.id);
       toast({ title: action === "approve" ? "✅ Approved" : action === "reject" ? "🚫 Rejected" : "🗑️ Deleted" });
       onAction();
-    } catch (e: any) {
-      toast({ title: "❌ Error", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "❌ Error", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setBusy(null);
     }
@@ -234,8 +234,8 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
       await reviewsApi.pin(review.id, !review.featured);
       toast({ title: review.featured ? "📌 Unpinned" : "📌 Pinned to top" });
       onAction();
-    } catch (e: any) {
-      toast({ title: "❌ Error", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "❌ Error", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setBusy(null);
     }
@@ -244,17 +244,23 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
   const handleEditSave = async (data: ReviewFormData) => {
     setBusy("edit");
     try {
+      // Build avatar value: trim whitespace; empty string → omit the key entirely
+      const avatarVal = data.avatar?.trim() || undefined;
       await reviewsApi.update(review.id, {
         name: data.name,
         text: data.text,
         rating: data.rating,
         project_type: data.project_type,
+        date: data.date,
+        verified: data.verified,
+        featured: data.featured,
+        ...(avatarVal !== undefined ? { avatar: avatarVal } : {}),
       });
       toast({ title: "✅ Updated" });
       setEditing(false);
       onAction();
-    } catch (e: any) {
-      toast({ title: "❌ Error", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "❌ Error", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setBusy(null);
     }
@@ -375,8 +381,8 @@ export default function ReviewsTab() {
     try {
       const data = await reviewsApi.list(filter, page);
       setReviews(Array.isArray(data) ? data : []);
-    } catch (e: any) {
-      toast({ title: "❌ Failed to load reviews", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "❌ Failed to load reviews", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -392,8 +398,8 @@ export default function ReviewsTab() {
       toast({ title: "✅ Review created", description: data.approved ? "Live on public site" : "Saved as pending" });
       setShowCreate(false);
       load();
-    } catch (e: any) {
-      toast({ title: "❌ Failed to create", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "❌ Failed to create", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     }
   };
 

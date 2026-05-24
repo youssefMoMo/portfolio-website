@@ -26,6 +26,15 @@ interface GamesRow {
 
 const GAMES_CACHE = "yd_games_v3";
 
+// ── Place ID validation ────────────────────────────────────────────────────────
+// Roblox place IDs are large numeric identifiers.
+// We accept 7–18 digits to cover both old short IDs and modern long ones.
+const PLACE_ID_RE = /^\d{7,18}$/;
+
+function isValidPlaceId(id: string): boolean {
+  return PLACE_ID_RE.test(id.trim());
+}
+
 export default function GamesTab() {
   const { toast }              = useToast();
   const [games, setGames]       = useState<GamesRow[]>([]);
@@ -66,13 +75,28 @@ export default function GamesTab() {
   };
 
   const handleSave = async () => {
-    if (!form.place_id.trim()) { toast({ title: "❌ Place ID required", variant: "destructive" }); return; }
-    if (!isSupabaseEnabled || !supabase) { toast({ title: "❌ Supabase not connected", variant: "destructive" }); return; }
+    const trimmedId = form.place_id.trim();
+
+    if (!trimmedId) {
+      toast({ title: "❌ Place ID required", variant: "destructive" });
+      return;
+    }
+    if (!isValidPlaceId(trimmedId)) {
+      toast({
+        title: "❌ Invalid Place ID",
+        description: "Place ID must be a numeric Roblox ID (7–18 digits).",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!isSupabaseEnabled || !supabase) {
+      toast({ title: "❌ Supabase not connected", variant: "destructive" });
+      return;
+    }
     setSaving(true);
-    localStorage.removeItem(GAMES_CACHE);
 
     const payload = {
-      place_id: form.place_id.trim(),
+      place_id: trimmedId,
       name: form.name.trim() || "Roblox Game",
       creator: form.creator.trim() || "LightOn Games",
       display_order: form.display_order,
@@ -88,6 +112,8 @@ export default function GamesTab() {
     if (error) {
       toast({ title: "❌ Save failed", description: error.message, variant: "destructive" });
     } else {
+      // Clear cache ONLY on success so stale data is never left behind
+      localStorage.removeItem(GAMES_CACHE);
       toast({ title: editingId ? "✅ Game updated" : "✅ Game added", description: "Live on Games page!" });
       resetForm();
       await loadGames();
@@ -98,54 +124,91 @@ export default function GamesTab() {
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"?`)) return;
     if (!supabase) return;
-    localStorage.removeItem(GAMES_CACHE);
-    const { error } = await supabase.from("games").delete().eq("id", id);
-    if (error) {
-      toast({ title: "❌ Delete failed", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      const { error } = await supabase.from("games").delete().eq("id", id);
+      if (error) throw error;
+      // Clear cache only after confirmed success
+      localStorage.removeItem(GAMES_CACHE);
       toast({ title: "✅ Deleted" });
       await loadGames();
+    } catch (e: unknown) {
+      toast({
+        title: "❌ Delete failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
     }
   };
 
   const handleTogglePublish = async (game: GamesRow) => {
     if (!supabase) return;
-    localStorage.removeItem(GAMES_CACHE);
-    await supabase.from("games").update({ is_published: !game.is_published }).eq("id", game.id);
-    await loadGames();
+    try {
+      const { error } = await supabase
+        .from("games")
+        .update({ is_published: !game.is_published })
+        .eq("id", game.id);
+      if (error) throw error;
+      // Clear cache only after confirmed success
+      localStorage.removeItem(GAMES_CACHE);
+      await loadGames();
+    } catch (e: unknown) {
+      toast({
+        title: "❌ Publish toggle failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleRefreshRoblox = async (game: GamesRow) => {
     toast({ title: "🔄 Syncing from Roblox…" });
     try {
-      const placeRes = await fetch(`https://games.roblox.com/v1/games/multiget-place-details?placeIds=${game.place_id}`);
-      const placeData = await placeRes.json();
-      if (!Array.isArray(placeData) || !placeData[0]) throw new Error("No data from Roblox");
-      const uid = String(placeData[0].universeId ?? "");
-      const updates: Record<string, unknown> = { universe_id: uid, updated_at: new Date().toISOString() };
+      // FIXED: Use the correct Roblox universe lookup endpoint.
+      // The old `multiget-place-details` endpoint's payload lacks `universeId`.
+      // The canonical route is `/universes/v1/places/{placeId}/universe`.
+      const universeRes = await fetch(
+        `https://apis.roblox.com/universes/v1/places/${game.place_id}/universe`
+      );
+      if (!universeRes.ok) throw new Error(`Universe lookup failed: ${universeRes.status}`);
+      const universeData = await universeRes.json() as { universeId?: number };
 
-      if (uid) {
-        const [iconRes, infoRes] = await Promise.all([
-          fetch(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${uid}&returnPolicy=PlaceHolder&size=512x512&format=Png`),
-          fetch(`https://games.roblox.com/v1/games?universeIds=${uid}`),
-        ]);
-        const iconData = await iconRes.json();
-        const infoData = await infoRes.json();
-        if (iconData?.data?.[0]?.imageUrl) updates.icon_url = iconData.data[0].imageUrl;
-        if (infoData?.data?.[0]) {
-          updates.visits = infoData.data[0].visits ?? game.visits;
-          if (infoData.data[0].name && game.name === "Roblox Game") updates.name = infoData.data[0].name;
+      const uid = universeData.universeId ? String(universeData.universeId) : "";
+      if (!uid) throw new Error("Could not resolve universeId from place ID");
+
+      const updates: Record<string, unknown> = {
+        universe_id: uid,
+        updated_at: new Date().toISOString(),
+      };
+
+      const [iconRes, infoRes] = await Promise.all([
+        fetch(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${uid}&returnPolicy=PlaceHolder&size=512x512&format=Png`),
+        fetch(`https://games.roblox.com/v1/games?universeIds=${uid}`),
+      ]);
+      const iconData = await iconRes.json() as { data?: { imageUrl?: string }[] };
+      const infoData = await infoRes.json() as { data?: { visits?: number; name?: string }[] };
+
+      if (iconData?.data?.[0]?.imageUrl) updates.icon_url = iconData.data[0].imageUrl;
+      if (infoData?.data?.[0]) {
+        updates.visits = infoData.data[0].visits ?? game.visits;
+        if (infoData.data[0].name && game.name === "Roblox Game") {
+          updates.name = infoData.data[0].name;
         }
       }
 
       if (supabase) {
-        await supabase.from("games").update(updates).eq("id", game.id);
+        const { error } = await supabase.from("games").update(updates).eq("id", game.id);
+        if (error) throw error;
+        // Clear cache only after a successful write
         localStorage.removeItem(GAMES_CACHE);
         await loadGames();
         toast({ title: "✅ Synced!" });
       }
-    } catch {
-      toast({ title: "❌ Sync failed", variant: "destructive" });
+    } catch (e: unknown) {
+      toast({
+        title: "❌ Sync failed",
+        description: e instanceof Error ? e.message : "Roblox API error",
+        variant: "destructive",
+      });
     }
   };
 
@@ -181,8 +244,13 @@ export default function GamesTab() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Place ID <span className="text-red-400">*</span></label>
-                  <Input value={form.place_id} onChange={(e) => setForm((f) => ({ ...f, place_id: e.target.value.replace(/\D/g, "") }))} placeholder="e.g. 111021125092689" className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10 font-mono text-sm" />
-                  <p className="text-[10px] text-muted-foreground">From: roblox.com/games/<strong>ID</strong>/game-name</p>
+                  <Input
+                    value={form.place_id}
+                    onChange={(e) => setForm((f) => ({ ...f, place_id: e.target.value.replace(/\D/g, "") }))}
+                    placeholder="e.g. 12345678901234567"
+                    className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10 font-mono text-sm"
+                  />
+                  <p className="text-[10px] text-muted-foreground">From: roblox.com/games/<strong>ID</strong>/game-name (7–18 digits)</p>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Game Name (optional — auto from Roblox)</label>
@@ -265,7 +333,7 @@ export default function GamesTab() {
           <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/15 text-xs text-cyan-300/80 space-y-1">
             <p className="font-semibold text-cyan-300">How it works:</p>
             <p>· Add a Place ID → game appears on the Games page immediately</p>
-            <p>· Click 🔄 to sync icon, name & visits from Roblox API</p>
+            <p>· Click 🔄 to sync icon, name &amp; visits from Roblox API</p>
             <p>· Toggle publish/hide without deleting</p>
           </div>
         </CardContent>

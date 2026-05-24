@@ -104,8 +104,10 @@ function timeAgo(iso: string | null | undefined): string {
 }
 
 // ─── Payload sanitiser ────────────────────────────────────────────────────────
+// SANITIZATION: Use .trim() only — the old regex /^\.+/ stripped literal
+// leading dots (e.g. "..." or ".hidden") which are valid message content.
 function sanitisePayloadString(raw: string, maxLen = 500): string {
-  return raw.trim().slice(0, maxLen).replace(/^\.+/, "");
+  return raw.trim().slice(0, maxLen);
 }
 
 // ─── Feedback flash ───────────────────────────────────────────────────────────
@@ -371,6 +373,19 @@ function LegendItem({ dot, label }: { dot: string; label: string }) {
 }
 
 // ─── Main UsersTab ─────────────────────────────────────────────────────────────
+// Memoize SessionCard so that the 15-second useNow tick only causes a re-render
+// for cards whose *active status* actually flipped — not for all 200 cards.
+// The comparator re-renders only when: session data changed OR isActive changed.
+const SessionCardMemo = React.memo(
+  SessionCard,
+  (prev, next) => {
+    if (prev.session !== next.session) return false; // data changed → re-render
+    const prevActive = checkActive(prev.session, prev.nowMs);
+    const nextActive = checkActive(next.session, next.nowMs);
+    return prevActive === nextActive; // only re-render when activity flips
+  }
+);
+
 export default function UsersTab() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -570,7 +585,7 @@ export default function UsersTab() {
       ) : (
         <div className="space-y-2">
           {filtered.map((s) => (
-            <SessionCard
+            <SessionCardMemo
               key={s.id}
               session={s}
               nowMs={nowMs}

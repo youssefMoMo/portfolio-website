@@ -961,24 +961,7 @@ body.is-scrolling .shooting-star {
    DualMarqueeSection.tsx uses marquee-left / marquee-right (defined in its
    embedded <style> tag) — keeping these dead keyframes was dead code. */
 
-/* Pause marquee while user is scrolling (avoids jank).
-   Selectors match the animation names used in DualMarqueeSection.tsx:
-   `marquee-left` and `marquee-right` (injected via the style prop). */
-body.is-scrolling [style*="marquee-left"],
-body.is-scrolling [style*="marquee-right"] {
-  animation-play-state: paused !important;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   SCROLL PERFORMANCE — broad animation pause during active scroll
-   Activated by the passive scroll listener in main.tsx which adds
-   .is-scrolling to <body> and clears it via 150 ms debounce.
-   ═══════════════════════════════════════════════════════════════ */
-body.is-scrolling .stars-layer,
-body.is-scrolling .nebula,
-body.is-scrolling .shooting-star,
-body.is-scrolling .light-gradient-1,
-body.is-scrolling .light-gradient-2,
-body.is-scrolling [class*="animate-"] {
-  animation-play-state: paused !important;
-}
+/* NOTE: marquee animations intentionally run uninterrupted during scroll.
+   The body.is-scrolling [style*="marquee-*"] pause rules have been removed —
+   hardware-accelerated translate3d marquees don't cause layout thrashing
+   and must never freeze mid-scroll (per UX spec). */
