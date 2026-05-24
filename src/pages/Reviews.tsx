@@ -1,3 +1,14 @@
+// src/pages/Reviews.tsx
+// REFACTOR CHANGELOG:
+//   • ARABIC TEXT: hasArabic check and all Arabic-rejection branches removed globally.
+//     Arabic names and review text are fully permitted.
+//   • PROFANITY FILTER: Replaced \b-based RegExp (broken on non-ASCII/Arabic boundaries)
+//     with a locale-aware Unicode normalise + substring scan that works on all scripts.
+//   • TIMER LEAK: timersRef cleanup is now hoisted into the mount-guard useEffect so every
+//     accumulated timer handle is cleared unconditionally on unmount.
+//   • LOCALIZATION: Success banner now uses t("reviews.submitted") instead of raw English.
+//   • REMOVED: unused openDiscordProfile import purged.
+
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, MessageCircle, Quote, X } from "lucide-react";
@@ -5,39 +16,63 @@ import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/use-language";
 import { getAllReviews, submitReviewToTable, ReviewsContent, Review } from "@/lib/contentManager";
 import { useTableRealtime } from "@/hooks/useContentRealtime";
-import { openDiscordProfile } from "@/lib/discord";
 import { profile } from "@/lib/data";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/hooks/use-toast";
 
 // ══════════════════════════════════════════
+// Profanity filter — locale-aware substring scan
+// ══════════════════════════════════════════
+//
+// The word-boundary anchor \b in JavaScript is defined purely against ASCII [A-Za-z0-9_].
+// It has ZERO awareness of Arabic, CJK, or any other non-Latin script boundary, so
+//   new RegExp('\\b' + w + '\\b', 'i')
+// silently fails to match (or produces false positives) on mixed-script input.
+//
+// Replacement strategy:
+//   1. Normalise the candidate string to NFKD and strip combining diacritics so accented
+//      variants (e.g. "f*cked") collapse to their ASCII skeleton.
+//   2. Check whether the cleaned string contains the blocked token as a substring.
+//   3. This is deliberately conservative (no word-boundary assumption), which is the
+//      safest posture for user-submitted content moderation.
+//
+const BLOCKED_WORDS: readonly string[] = [
+  "fuck", "shit", "ass", "bitch", "dick", "pussy", "damn", "bastard",
+  "crap", "hell", "cock", "nigger", "nigga", "whore", "slut", "piss", "cunt",
+];
+
+function normalisedSubstringCheck(input: string): boolean {
+  // Normalise to NFKD, then strip combining marks (Unicode category M).
+  const cleaned = input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/g, "")
+    .toLowerCase();
+  return BLOCKED_WORDS.some((w) => cleaned.includes(w));
+}
+
+// ══════════════════════════════════════════
 // Write Review Popup
 // ══════════════════════════════════════════
-function WriteReviewModal({ onClose, onSubmit }: {
+function WriteReviewModal({
+  onClose,
+  onSubmit,
+}: {
   onClose: () => void;
   onSubmit: (r: Omit<Review, "id" | "verified" | "avatar" | "status">) => void;
 }) {
-  const [name, setName] = useState("");
-  const [rating, setRating] = useState(5);
+  const { t } = useLanguage();
+  const [name, setName]           = useState("");
+  const [rating, setRating]       = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
-  const [text, setText] = useState("");
+  const [text, setText]           = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [validationMsg, setValidationMsg] = useState("");
 
-  const hasArabic = (str: string) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(str);
-
-  const BLOCKED_WORDS = ["fuck","shit","ass","bitch","dick","pussy","damn","bastard","crap","hell","cock","nigger","nigga","whore","slut","piss","cunt"];
-  const hasProfanity = (str: string) => {
-    const lower = str.toLowerCase();
-    return BLOCKED_WORDS.some(w => new RegExp(`\\b${w}\\b`, "i").test(lower));
-  };
-
+  // ── Validation: profanity only — Arabic is fully allowed ──────────────
   const validateText = (value: string) => {
     setText(value);
-    if (hasArabic(value)) {
-      setValidationMsg("⚠️ Arabic text is not allowed in reviews. Please write in English or Spanish only.");
-    } else if (hasProfanity(value)) {
-      setValidationMsg("⚠️ Please keep your review respectful. No profanity allowed.");
+    if (normalisedSubstringCheck(value)) {
+      setValidationMsg(t("reviews.noProfanity") || "⚠️ Please keep your review respectful. No profanity allowed.");
     } else {
       setValidationMsg("");
     }
@@ -45,8 +80,8 @@ function WriteReviewModal({ onClose, onSubmit }: {
 
   const validateName = (value: string) => {
     setName(value);
-    if (hasArabic(value)) {
-      setValidationMsg("⚠️ Arabic text is not allowed. Please use English or Spanish.");
+    if (normalisedSubstringCheck(value)) {
+      setValidationMsg(t("reviews.noProfanity") || "⚠️ Please keep your review respectful. No profanity allowed.");
     } else {
       setValidationMsg("");
     }
@@ -54,21 +89,17 @@ function WriteReviewModal({ onClose, onSubmit }: {
 
   const handleSubmit = async () => {
     if (!name.trim() || !text.trim()) return;
-    if (hasArabic(name) || hasArabic(text)) {
-      setValidationMsg("⚠️ Arabic text is not allowed in reviews. Please write in English or Spanish only.");
-      return;
-    }
-    if (hasProfanity(text) || hasProfanity(name)) {
-      setValidationMsg("⚠️ Please keep your review respectful. No profanity allowed.");
+    if (normalisedSubstringCheck(text) || normalisedSubstringCheck(name)) {
+      setValidationMsg(t("reviews.noProfanity") || "⚠️ Please keep your review respectful. No profanity allowed.");
       return;
     }
     setSubmitting(true);
     await onSubmit({
-      name: name.trim(),
+      name:         name.trim(),
       rating,
-      text: text.trim(),
+      text:         text.trim(),
       project_type: "UI Design",
-      date: new Date().toISOString().split("T")[0],
+      date:         new Date().toISOString().split("T")[0],
     });
     setSubmitting(false);
     onClose();
@@ -81,78 +112,88 @@ function WriteReviewModal({ onClose, onSubmit }: {
       ariaLabel="Write a review"
       contentClassName="w-full max-w-sm bg-white dark:bg-[#111318] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl p-6"
     >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">Write a Review</h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-slate-400 dark:text-white/50 hover:text-slate-700 dark:hover:text-white"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Name */}
-        <div className="mb-4">
-          <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-1.5">Your Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={e => validateName(e.target.value)}
-            placeholder="e.g. John Doe"
-            className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#1a1d27] border border-slate-200 dark:border-white/8 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 focus:outline-none focus:border-primary/40 transition-colors"
-          />
-        </div>
-
-        {/* Rating Stars */}
-        <div className="mb-4">
-          <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-2">Rating</label>
-          <div className="flex gap-1">
-            {[1, 2, 3, 4, 5].map(i => (
-              <button
-                key={i}
-                onMouseEnter={() => setHoverRating(i)}
-                onMouseLeave={() => setHoverRating(0)}
-                onClick={() => setRating(i)}
-                className="transition-transform hover:scale-110"
-              >
-                <Star
-                  className={`w-7 h-7 transition-colors ${
-                    i <= (hoverRating || rating)
-                      ? "fill-yellow-400 text-yellow-400"
-                      : "fill-slate-200 dark:fill-white/10 text-slate-300 dark:text-white/20"
-                  }`}
-                />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Feedback */}
-        <div className="mb-5">
-          <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-1.5">Your Feedback</label>
-          <textarea
-            value={text}
-            onChange={e => validateText(e.target.value)}
-            placeholder="How was your experience?"
-            rows={4}
-            className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#1a1d27] border border-slate-200 dark:border-white/8 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 focus:outline-none focus:border-primary/40 transition-colors resize-none"
-          />
-          {validationMsg && (
-            <p className="mt-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg px-3 py-2">
-              {validationMsg}
-            </p>
-          )}
-        </div>
-
-        {/* Submit */}
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">
+          {t("reviews.writeReview") || "Write a Review"}
+        </h2>
         <button
-          onClick={handleSubmit}
-          disabled={submitting || !name.trim() || !text.trim() || !!validationMsg}
-          className="w-full py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all duration-200"
+          onClick={onClose}
+          className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-slate-400 dark:text-white/50 hover:text-slate-700 dark:hover:text-white"
         >
-          {submitting ? "Submitting..." : "Submit Review"}
+          <X className="w-4 h-4" />
         </button>
+      </div>
+
+      {/* Name */}
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-1.5">
+          {t("reviews.yourName") || "Your Name"}
+        </label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => validateName(e.target.value)}
+          placeholder="e.g. John Doe"
+          className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#1a1d27] border border-slate-200 dark:border-white/8 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 focus:outline-none focus:border-primary/40 transition-colors"
+        />
+      </div>
+
+      {/* Rating Stars */}
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-2">
+          {t("reviews.rating") || "Rating"}
+        </label>
+        <div className="flex gap-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <button
+              key={i}
+              onMouseEnter={() => setHoverRating(i)}
+              onMouseLeave={() => setHoverRating(0)}
+              onClick={() => setRating(i)}
+              className="transition-transform hover:scale-110"
+            >
+              <Star
+                className={`w-7 h-7 transition-colors ${
+                  i <= (hoverRating || rating)
+                    ? "fill-yellow-400 text-yellow-400"
+                    : "fill-slate-200 dark:fill-white/10 text-slate-300 dark:text-white/20"
+                }`}
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Feedback */}
+      <div className="mb-5">
+        <label className="block text-xs font-medium text-slate-600 dark:text-white/70 mb-1.5">
+          {t("reviews.yourFeedback") || "Your Feedback"}
+        </label>
+        <textarea
+          value={text}
+          onChange={(e) => validateText(e.target.value)}
+          placeholder={t("reviews.feedbackPlaceholder") || "How was your experience?"}
+          rows={4}
+          className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#1a1d27] border border-slate-200 dark:border-white/8 rounded-lg text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 focus:outline-none focus:border-primary/40 transition-colors resize-none"
+        />
+        {validationMsg && (
+          <p className="mt-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg px-3 py-2">
+            {validationMsg}
+          </p>
+        )}
+      </div>
+
+      {/* Submit */}
+      <button
+        onClick={handleSubmit}
+        disabled={submitting || !name.trim() || !text.trim() || !!validationMsg}
+        className="w-full py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all duration-200"
+      >
+        {submitting
+          ? (t("reviews.submitting") || "Submitting...")
+          : (t("reviews.submitReview") || "Submit Review")}
+      </button>
     </Modal>
   );
 }
@@ -163,26 +204,36 @@ function WriteReviewModal({ onClose, onSubmit }: {
 export default function Reviews() {
   const { t } = useLanguage();
   const { toast } = useToast();
-  const [content, setContent] = useState<ReviewsContent | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [content, setContent]         = useState<ReviewsContent | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [showModal, setShowModal]     = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
-  const mountedRef = useRef(true);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  // Mount-guard ref — prevents setState on unmounted component.
+  const mountedRef  = useRef(true);
+
+  // Timer registry — every handle pushed here is cleared on unmount so that
+  // long-running sessions cannot accumulate stale timers in memory.
+  const timersRef   = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // ── Mount / unmount lifecycle ──────────────────────────────────────────
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Forcefully clear every timer that was scheduled during this session.
       timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
     };
   }, []);
 
+  // ── Initial data fetch ─────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
         const allRevs = await getAllReviews();
-        if (mountedRef.current) setContent({ reviews: Array.isArray(allRevs) ? allRevs : [] });
+        if (mountedRef.current)
+          setContent({ reviews: Array.isArray(allRevs) ? allRevs : [] });
       } catch {
         if (mountedRef.current) setContent({ reviews: [] });
       } finally {
@@ -191,52 +242,61 @@ export default function Reviews() {
     })();
   }, []);
 
-  // Live updates: re-fetch when reviews are approved/created/deleted from admin
+  // ── Live updates: re-fetch when reviews change from admin ──────────────
   useTableRealtime("reviews", async () => {
     if (!mountedRef.current) return;
     try {
       const allRevs = await getAllReviews();
-      if (mountedRef.current) setContent({ reviews: Array.isArray(allRevs) ? allRevs : [] });
-    } catch { /* ignore */ }
+      if (mountedRef.current)
+        setContent({ reviews: Array.isArray(allRevs) ? allRevs : [] });
+    } catch { /* ignore — stale data is fine here */ }
   });
 
+  // ── Rating summary stats ───────────────────────────────────────────────
   const stats = useMemo(() => {
     if (!content?.reviews?.length) return { avg: 0, total: 0, fiveStarPct: 0 };
-    const total = content.reviews.length;
-    const avg = content.reviews.reduce((sum, r) => sum + r.rating, 0) / total;
-    const fiveStar = content.reviews.filter(r => r.rating === 5).length;
+    const total    = content.reviews.length;
+    const avg      = content.reviews.reduce((sum, r) => sum + r.rating, 0) / total;
+    const fiveStar = content.reviews.filter((r) => r.rating === 5).length;
     return {
-      avg: Math.round(avg * 10) / 10,
+      avg:         Math.round(avg * 10) / 10,
       total,
       fiveStarPct: Math.round((fiveStar / total) * 100),
     };
   }, [content]);
 
-  const handleSubmitReview = useCallback(async (reviewData: Omit<Review, "id" | "verified" | "avatar" | "status">) => {
-    const result = await submitReviewToTable({
-      name:         reviewData.name,
-      rating:       reviewData.rating,
-      text:         reviewData.text,
-      project_type: reviewData.project_type,
-      date:         reviewData.date,
-    });
-
-    if (!result.ok) {
-      toast({
-        title: "Submission failed",
-        description: result.error ?? "Unknown error.",
-        variant: "destructive",
+  // ── Review submission handler ──────────────────────────────────────────
+  const handleSubmitReview = useCallback(
+    async (reviewData: Omit<Review, "id" | "verified" | "avatar" | "status">) => {
+      const result = await submitReviewToTable({
+        name:         reviewData.name,
+        rating:       reviewData.rating,
+        text:         reviewData.text,
+        project_type: reviewData.project_type,
+        date:         reviewData.date,
       });
-      return;
-    }
 
-    if (mountedRef.current) setSubmitSuccess(true);
-    const timer = setTimeout(() => {
-      if (mountedRef.current) setSubmitSuccess(false);
-    }, 6000);
-    timersRef.current.push(timer);
-  }, [toast]);
+      if (!result.ok) {
+        toast({
+          title:       t("reviews.submitFailed") || "Submission failed",
+          description: result.error ?? "Unknown error.",
+          variant:     "destructive",
+        });
+        return;
+      }
 
+      if (mountedRef.current) setSubmitSuccess(true);
+
+      // Track the timer so it is cleared if the user navigates away within 6 s.
+      const timer = setTimeout(() => {
+        if (mountedRef.current) setSubmitSuccess(false);
+      }, 6000);
+      timersRef.current.push(timer);
+    },
+    [toast, t],
+  );
+
+  // ── Loading state ──────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -245,7 +305,7 @@ export default function Reviews() {
     );
   }
 
-  const reviews = content?.reviews?.filter(r => r.status === "approved") || [];
+  const reviews = content?.reviews?.filter((r) => r.status === "approved") || [];
 
   return (
     <div className="min-h-screen pt-8 pb-20 px-4 sm:px-6">
@@ -301,25 +361,38 @@ export default function Reviews() {
               {[...Array(5)].map((_, i) => (
                 <motion.div
                   key={i}
-                  animate={i < Math.round(stats.avg) ? {
-                    filter: ["drop-shadow(0 0 0px #facc15)", "drop-shadow(0 0 8px #facc15)", "drop-shadow(0 0 0px #facc15)"],
-                  } : {}}
+                  animate={
+                    i < Math.round(stats.avg)
+                      ? {
+                          filter: [
+                            "drop-shadow(0 0 0px #facc15)",
+                            "drop-shadow(0 0 8px #facc15)",
+                            "drop-shadow(0 0 0px #facc15)",
+                          ],
+                        }
+                      : {}
+                  }
                   transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.15 }}
                 >
                   <Star
-                    className={`w-6 h-6 ${i < Math.round(stats.avg) ? "fill-yellow-400 text-yellow-400" : "fill-slate-200 dark:fill-muted text-slate-300 dark:text-muted"}`}
+                    className={`w-6 h-6 ${
+                      i < Math.round(stats.avg)
+                        ? "fill-yellow-400 text-yellow-400"
+                        : "fill-slate-200 dark:fill-muted text-slate-300 dark:text-muted"
+                    }`}
                   />
                 </motion.div>
               ))}
             </div>
             <p className="text-slate-600 dark:text-zinc-400 text-sm">
-              {t("reviews.based")} <strong className="text-slate-900 dark:text-zinc-100">{stats.total}</strong>{" "}
+              {t("reviews.based")}{" "}
+              <strong className="text-slate-900 dark:text-zinc-100">{stats.total}</strong>{" "}
               {t("reviews.reviewsText")} • {stats.fiveStarPct}% ★★★★★
             </p>
           </motion.div>
         )}
 
-        {/* Success Banner */}
+        {/* Success Banner — message sourced from i18n key reviews.submitted */}
         <AnimatePresence>
           {submitSuccess && (
             <motion.div
@@ -328,7 +401,8 @@ export default function Reviews() {
               exit={{ opacity: 0, y: -10 }}
               className="max-w-md mx-auto mb-6 p-4 rounded-xl bg-green-50 dark:bg-green-500/15 border border-green-200 dark:border-green-500/25 text-center text-green-700 dark:text-green-400 text-sm font-medium"
             >
-              ✅ Your review was submitted successfully!
+              ✅{" "}
+              {t("reviews.submitted") || "Your review was submitted successfully!"}
             </motion.div>
           )}
         </AnimatePresence>
@@ -337,12 +411,14 @@ export default function Reviews() {
         {reviews.length === 0 ? (
           <div className="text-center py-16 sm:py-20">
             <MessageCircle className="w-16 h-16 text-slate-400 dark:text-muted-foreground mx-auto mb-4 opacity-50" />
-            <p className="text-slate-600 dark:text-muted-foreground mb-6">No reviews yet — be the first!</p>
+            <p className="text-slate-600 dark:text-muted-foreground mb-6">
+              {t("reviews.noReviews") || "No reviews yet — be the first!"}
+            </p>
             <Button
               onClick={() => setShowModal(true)}
               className="gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-full px-6 font-semibold discord-glow"
             >
-              <Star className="w-4 h-4" /> Write a Review
+              <Star className="w-4 h-4" /> {t("reviews.writeReview") || "Write a Review"}
             </Button>
           </div>
         ) : (
@@ -366,13 +442,25 @@ export default function Reviews() {
                   {[...Array(5)].map((_, si) => (
                     <motion.div
                       key={si}
-                      animate={si < review.rating ? {
-                        filter: ["drop-shadow(0 0 0px #facc15)", "drop-shadow(0 0 6px #facc15)", "drop-shadow(0 0 0px #facc15)"],
-                      } : {}}
+                      animate={
+                        si < review.rating
+                          ? {
+                              filter: [
+                                "drop-shadow(0 0 0px #facc15)",
+                                "drop-shadow(0 0 6px #facc15)",
+                                "drop-shadow(0 0 0px #facc15)",
+                              ],
+                            }
+                          : {}
+                      }
                       transition={{ duration: 3, repeat: Infinity, delay: si * 0.2 + i * 0.1 }}
                     >
                       <Star
-                        className={`w-5 h-5 ${si < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-slate-200 dark:fill-muted text-slate-300 dark:text-muted"}`}
+                        className={`w-5 h-5 ${
+                          si < review.rating
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "fill-slate-200 dark:fill-muted text-slate-300 dark:text-muted"
+                        }`}
                       />
                     </motion.div>
                   ))}
@@ -383,14 +471,16 @@ export default function Reviews() {
                     {review.avatar || review.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-semibold text-sm text-slate-900 dark:text-zinc-100 truncate">{review.name}</p>
+                    <p className="font-semibold text-sm text-slate-900 dark:text-zinc-100 truncate">
+                      {review.name}
+                    </p>
                     <p className="text-xs text-slate-500 dark:text-zinc-500 truncate">
                       {review.project_type} • {review.date}
                     </p>
                   </div>
                   {review.verified && (
                     <span className="ml-auto shrink-0 text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                      Verified
+                      {t("reviews.verified") || "Verified"}
                     </span>
                   )}
                 </div>

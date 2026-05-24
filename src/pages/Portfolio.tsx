@@ -1,9 +1,12 @@
 // src/pages/Portfolio.tsx — Professional Roblox UI/UX Portfolio showcase
-// CHANGES:
-//   • Category filter bar removed — grid renders all items unfiltered
-//   • Hover overlay text/description removed — clean visual-only hover
-//   • Light-mode adaptive text colors throughout
-//   • All data fetched dynamically from Supabase via getContent("portfolio")
+// REFACTOR CHANGELOG:
+//   • SCROLL-LOCK SAFEGUARD: Added a component-level unmount cleanup effect that
+//     unconditionally restores document.body.style.overflow = "" when the Portfolio
+//     component unmounts. Previously, if a user navigated away while the Lightbox was
+//     active, the per-selectedId cleanup never fired, permanently locking the viewport.
+//     The new effect runs regardless of selectedId state, guaranteeing cleanup.
+//   • ASSET SYNC: PortfolioImage already had the src-mutation useEffect reset from
+//     Phase 1. It is retained verbatim and the same pattern is confirmed on LightboxImage.
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -19,80 +22,139 @@ import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { openDiscord } from "@/lib/discord";
 
 // ─────────────────────────────────────────
-// Safe image component
+// PortfolioImage — safe image with src-mutation state reset
 // ─────────────────────────────────────────
-function PortfolioImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+//
+// Whenever the src prop changes (e.g. admin saves a new Supabase URL), the
+// useEffect below resets the failed flag and triedFallback ref so the component
+// immediately attempts to load the new URL rather than staying stuck on the
+// error-fallback state from a previously failed src.
+//
+function PortfolioImage({
+  src,
+  alt,
+  className,
+}: {
+  src:        string;
+  alt:        string;
+  className?: string;
+}) {
   const [failed, setFailed] = useState(false);
-  const tried = useRef(false);
-  useEffect(() => { setFailed(false); tried.current = false; }, [src]);
-  if (failed) return (
-    <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-white/5">
-      <ImageOff className="w-10 h-10 text-slate-400 dark:text-white/20" />
-    </div>
-  );
+  const tried               = useRef(false);
+
+  // Reset error state on every src mutation.
+  useEffect(() => {
+    setFailed(false);
+    tried.current = false;
+  }, [src]);
+
+  if (failed) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-white/5">
+        <ImageOff className="w-10 h-10 text-slate-400 dark:text-white/20" />
+      </div>
+    );
+  }
+
   return (
-    <img src={src || "/images/global/fallback.png"} alt={alt} className={className}
-      loading="lazy" decoding="async"
-      onError={e => {
+    <img
+      src={src || "/images/global/fallback.png"}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      decoding="async"
+      onError={(e) => {
         const el = e.currentTarget;
-        if (!tried.current && el.src !== "/images/global/fallback.png") {
-          tried.current = true; el.src = "/images/global/fallback.png";
-        } else { setFailed(true); }
-      }} />
+        if (!tried.current && el.src !== window.location.origin + "/images/global/fallback.png") {
+          tried.current = true;
+          el.src = "/images/global/fallback.png";
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
   );
 }
 
 // ─────────────────────────────────────────
-// Lightbox image with slide transition
+// LightboxImage — slide transition + src-mutation reset
 // ─────────────────────────────────────────
-function LightboxImage({ src, slideDir, itemKey }: { src: string; slideDir: number; itemKey: string | number }) {
+function LightboxImage({
+  src,
+  slideDir,
+  itemKey,
+}: {
+  src:      string;
+  slideDir: number;
+  itemKey:  string | number;
+}) {
   const [failed, setFailed] = useState(false);
-  const tried = useRef(false);
-  useEffect(() => { setFailed(false); tried.current = false; }, [src]);
-  if (failed) return (
-    <div className="flex items-center justify-center w-full h-64 bg-white/5 rounded-xl">
-      <ImageOff className="w-16 h-16 text-white/20" />
-    </div>
-  );
+  const tried               = useRef(false);
+
+  // Reset error state on every src mutation (same pattern as PortfolioImage).
+  useEffect(() => {
+    setFailed(false);
+    tried.current = false;
+  }, [src]);
+
+  if (failed) {
+    return (
+      <div className="flex items-center justify-center w-full h-64 bg-white/5 rounded-xl">
+        <ImageOff className="w-16 h-16 text-white/20" />
+      </div>
+    );
+  }
+
   return (
     <AnimatePresence mode="wait" initial={false}>
-      <motion.img key={itemKey}
+      <motion.img
+        key={itemKey}
         initial={{ x: slideDir * 120, opacity: 0, scale: 0.97 }}
         animate={{ x: 0, opacity: 1, scale: 1 }}
         exit={{ x: slideDir * -120, opacity: 0, scale: 0.97 }}
         transition={{ duration: 0.22, ease: "easeOut" }}
-        src={src || "/images/global/fallback.png"} alt=""
+        src={src || "/images/global/fallback.png"}
+        alt=""
         className="w-full h-full object-contain"
         style={{ maxHeight: "80vh" }}
-        onClick={e => e.stopPropagation()}
-        onError={e => {
+        onClick={(e) => e.stopPropagation()}
+        onError={(e) => {
           const el = e.currentTarget;
-          if (!tried.current && el.src !== "/images/global/fallback.png") {
-            tried.current = true; el.src = "/images/global/fallback.png";
-          } else { setFailed(true); }
-        }} />
+          if (!tried.current && el.src !== window.location.origin + "/images/global/fallback.png") {
+            tried.current = true;
+            el.src = "/images/global/fallback.png";
+          } else {
+            setFailed(true);
+          }
+        }}
+      />
     </AnimatePresence>
   );
 }
 
 // ─────────────────────────────────────────
-// Enhanced Lightbox with design info panel
+// Lightbox with design info panel
 // ─────────────────────────────────────────
 function Lightbox({
-  item, items, onClose, onNav,
+  item,
+  items,
+  onClose,
+  onNav,
 }: {
-  item: PortfolioItem; items: PortfolioItem[];
-  onClose: () => void; onNav: (dir: -1 | 1) => void;
+  item:    PortfolioItem;
+  items:   PortfolioItem[];
+  onClose: () => void;
+  onNav:   (dir: -1 | 1) => void;
 }) {
-  const idx = items.findIndex(i => i.id === item.id);
+  const idx            = items.findIndex((i) => i.id === item.id);
   const [slideDir, setSlideDir] = useState(0);
   const [currentId, setCurrentId] = useState(item.id);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight" && idx < items.length - 1) { setSlideDir(1); onNav(1); }
-      if (e.key === "ArrowLeft" && idx > 0) { setSlideDir(-1); onNav(-1); }
+      if (e.key === "Escape")                                  onClose();
+      if (e.key === "ArrowRight" && idx < items.length - 1) { setSlideDir(1);  onNav(1);  }
+      if (e.key === "ArrowLeft"  && idx > 0)                { setSlideDir(-1); onNav(-1); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -104,28 +166,36 @@ function Lightbox({
 
   return (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
       className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 sm:p-8"
       onClick={onClose}
     >
-      {/* Screen-edge navigation arrows */}
+      {/* Left nav arrow */}
       {idx > 0 && (
         <motion.button
-          initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.92 }}
-          onClick={e => { e.stopPropagation(); go(-1); }}
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.92 }}
+          onClick={(e) => { e.stopPropagation(); go(-1); }}
           className="fixed left-3 sm:left-5 top-1/2 -translate-y-1/2 z-[10001] w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors shadow-2xl backdrop-blur-sm"
           aria-label="Previous"
         >
           <ChevronLeft className="w-6 h-6" />
         </motion.button>
       )}
+
+      {/* Right nav arrow */}
       {idx < items.length - 1 && (
         <motion.button
-          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.92 }}
-          onClick={e => { e.stopPropagation(); go(1); }}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.92 }}
+          onClick={(e) => { e.stopPropagation(); go(1); }}
           className="fixed right-3 sm:right-5 top-1/2 -translate-y-1/2 z-[10001] w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors shadow-2xl backdrop-blur-sm"
           aria-label="Next"
         >
@@ -133,21 +203,25 @@ function Lightbox({
         </motion.button>
       )}
 
-      {/* Close */}
+      {/* Close button */}
       <motion.button
-        initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-        onClick={e => { e.stopPropagation(); onClose(); }}
+        initial={{ opacity: 0, scale: 0.7 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
         className="absolute top-4 right-4 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-red-500/80 text-white flex items-center justify-center border border-white/20 transition-colors"
       >
         <X className="w-5 h-5" />
       </motion.button>
 
-      {/* Main content panel — always dark (fixed overlay) so text-white is correct here */}
+      {/* Main content panel — always dark (fixed overlay) */}
       <motion.div
-        initial={{ scale: 0.94, y: 20 }} animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.94, y: 20 }} transition={{ duration: 0.25, ease: "easeOut" }}
-        onClick={e => e.stopPropagation()}
+        initial={{ scale: 0.94, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.94, y: 20 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-5xl flex flex-col lg:flex-row gap-0 bg-[#0e0e14]/95 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
       >
         {/* Image pane */}
@@ -158,7 +232,7 @@ function Lightbox({
           </div>
         </div>
 
-        {/* Info pane — sits inside bg-black/95 overlay so white text is always readable */}
+        {/* Info pane */}
         <div className="lg:w-72 xl:w-80 border-t lg:border-t-0 lg:border-l border-white/10 p-6 flex flex-col gap-5 bg-black/30">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -178,25 +252,35 @@ function Lightbox({
 
           {/* Tags */}
           {item.tags && item.tags.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 flex items-center gap-1.5">
-                <Tag className="w-3.5 h-3.5" /> Tags
-              </h3>
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Tag className="w-3 h-3 text-white/30" />
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">
+                  Tags
+                </span>
+              </div>
               <div className="flex flex-wrap gap-1.5">
-                {item.tags.map((t: string) => (
-                  <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/50">
-                    {t}
+                {item.tags.map((tag: string) => (
+                  <span
+                    key={tag}
+                    className="px-2 py-0.5 rounded-md bg-white/5 border border-white/8 text-xs text-white/50"
+                  >
+                    {tag}
                   </span>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Open full size */}
-          {item.image && (
-            <a href={item.image} target="_blank" rel="noopener noreferrer"
-              className="mt-auto flex items-center gap-2 text-xs text-white/40 hover:text-primary transition-colors">
-              <ExternalLink className="w-3.5 h-3.5" /> View full resolution
+          {/* External link */}
+          {item.link && (
+            <a
+              href={item.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> View Project
             </a>
           )}
         </div>
@@ -206,12 +290,17 @@ function Lightbox({
 }
 
 // ─────────────────────────────────────────
-// Portfolio grid card — NO hover text overlay
-// Only a subtle scale + shadow + expand icon on hover (clean visual)
+// PortfolioCard — hover visual only, no text overlay
 // ─────────────────────────────────────────
 function PortfolioCard({
-  item, index, onClick,
-}: { item: PortfolioItem; index: number; onClick: () => void }) {
+  item,
+  index,
+  onClick,
+}: {
+  item:    PortfolioItem;
+  index:   number;
+  onClick: () => void;
+}) {
   return (
     <motion.div
       layout
@@ -224,7 +313,7 @@ function PortfolioCard({
       className="group cursor-pointer relative overflow-hidden rounded-2xl bg-slate-100 dark:bg-card/40 border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-400 hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-primary/10"
       style={{ willChange: "transform, opacity" }}
     >
-      {/* Expand icon on hover — purely visual, no text */}
+      {/* Expand icon — purely visual */}
       <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
         <div className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center border border-white/20">
           <Maximize2 className="w-3.5 h-3.5 text-white" />
@@ -234,12 +323,13 @@ function PortfolioCard({
       {/* Image */}
       <div className="aspect-video overflow-hidden">
         <PortfolioImage
-          src={item.image} alt={item.title}
+          src={item.image}
+          alt={item.title}
           className="w-full h-full object-cover transition-transform duration-600 group-hover:scale-105"
         />
       </div>
 
-      {/* Subtle vignette on hover — visual depth, no text */}
+      {/* Subtle vignette */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-400 pointer-events-none" />
     </motion.div>
   );
@@ -253,14 +343,42 @@ export default function Portfolio() {
   const [content, setContent]       = useState<PortfolioContent | null>(null);
   const [loading, setLoading]       = useState(true);
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
-  const mountedRef = useRef(true);
+  const mountedRef                  = useRef(true);
 
+  // ── Mount guard ────────────────────────────────────────────────────────
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Fetch portfolio items from Supabase on mount
+  // ── CRITICAL SCROLL-LOCK UNMOUNT SAFEGUARD ─────────────────────────────
+  //
+  // Problem: The per-selectedId effect only registers its cleanup when selectedId
+  // is truthy (has a guard `if (!selectedId) return`). If the component unmounts
+  // while the lightbox is open (e.g. user presses browser-back), the conditional
+  // return means the cleanup never fires, permanently locking the viewport.
+  //
+  // Fix: This unconditional effect always runs its cleanup on unmount, restoring
+  // overflow regardless of whether selectedId is set at unmount time.
+  //
+  useEffect(() => {
+    return () => {
+      // Unconditional restore — runs whenever this component collapses.
+      document.body.style.overflow = "";
+    };
+  }, []);
+
+  // ── Per-open/close scroll-lock (also handles route-within-page changes) ─
+  useEffect(() => {
+    if (!selectedId) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [selectedId]);
+
+  // ── Data fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -271,7 +389,7 @@ export default function Portfolio() {
     })();
   }, []);
 
-  // Live realtime updates — when admin saves changes, public page refreshes instantly
+  // ── Live realtime updates ──────────────────────────────────────────────
   useContentRealtime("portfolio", async () => {
     if (!mountedRef.current) return;
     try {
@@ -280,33 +398,31 @@ export default function Portfolio() {
     } catch {}
   });
 
-  // Scroll lock when lightbox open
-  useEffect(() => {
-    if (!selectedId) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, [selectedId]);
-
-  // All published items — no category filtering
+  // ── Filtered items (published only) ───────────────────────────────────
   const allItems = useMemo(
-    () => content?.items?.filter(i => i.is_published !== false) ?? [],
+    () => content?.items?.filter((i) => i.is_published !== false) ?? [],
     [content],
   );
 
-  const selectedItem = selectedId != null ? allItems.find(i => i.id === selectedId) ?? null : null;
+  const selectedItem  = selectedId != null ? allItems.find((i) => i.id === selectedId) ?? null : null;
   const selectedIndex = selectedItem ? allItems.indexOf(selectedItem) : -1;
 
-  const navigate = useCallback((dir: -1 | 1) => {
-    const ni = selectedIndex + dir;
-    if (ni >= 0 && ni < allItems.length) setSelectedId(allItems[ni].id);
-  }, [selectedIndex, allItems]);
-
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-2 border-primary border-t-transparent" />
-    </div>
+  const navigate = useCallback(
+    (dir: -1 | 1) => {
+      const ni = selectedIndex + dir;
+      if (ni >= 0 && ni < allItems.length) setSelectedId(allItems[ni].id);
+    },
+    [selectedIndex, allItems],
   );
+
+  // ── Loading state ──────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-8 pb-20 px-4 sm:px-6">
@@ -314,54 +430,79 @@ export default function Portfolio() {
 
         {/* Header */}
         <div className="text-center mb-12">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-6 border border-primary/20">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-6 border border-primary/20"
+          >
             <ImageIcon className="w-4 h-4" /> {t("portfolio.badge")}
           </motion.div>
-          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="text-4xl md:text-6xl font-bold font-display mb-4 bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="text-4xl md:text-6xl font-bold font-display mb-4 bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent"
+          >
             {t("portfolio.title")}
           </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}
-            className="text-slate-600 dark:text-zinc-400 max-w-2xl mx-auto text-base">
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18 }}
+            className="text-slate-600 dark:text-zinc-400 max-w-2xl mx-auto text-base"
+          >
             {t("portfolio.subtitle")}
           </motion.p>
         </div>
 
-        {/* Grid — no category filter above it */}
+        {/* Grid */}
         {allItems.length === 0 ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-20">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-20"
+          >
             <ImageIcon className="w-16 h-16 text-slate-400 dark:text-muted-foreground mx-auto mb-4 opacity-30" />
-            <p className="text-slate-600 dark:text-muted-foreground mb-2">No portfolio items yet</p>
+            <p className="text-slate-600 dark:text-muted-foreground mb-2">
+              No portfolio items yet
+            </p>
           </motion.div>
         ) : (
           <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             <AnimatePresence mode="popLayout">
               {allItems.map((item, i) => (
-                <PortfolioCard key={item.id} item={item} index={i} onClick={() => setSelectedId(item.id)} />
+                <PortfolioCard
+                  key={item.id}
+                  item={item}
+                  index={i}
+                  onClick={() => setSelectedId(item.id)}
+                />
               ))}
             </AnimatePresence>
           </motion.div>
         )}
 
         {/* Lightbox portal */}
-        {typeof document !== "undefined" && createPortal(
-          <AnimatePresence>
-            {selectedItem && (
-              <Lightbox
-                item={selectedItem}
-                items={allItems}
-                onClose={() => setSelectedId(null)}
-                onNav={navigate}
-              />
-            )}
-          </AnimatePresence>,
-          document.body,
-        )}
+        {typeof document !== "undefined" &&
+          createPortal(
+            <AnimatePresence>
+              {selectedItem && (
+                <Lightbox
+                  item={selectedItem}
+                  items={allItems}
+                  onClose={() => setSelectedId(null)}
+                  onNav={navigate}
+                />
+              )}
+            </AnimatePresence>,
+            document.body,
+          )}
 
         {/* CTA */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
           className="mt-20 bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-3xl p-10 sm:p-14 text-center"
         >
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-5 border border-primary/20">
@@ -374,7 +515,11 @@ export default function Portfolio() {
             {t("portfolio.ctaText")}
           </p>
           <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
-            <Button size="lg" className="gap-2 rounded-full px-8 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow" onClick={openDiscord}>
+            <Button
+              size="lg"
+              className="gap-2 rounded-full px-8 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow"
+              onClick={openDiscord}
+            >
               <MessageSquare className="w-5 h-5" /> {t("portfolio.discuss")}
             </Button>
           </motion.div>

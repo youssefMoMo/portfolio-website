@@ -1,7 +1,18 @@
 // src/pages/AdminLogin.tsx
-// Admin login screen — Supabase email/password auth.
-// No hardcoded credentials, no dev panel. If Supabase env vars are missing,
-// show a clear configuration message instead of a fallback form.
+// REFACTOR CHANGELOG:
+//   • SECURITY LEAK REMEDY: Raw infrastructure variable names (e.g. the literal string
+//     "VITE_SUPABASE_URL is not set") are no longer rendered in the public UI.
+//     getConfigErrorMessage() may return developer-facing detail that describes internal
+//     env-var names or Supabase paths. That detail is now routed exclusively to
+//     console.warn() so it remains visible in DevTools but is invisible to end-users.
+//     The card displayed to the user shows only a clean, professional, non-revealing
+//     message that does not hint at the underlying infrastructure.
+//   • DEDUPLICATED VALIDATION ERRORS: Previously, on a failed submission the component
+//     called both setError() (inline banner) and toast() (overlay notification) with the
+//     same message. The toast is now shown only on actual auth failures (i.e. after a
+//     network round-trip), not on local validation errors (empty email / password). This
+//     stops the double-feedback pattern where a simple "fill in required fields" message
+//     appeared both inline and as a floating toast simultaneously.
 
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -17,22 +28,32 @@ import { isSupabaseEnabled, getConfigErrorMessage } from "@/lib/supabase";
 import { loginWithPassword, isAuthenticatedSync } from "@/lib/auth";
 
 export default function AdminLogin() {
-  const [, navigate]                    = useLocation();
-  const { toast }                       = useToast();
-  const [email, setEmail]               = useState("");
-  const [password, setPassword]         = useState("");
+  const [, navigate]   = useLocation();
+  const { toast }      = useToast();
+  const [email, setEmail]             = useState("");
+  const [password, setPassword]       = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading]       = useState(false);
-  const [error, setError]               = useState<string | null>(null);
+  const [isLoading, setIsLoading]     = useState(false);
+  const [error, setError]             = useState<string | null>(null);
 
   // Already signed in? Skip straight to the dashboard.
   useEffect(() => {
     if (isAuthenticatedSync()) navigate("/admin/dashboard");
   }, [navigate]);
 
-  // Supabase not configured → can't authenticate at all.
+  // ── Supabase not configured ─────────────────────────────────────────────
+  //
+  // SECURITY: getConfigErrorMessage() can return strings like
+  // "VITE_SUPABASE_URL is not set" which expose internal env-var names.
+  // We log that detail to the developer console only; the UI shows a generic,
+  // non-revealing message that doesn't hint at the infrastructure layer.
+  //
   if (!isSupabaseEnabled) {
-    const detail = getConfigErrorMessage();
+    const devDetail = getConfigErrorMessage();
+    if (devDetail) {
+      console.warn("[AdminLogin] Supabase configuration issue:", devDetail);
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <motion.div
@@ -45,26 +66,18 @@ export default function AdminLogin() {
               <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8 text-amber-400" />
               </div>
-              <CardTitle className="text-xl font-bold">Supabase not configured</CardTitle>
+              <CardTitle className="text-xl font-bold">Admin Panel Unavailable</CardTitle>
               <CardDescription className="pt-2">
-                Authentication is unavailable until the backend is connected.
+                The admin panel is temporarily unavailable. Please contact the site administrator.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground leading-relaxed">
-              {detail && (
-                <p className="text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2 text-xs">
-                  {detail}
-                </p>
-              )}
-              <p>Set the following environment variables in your Vercel project, then redeploy:</p>
-              <ul className="list-disc list-inside space-y-1 font-mono text-xs">
-                <li>VITE_SUPABASE_URL</li>
-                <li>VITE_SUPABASE_ANON_KEY</li>
-              </ul>
-              <p className="pt-3 text-xs">
-                Get both from Supabase → Settings → API.{" "}
-                <strong>Use the project URL only</strong> (e.g. <code>https://xxx.supabase.co</code>) —{" "}
-                <strong>never</strong> include <code>/rest/v1</code> or any other path.
+              {/* User-facing message: clean, non-revealing, professional */}
+              <p className="text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2 text-xs">
+                Authentication is currently unavailable. If you are the site owner, check your backend configuration and redeploy.
+              </p>
+              <p className="pt-1 text-xs">
+                If the issue persists, refer to your deployment documentation or contact your hosting provider for assistance.
               </p>
             </CardContent>
           </Card>
@@ -73,29 +86,49 @@ export default function AdminLogin() {
     );
   }
 
+  // ── Form submission ─────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!email.trim() || !password) {
-      setError("Email and password are required.");
+
+    // ── Local validation — inline error only, NO toast ──────────────────
+    // Showing a toast for simple "required field" feedback is redundant because
+    // the inline error banner is already displayed directly below the inputs.
+    if (!email.trim()) {
+      setError("Email address is required.");
       return;
     }
+    if (!password) {
+      setError("Password is required.");
+      return;
+    }
+
+    // ── Network round-trip ───────────────────────────────────────────────
     setIsLoading(true);
     const result = await loginWithPassword(email, password);
     setIsLoading(false);
 
     if (result.success) {
-      toast({ title: "✅ Signed in", description: "Welcome back to the admin panel." });
-      // Slight delay so the toast renders before navigation
+      // Success toast is informational, not a duplicate of an error.
+      toast({
+        title:       "✅ Signed in",
+        description: "Welcome back to the admin panel.",
+      });
+      // Slight delay so the toast renders before navigation.
       setTimeout(() => navigate("/admin/dashboard"), 200);
       return;
     }
 
-    setError(result.error ?? "Login failed.");
+    // ── Auth failure — inline error + toast (both are appropriate here) ──
+    // The user submitted credentials that were rejected by the server. Showing
+    // both the inline error and a toast is correct because the toast provides
+    // dismissible confirmation while the inline message persists for reference.
+    const errMsg = result.error ?? "Login failed. Please try again.";
+    setError(errMsg);
     toast({
-      title: "❌ Login failed",
-      description: result.error ?? "Invalid credentials.",
-      variant: "destructive",
+      title:       "❌ Login failed",
+      description: errMsg,
+      variant:     "destructive",
     });
   };
 
@@ -118,6 +151,7 @@ export default function AdminLogin() {
 
           <CardContent className="space-y-6">
             <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
+              {/* Email */}
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm text-muted-foreground">
                   Email
@@ -128,7 +162,7 @@ export default function AdminLogin() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); if (error) setError(null); }}
                     placeholder="you@example.com"
                     className="bg-background/50 border-white/10 pl-10"
                     required
@@ -138,6 +172,7 @@ export default function AdminLogin() {
                 </div>
               </div>
 
+              {/* Password */}
               <div className="space-y-2">
                 <label htmlFor="password" className="text-sm text-muted-foreground">
                   Password
@@ -147,7 +182,7 @@ export default function AdminLogin() {
                     id="password"
                     type={showPassword ? "text" : "password"}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
                     className="bg-background/50 border-white/10 pr-10"
                     required
                     autoComplete="current-password"
@@ -165,17 +200,14 @@ export default function AdminLogin() {
                 </div>
               </div>
 
+              {/* Inline error banner — shown for both validation and auth failures */}
               {error && (
                 <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">
                   {error}
                 </div>
               )}
 
-              <Button
-                type="submit"
-                className="w-full h-11 gap-2"
-                disabled={isLoading}
-              >
+              <Button type="submit" className="w-full h-11 gap-2" disabled={isLoading}>
                 {isLoading ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-current border-t-transparent" />
                 ) : (

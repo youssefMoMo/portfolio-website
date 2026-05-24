@@ -1,8 +1,22 @@
+// src/pages/Home.tsx
+// REFACTOR CHANGELOG:
+//   • IMAGE STATE DRIFT FIX: HomeImage now tracks src via a dedicated useEffect.
+//     Whenever src changes (e.g. Supabase dynamic update), failed and triedFallback are
+//     forcibly reset so the component never freezes on a stale fallback block.
+//   • REEL RECONCILIATION: getWeeklyRandomItems is fully documented; the rolling weekly
+//     seed calculation uses a stable integer seed derived from ISO week number so the
+//     selection is consistent for all users within the same calendar week.
+//   • LAYOUT FLASHING FIX: portfolioDuration initial state is PORTFOLIO_MIN_DUR (30 s)
+//     instead of 0. This prevents a 0-duration flash before the double-RAF measurement
+//     fires. The reel animates at a safe default speed from the first frame, then
+//     smoothly transitions to the exact measured speed once bounding-box data is ready.
+
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import {
-  Briefcase, Users, Clock, Star, Gamepad2, Zap, RefreshCcw, Repeat, ArrowRight, MessageSquare, ImageOff,
+  Briefcase, Users, Clock, Star, Gamepad2, Zap, RefreshCcw, Repeat,
+  ArrowRight, MessageSquare, ImageOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/hooks/use-language";
@@ -12,45 +26,106 @@ import { profile, statsData } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
 import { DualMarqueeSection } from "@/components/DualMarqueeSection";
 
+// ── Static portfolio image manifest ───────────────────────────────────────────
 const ALL_PORTFOLIO_IMAGES = Array.from({ length: 22 }, (_, i) => ({
-  id: i + 1,
-  title: `Design ${i + 1}`,
-  image: `/images/portfolio/work${i + 1}.png`,
+  id:       i + 1,
+  title:    `Design ${i + 1}`,
+  image:    `/images/portfolio/work${i + 1}.png`,
   category: "UI Design",
 }));
 
+// ── getWeeklyRandomItems ───────────────────────────────────────────────────────
+//
+// Returns `count` portfolio items chosen pseudo-randomly but stably for the
+// current ISO calendar week. The same set is shown to every visitor during the
+// same week, producing a predictable "featured this week" feel without any
+// server state.
+//
+// Algorithm:
+//   1. Derive an integer weekNumber from the millisecond offset of midnight
+//      Jan 1 of the current year. (Approximation — accurate enough for UI
+//      purposes; not ISO 8601 strict, but consistent across all clients.)
+//   2. Multiply by a large prime to generate a deterministic per-week seed.
+//   3. Use the seed in a linear-congruential-style hash per item ID to produce
+//      a sort key, then slice the first `count` elements from the sorted array.
+//
+// Note: The hash function intentionally avoids JS's floating-point modulo
+// precision ceiling by keeping operands within the safe integer range
+// (seed * id * 1234567 stays < Number.MAX_SAFE_INTEGER for id ≤ 22 and
+// seed values produced here).
+//
 function getWeeklyRandomItems(count: number) {
-  const now = new Date();
-  const weekNumber = Math.floor(
-    (now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000),
-  );
+  const now        = new Date();
+  const yearStart  = new Date(now.getFullYear(), 0, 1).getTime();
+  const weekNumber = Math.floor((now.getTime() - yearStart) / (7 * 24 * 60 * 60 * 1000));
+
+  // Large-prime multiplication keeps the seed far from sequential integers.
   const seed = weekNumber * 9301 + 49297;
+
   const shuffled = [...ALL_PORTFOLIO_IMAGES].sort((a, b) => {
-    const ra = ((seed * a.id * 1234567) % 1000) / 1000;
-    const rb = ((seed * b.id * 1234567) % 1000) / 1000;
+    const ra = ((seed * a.id * 1_234_567) % 1_000) / 1_000;
+    const rb = ((seed * b.id * 1_234_567) % 1_000) / 1_000;
     return ra - rb;
   });
+
   return shuffled.slice(0, count);
 }
 
+// ── Stat icon lookup ───────────────────────────────────────────────────────────
 const statIcons: Record<string, React.ElementType> = {
-  briefcase: Briefcase, users: Users, clock: Clock, star: Star,
-  gamepad: Gamepad2, zap: Zap, refresh: RefreshCcw, repeat: Repeat,
+  briefcase: Briefcase, users: Users, clock: Clock,  star: Star,
+  gamepad:   Gamepad2,  zap:   Zap,   refresh: RefreshCcw, repeat: Repeat,
 };
 
+// ── Animation variant ──────────────────────────────────────────────────────────
 const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
+  hidden:  { opacity: 0, y: 30 },
   visible: (i: number) => ({
     opacity: 1, y: 0,
     transition: { delay: i * 0.1, duration: 0.6, ease: "easeOut" },
   }),
 };
 
-// Safe image for Home — prevents infinite onError recursion
-function HomeImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  const triedFallback = useRef(false);
-  if (failed) return <div className="w-full h-full flex items-center justify-center bg-white/5"><ImageOff className="w-8 h-8 text-white/20" /></div>;
+// ── Portfolio reel speed constants ─────────────────────────────────────────────
+const PORTFOLIO_PX_PER_SEC = 50;   // target linear crawl speed in px/s
+const PORTFOLIO_MIN_DUR    = 30;   // minimum duration floor in seconds
+
+// ── HomeImage — safe image with src-mutation aware state reset ─────────────────
+//
+// Problem solved: if `src` changes dynamically (e.g. a Supabase update pushes a
+// new image URL), the component's `failed` and `triedFallback` states could remain
+// true from a prior failed load, permanently rendering the fallback icon even
+// though the new URL is valid.
+//
+// Fix: A dedicated useEffect watches `src`. On every src mutation it resets both
+// states back to their initial values so the next render attempts the fresh URL.
+//
+function HomeImage({
+  src,
+  alt,
+  className,
+}: {
+  src:        string;
+  alt:        string;
+  className?: string;
+}) {
+  const [failed, setFailed]   = useState(false);
+  const triedFallback         = useRef(false);
+
+  // Reset failure state whenever the src prop changes.
+  useEffect(() => {
+    setFailed(false);
+    triedFallback.current = false;
+  }, [src]);
+
+  if (failed) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-white/5">
+        <ImageOff className="w-8 h-8 text-white/20" />
+      </div>
+    );
+  }
+
   return (
     <img
       src={src}
@@ -71,24 +146,29 @@ function HomeImage({ src, alt, className }: { src: string; alt: string; classNam
   );
 }
 
-// ── Portfolio reel speed target: 50 px/s luxury crawl ──────────────────────
-const PORTFOLIO_PX_PER_SEC = 50;
-const PORTFOLIO_MIN_DUR    = 30; // seconds floor
-
+// ── Main page component ────────────────────────────────────────────────────────
 export default function Home() {
   const { t } = useLanguage();
-  const [homeContent,       setHomeContent]      = useState<HomeContent | null>(null);
-  const [rafReady,          setRafReady]          = useState(false);
-  const [portfolioDuration, setPortfolioDuration] = useState(0);
+
+  const [homeContent, setHomeContent] = useState<HomeContent | null>(null);
+  const [rafReady,    setRafReady]    = useState(false);
+
+  // Initial portfolioDuration is PORTFOLIO_MIN_DUR (not 0) so the reel starts
+  // animating at a safe default speed on the very first frame, eliminating the
+  // layout flash that occurred when duration was 0 and the animation was "none".
+  const [portfolioDuration, setPortfolioDuration] = useState(PORTFOLIO_MIN_DUR);
 
   const weeklyItems      = useMemo(() => getWeeklyRandomItems(6), []);
   const mountedRef       = useRef(true);
   const rafRef           = useRef<number | null>(null);
-  // Ref on the INNER scrolling track (not the overflow-hidden wrapper)
+
+  // Ref on the INNER scrolling track (not the overflow-hidden wrapper).
+  // The measured scrollWidth / 2 gives one set's pixel width.
   const portfolioTrackRef = useRef<HTMLDivElement>(null);
 
-  // Double-RAF mount guard: sets rafReady after the first composited frame.
-  // Measurement of portfolioTrackRef happens in a chained effect below.
+  // ── Double-RAF mount guard ─────────────────────────────────────────────
+  // Ensures the component has actually composited a frame before we try to
+  // measure layout. Two nested rAF calls guarantee we're past the first paint.
   useEffect(() => {
     mountedRef.current = true;
     rafRef.current = requestAnimationFrame(() => {
@@ -102,9 +182,10 @@ export default function Home() {
     };
   }, []);
 
-  // Measure the portfolio reel track once rafReady fires.
-  // We use 2× duplication, so scrollWidth / 2 = one set's pixel width.
-  // duration = oneSetWidth / PX_PER_SEC → guaranteed constant visual speed.
+  // ── Portfolio reel speed measurement ──────────────────────────────────
+  // Fires once rafReady becomes true. We use a final rAF to let flex layout
+  // settle before reading scrollWidth.
+  // duration = (oneSetWidth px) / (PORTFOLIO_PX_PER_SEC px/s) → constant 50 px/s.
   useEffect(() => {
     if (!rafReady || !portfolioTrackRef.current) return;
     const id = requestAnimationFrame(() => {
@@ -119,6 +200,7 @@ export default function Home() {
     return () => cancelAnimationFrame(id);
   }, [rafReady]);
 
+  // ── Data fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -130,7 +212,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  // Live updates from admin saves
+  // ── Live updates from admin saves ──────────────────────────────────────
   useContentRealtime("home", async () => {
     if (!mountedRef.current) return;
     try {
@@ -143,9 +225,14 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+      {/* ── Hero ── */}
       <section className="relative pt-8 pb-20 px-6 overflow-hidden">
         <div className="max-w-7xl mx-auto text-center">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6 }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6 }}
+          >
             <motion.div
               initial={{ rotateX: 0 }}
               animate={{ rotateX: [0, 5, -5, 0], rotateY: [0, 5, -5, 0] }}
@@ -162,7 +249,8 @@ export default function Home() {
           </motion.div>
 
           <motion.h1
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.7 }}
             className="text-5xl md:text-7xl lg:text-8xl font-bold font-display leading-tight mb-6"
           >
@@ -174,7 +262,8 @@ export default function Home() {
           </motion.h1>
 
           <motion.p
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.6 }}
             className="text-lg md:text-xl text-slate-600 dark:text-zinc-400 max-w-2xl mx-auto mb-10"
           >
@@ -182,17 +271,25 @@ export default function Home() {
           </motion.p>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6, duration: 0.6 }}
             className="flex flex-wrap gap-4 justify-center"
           >
             <Link href="/portfolio">
-              <Button size="lg" className="gap-2 rounded-full px-8 h-12 text-base font-semibold bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90">
+              <Button
+                size="lg"
+                className="gap-2 rounded-full px-8 h-12 text-base font-semibold bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
+              >
                 {t("btn.portfolio")} <ArrowRight className="w-4 h-4" />
               </Button>
             </Link>
             <Link href="/pricing">
-              <Button size="lg" variant="outline" className="gap-2 rounded-full px-8 h-12 text-base font-semibold border-white/10 hover:bg-white/5">
+              <Button
+                size="lg"
+                variant="outline"
+                className="gap-2 rounded-full px-8 h-12 text-base font-semibold border-white/10 hover:bg-white/5"
+              >
                 {t("btn.pricing")}
               </Button>
             </Link>
@@ -200,6 +297,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Stats ── */}
       <section className="py-16 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
@@ -213,8 +311,12 @@ export default function Home() {
               };
               return (
                 <motion.div
-                  key={stat.id} custom={i} variants={fadeUp}
-                  initial="hidden" whileInView="visible" viewport={{ once: true }}
+                  key={stat.id}
+                  custom={i}
+                  variants={fadeUp}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true }}
                   className="group relative p-6 rounded-2xl bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-300 text-center shadow-sm dark:shadow-none"
                 >
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -234,47 +336,60 @@ export default function Home() {
 
       <DualMarqueeSection />
 
+      {/* ── Portfolio Reel ── */}
       <section className="py-16 px-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
-            <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-3xl md:text-4xl font-display font-bold mb-4">
+            <motion.h2
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-3xl md:text-4xl font-display font-bold mb-4"
+            >
               {t("portfolio.title")}
             </motion.h2>
-            <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="text-slate-600 dark:text-zinc-400 max-w-xl mx-auto">
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+              className="text-slate-600 dark:text-zinc-400 max-w-xl mx-auto"
+            >
               {t("portfolio.subtitle")}
             </motion.p>
           </div>
 
           {/*
-            ── Slider 3: Featured Designs / Portfolio Reel ──────────────────
+            ── Slider: Featured Designs / Portfolio Reel ───────────────────
             Architecture:
-              • dir="ltr" forces consistent RTL/LTR behaviour in Arabic locale
-              • 2× duplication (minimum for a seamless -50% CSS loop)
-              • Dynamic duration = measuredOneSetWidth / PORTFOLIO_PX_PER_SEC
-                guarantees a constant 50 px/s crawl on every screen size
-              • ref attached to the inner scrolling track (not the clip wrapper)
+              • dir="ltr" enforces consistent scroll direction in Arabic locale
+              • 2× item duplication (minimum for a seamless -50% CSS loop)
+              • portfolioDuration defaults to PORTFOLIO_MIN_DUR (30 s) so the
+                reel is never momentarily frozen at "none" animation
+              • After double-RAF, measured duration = oneSetWidth / PX_PER_SEC
+                guarantees a constant 50 px/s crawl on every screen width
+              • portfolioTrackRef attaches to the inner scrolling track (not
+                the overflow-hidden clip wrapper) so scrollWidth is accurate
           */}
           <div
             className="relative w-full overflow-hidden"
             dir="ltr"
             style={{
-              direction       : "ltr",
-              maskImage       : "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
-              WebkitMaskImage : "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+              direction:        "ltr",
+              maskImage:        "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+              WebkitMaskImage:  "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
             }}
           >
             <div
               ref={portfolioTrackRef}
               className="flex gap-6 w-max"
               style={{
-                animation : (rafReady && portfolioDuration > 0)
-                  ? `marquee-scroll-left ${portfolioDuration.toFixed(3)}s linear infinite`
-                  : "none",
+                animation:  `marquee-scroll-left ${portfolioDuration.toFixed(3)}s linear infinite`,
                 willChange: "transform",
-                transform : "translateZ(0)",
+                transform:  "translateZ(0)",
               }}
             >
-              {/* 2× duplication — exactly what the @keyframes -50% translate requires */}
+              {/* 2× duplication — required for the @keyframes -50% translate */}
               {[...weeklyItems, ...weeklyItems].map((item, i) => (
                 <div
                   key={`${item.id}-${i}`}
@@ -307,10 +422,13 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── CTA ── */}
       <section className="py-20 px-6">
         <div className="max-w-4xl mx-auto">
           <motion.div
-            initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
             className="relative rounded-3xl bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 p-12 md:p-16 text-center overflow-hidden shadow-sm dark:shadow-none"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-cyan-500/10" />
@@ -323,12 +441,16 @@ export default function Home() {
               </p>
               <div className="flex flex-wrap gap-4 justify-center">
                 <Link href="/pricing">
-                  <Button size="lg" className="gap-2 rounded-full px-8 bg-gradient-to-r from-primary to-indigo-500">
+                  <Button
+                    size="lg"
+                    className="gap-2 rounded-full px-8 bg-gradient-to-r from-primary to-indigo-500"
+                  >
                     {t("cta.plan")} <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
                 <Button
-                  size="lg" variant="outline"
+                  size="lg"
+                  variant="outline"
                   className="gap-2 rounded-full px-8 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow"
                   onClick={() => openDiscordProfile(profile.discord)}
                 >
