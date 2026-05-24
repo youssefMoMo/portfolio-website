@@ -1,13 +1,21 @@
 // src/components/SettingsModal.tsx
 //
-// ✅ NEW IN THIS VERSION:
-//   • Settings gear in Navbar now opens this modal (was dead — no onClick)
-//   • Performance Booster toggle (stored in localStorage as yd_perf_boost)
-//   • Low-End Device (Eco) Mode toggle (stored in localStorage as yd_eco_mode)
-//     — When ON: all marquees are replaced with static grid cards,
-//       canvas particles and complex transitions are disabled site-wide
-//   • `usePerformanceSettings` hook exported for use by DualMarqueeSection
-//     and other components that respond to these toggles
+// ─── SOURCE OF TRUTH FOR PERFORMANCE SETTINGS ───────────────────────────────
+//
+// This file owns the canonical performance settings layer for the entire app.
+// `usePerformanceSettings` is the ONLY hook any component should use to read
+// or write eco mode / perf boost state. Direct localStorage access with
+// ad-hoc key strings is forbidden — all consumers import from here.
+//
+// Storage keys (single authoritative definition):
+//   yd_perf_boost  — Performance Booster (reduces repaint surfaces)
+//   yd_eco_mode    — Low-End Device Mode (disables marquees, particles, etc.)
+//
+// Event bus:
+//   `yd-perf-settings-changed` (window CustomEvent) — fired on every toggle.
+//   PerformanceOptimizer, DualMarqueeSection, SkillsMarquee, ReviewsMarquee
+//   all subscribe and react within the same tab. SettingsModal does NOT need
+//   to know about those consumers; the event is the contract.
 
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
@@ -28,22 +36,35 @@ import { useTheme } from "@/hooks/use-theme";
 import { useLanguage } from "@/hooks/use-language";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-// ─── Performance settings keys ────────────────────────────────────────────────
-export const PERF_BOOST_KEY = "yd_perf_boost";
-export const ECO_MODE_KEY   = "yd_eco_mode";
+// ─── Performance settings keys (exported for consumers) ──────────────────────
+
+export const PERF_BOOST_KEY      = "yd_perf_boost";
+export const ECO_MODE_KEY        = "yd_eco_mode";
 export const PERF_SETTINGS_EVENT = "yd-perf-settings-changed";
 
 // ─── usePerformanceSettings ───────────────────────────────────────────────────
-// Shared hook — import this in any component that needs to react to
-// Performance Booster or Eco Mode toggles.
+//
+// Shared hook — import this in every component that reads or writes performance
+// toggles. Direct localStorage access with literal key strings is a leak; use
+// this hook exclusively.
+//
+// Guarantees:
+//   • SSR-safe: initial state is read inside useState initialiser (no top-level
+//     window/localStorage access during server render).
+//   • Cross-component sync: the `yd-perf-settings-changed` window event keeps
+//     all hook instances in the same tab in sync after any write.
+//   • `setEcoMode` manages the `eco-mode` class on <html> so CSS-driven
+//     conditional rules activate/deactivate without any extra effect in consumers.
+
 export function usePerformanceSettings() {
-  const readBool = (key: string) => {
+  const readBool = (key: string): boolean => {
     try { return localStorage.getItem(key) === "true"; } catch { return false; }
   };
 
   const [perfBoost, setPerfBoostState] = useState(() => readBool(PERF_BOOST_KEY));
   const [ecoMode,   setEcoModeState]   = useState(() => readBool(ECO_MODE_KEY));
 
+  // Sync from other hook instances (or external writes) via event bus
   useEffect(() => {
     const sync = () => {
       setPerfBoostState(readBool(PERF_BOOST_KEY));
@@ -52,6 +73,15 @@ export function usePerformanceSettings() {
     window.addEventListener(PERF_SETTINGS_EVENT, sync);
     return () => window.removeEventListener(PERF_SETTINGS_EVENT, sync);
   }, []);
+
+  // Apply eco-mode class on mount and whenever the value changes
+  useEffect(() => {
+    if (ecoMode) {
+      document.documentElement.classList.add("eco-mode");
+    } else {
+      document.documentElement.classList.remove("eco-mode");
+    }
+  }, [ecoMode]);
 
   const setPerfBoost = useCallback((val: boolean) => {
     try { localStorage.setItem(PERF_BOOST_KEY, String(val)); } catch {}
@@ -62,7 +92,6 @@ export function usePerformanceSettings() {
   const setEcoMode = useCallback((val: boolean) => {
     try { localStorage.setItem(ECO_MODE_KEY, String(val)); } catch {}
     setEcoModeState(val);
-    // Toggle eco-mode class on <html> so other CSS-driven animations respect it
     if (val) {
       document.documentElement.classList.add("eco-mode");
     } else {
@@ -75,6 +104,7 @@ export function usePerformanceSettings() {
 }
 
 // ─── Framer Motion variants ───────────────────────────────────────────────────
+
 const backdropVariants = {
   hidden:  { opacity: 0 },
   visible: { opacity: 1, transition: { duration: 0.25 } },
@@ -97,10 +127,14 @@ const containerVariants = {
 };
 const itemVariants = {
   hidden:  { opacity: 0, x: 16, y: 8 },
-  visible: { opacity: 1, x: 0,  y: 0, transition: { type: "spring", stiffness: 200, damping: 18 } },
+  visible: {
+    opacity: 1, x: 0, y: 0,
+    transition: { type: "spring", stiffness: 200, damping: 18 },
+  },
 };
 
 // ─── Flag images & emoji fallbacks ───────────────────────────────────────────
+
 const FLAG_IMAGES: Record<string, string> = {
   en: "/images/global/flag-en.png",
   ar: "/images/global/flag-ar.png",
@@ -109,6 +143,7 @@ const FLAG_IMAGES: Record<string, string> = {
 const FLAG_EMOJI: Record<string, string> = { en: "🇺🇸", ar: "🇸🇦", es: "🇪🇸" };
 
 // ─── Toggle Switch sub-component ─────────────────────────────────────────────
+
 function ToggleSwitch({
   checked,
   onChange,
@@ -139,13 +174,14 @@ function ToggleSwitch({
 }
 
 // ─── Main SettingsModal ───────────────────────────────────────────────────────
+
 type SettingsModalProps = { isOpen: boolean; onClose: () => void };
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { theme, setTheme } = useTheme();
-  const { lang, setLang }   = useLanguage();
+  const { theme, setTheme }             = useTheme();
+  const { lang, setLang }               = useLanguage();
   const { perfBoost, setPerfBoost, ecoMode, setEcoMode } = usePerformanceSettings();
-  const [flagErrors, setFlagErrors] = useState<Record<string, boolean>>({});
+  const [flagErrors, setFlagErrors]     = useState<Record<string, boolean>>({});
 
   const themes = useMemo(() => [
     { value: "light",  label: "Light",  icon: Sun,     color: "from-amber-400 to-orange-400" },
@@ -154,9 +190,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   ], []);
 
   const languages = useMemo(() => [
-    { value: "en", label: "English",  color: "from-blue-500 to-indigo-500" },
-    { value: "ar", label: "العربية",  color: "from-green-500 to-emerald-500" },
-    { value: "es", label: "Español",  color: "from-red-500 to-orange-500" },
+    { value: "en", label: "English", color: "from-blue-500 to-indigo-500" },
+    { value: "ar", label: "العربية", color: "from-green-500 to-emerald-500" },
+    { value: "es", label: "Español", color: "from-red-500 to-orange-500" },
   ], []);
 
   const handleLanguageChange = useCallback((newLang: string) => {
@@ -171,7 +207,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setTheme(newTheme as "dark" | "light" | "system");
   }, [theme, setTheme, onClose]);
 
-  // ESC closes
+  // ESC key closes
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -179,29 +215,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
-  // Body scroll lock
+  // Body scroll lock with scrollbar compensation
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return;
-    const body = document.body;
-    const html = document.documentElement;
-    const scrollbarWidth = window.innerWidth - html.clientWidth;
-    const prev = { overflow: body.style.overflow, paddingRight: body.style.paddingRight };
+    const body                = document.body;
+    const html                = document.documentElement;
+    const scrollbarWidth      = window.innerWidth - html.clientWidth;
+    const prev = {
+      overflow:      body.style.overflow,
+      paddingRight:  body.style.paddingRight,
+    };
     body.style.overflow = "hidden";
     if (scrollbarWidth > 0) body.style.paddingRight = scrollbarWidth + "px";
     return () => {
-      body.style.overflow = prev.overflow;
+      body.style.overflow     = prev.overflow;
       body.style.paddingRight = prev.paddingRight;
     };
   }, [isOpen]);
-
-  // Apply eco-mode class on mount (in case page loads with eco on)
-  useEffect(() => {
-    if (ecoMode) {
-      document.documentElement.classList.add("eco-mode");
-    } else {
-      document.documentElement.classList.remove("eco-mode");
-    }
-  }, [ecoMode]);
 
   if (typeof document === "undefined") return null;
 
@@ -217,7 +247,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             onClick={onClose}
           />
 
-          {/* Panel */}
+          {/* Slide-in panel */}
           <motion.div
             variants={modalVariants}
             initial="hidden" animate="visible" exit="exit"
@@ -253,12 +283,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
                   className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                  aria-label="Close settings"
                 >
                   <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </motion.button>
               </motion.div>
 
-              {/* ── Content ──────────────────────────────────────────── */}
+              {/* ── Scrollable content ───────────────────────────────── */}
               <motion.div
                 variants={containerVariants}
                 initial="hidden" animate="visible"
@@ -280,8 +311,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           key={langOption.value}
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
-                          transition={{ delay: 0.45 + index * 0.1, type: "spring", stiffness: 300 }}
-                          whileHover={{ scale: 1.08, transition: { type: "spring", stiffness: 400, damping: 10 } }}
+                          transition={{
+                            delay: 0.45 + index * 0.1,
+                            type: "spring",
+                            stiffness: 300,
+                          }}
+                          whileHover={{ scale: 1.08 }}
                           whileTap={{ scale: 0.93 }}
                           onClick={() => handleLanguageChange(langOption.value)}
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
@@ -295,17 +330,26 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           )}
                           <div className="relative flex flex-col items-center gap-1.5">
                             {showEmoji ? (
-                              <span className="text-2xl sm:text-3xl">{FLAG_EMOJI[langOption.value]}</span>
+                              <span className="text-2xl sm:text-3xl">
+                                {FLAG_EMOJI[langOption.value]}
+                              </span>
                             ) : (
                               <img
                                 src={FLAG_IMAGES[langOption.value]}
                                 alt={langOption.label}
                                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover shadow-sm"
-                                onError={() => setFlagErrors((prev) => ({ ...prev, [langOption.value]: true }))}
+                                onError={() =>
+                                  setFlagErrors((prev) => ({
+                                    ...prev,
+                                    [langOption.value]: true,
+                                  }))
+                                }
                               />
                             )}
                             <span className={`text-[10px] sm:text-xs font-semibold ${
-                              isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
+                              isActive
+                                ? "text-white"
+                                : "text-muted-foreground group-hover:text-foreground"
                             }`}>
                               {langOption.label}
                             </span>
@@ -338,8 +382,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           key={t.value}
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
-                          transition={{ delay: 0.55 + index * 0.1, type: "spring", stiffness: 300 }}
-                          whileHover={{ scale: 1.08, transition: { type: "spring", stiffness: 400, damping: 10 } }}
+                          transition={{
+                            delay: 0.55 + index * 0.1,
+                            type: "spring",
+                            stiffness: 300,
+                          }}
+                          whileHover={{ scale: 1.08 }}
                           whileTap={{ scale: 0.93 }}
                           onClick={() => handleThemeChange(t.value)}
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
@@ -358,11 +406,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               transition={{ delay: 0.55 + index * 0.1, type: "spring" }}
                             >
                               <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${
-                                isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
+                                isActive
+                                  ? "text-white"
+                                  : "text-muted-foreground group-hover:text-foreground"
                               }`} />
                             </motion.div>
                             <span className={`text-[10px] sm:text-xs font-semibold ${
-                              isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
+                              isActive
+                                ? "text-white"
+                                : "text-muted-foreground group-hover:text-foreground"
                             }`}>
                               {t.label}
                             </span>
@@ -388,6 +440,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
 
                   <div className="space-y-2.5">
+
                     {/* Performance Booster */}
                     <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-background/50 px-4 py-3.5">
                       <div className="min-w-0">
@@ -408,7 +461,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       />
                     </div>
 
-                    {/* Eco Mode */}
+                    {/* Low-End Device (Eco) Mode */}
                     <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3.5 transition-colors duration-300 ${
                       ecoMode
                         ? "border-emerald-500/40 bg-emerald-950/20"
@@ -416,7 +469,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     }`}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <Leaf className={`w-3.5 h-3.5 flex-shrink-0 ${ecoMode ? "text-emerald-400" : "text-muted-foreground"}`} />
+                          <Leaf className={`w-3.5 h-3.5 flex-shrink-0 ${
+                            ecoMode ? "text-emerald-400" : "text-muted-foreground"
+                          }`} />
                           <p className="text-xs sm:text-sm font-semibold text-foreground">
                             Low-End Device Mode
                           </p>
@@ -432,7 +487,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       />
                     </div>
 
-                    {/* Info chip when eco is on */}
+                    {/* Info chip when eco is active */}
                     <AnimatePresence>
                       {ecoMode && (
                         <motion.div
@@ -449,6 +504,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </motion.div>
                       )}
                     </AnimatePresence>
+
                   </div>
                 </motion.div>
 
@@ -470,7 +526,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       animate={{ scale: [1, 1.1, 1] }}
                       transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                     >
-                      <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                      <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                     </motion.div>
                     <span>Open Discord DM</span>
                   </motion.a>

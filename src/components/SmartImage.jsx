@@ -1,76 +1,32 @@
-import { useState, useEffect } from 'react';
-
 /**
- * SmartImage — drop-in <img> replacement.
+ * SmartImage.jsx — DEPRECATED
  *
- * Behavior:
- *  - Resolves Vite/Vercel public-relative paths correctly
- *    (a leading "/" path resolves against site root in both dev and prod)
- *  - On error, falls back to `fallback` prop, then to a transparent pixel
- *  - Lazy loads + async decodes by default
- *  - Resets when src prop changes
+ * This file is an official deprecation shim. All logic has been removed.
+ *
+ * Migration guide:
+ *   Before:  import SmartImage from "@/components/SmartImage";
+ *   After:   import SafeImage  from "@/components/SafeImage";
+ *            // or named: import { SafeImage } from "@/components/SafeImage";
+ *
+ * SmartImage's original props map directly onto SafeImage:
+ *   src, alt, fallback, loading, decoding, onError, onLoad,
+ *   className, style — all identical.
+ *
+ * SafeImage adds:
+ *   fallbackIcon    — ReactNode rendered when both src and fallback fail
+ *   wrapperClassName / containerClassName — class on the fallback wrapper
+ *   width, height   — passed to the underlying <img> for CLS stability
+ *
+ * This shim re-exports SafeImage as both the named export `SmartImage` and
+ * as the default export so existing import styles continue to work during
+ * the migration period. It will be deleted once all consumer files are
+ * updated to import SafeImage directly.
+ *
+ * @deprecated — use SafeImage from "@/components/SafeImage" instead.
  */
 
-const TRANSPARENT_PIXEL =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+// eslint-disable-next-line no-restricted-imports
+import SafeImage from "./SafeImage";
 
-function normalize(src) {
-  if (!src) return null;
-  if (typeof src !== 'string') return src;
-  const trimmed = src.trim();
-  if (!trimmed) return null;
-  if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
-  if (trimmed.startsWith('/')) return trimmed;
-  // Bare or "./..." — normalize to public root
-  return '/' + trimmed.replace(/^\.?\/?/, '');
-}
-
-export default function SmartImage({
-  src,
-  alt = '',
-  fallback = '/images/placeholder.png',
-  loading = 'lazy',
-  decoding = 'async',
-  onError,
-  onLoad,
-  className,
-  style,
-  ...rest
-}) {
-  const initial = normalize(src) || fallback || TRANSPARENT_PIXEL;
-  const [currentSrc, setCurrentSrc] = useState(initial);
-  const [stage, setStage] = useState('primary');
-
-  useEffect(() => {
-    const next = normalize(src) || fallback || TRANSPARENT_PIXEL;
-    setCurrentSrc(next);
-    setStage('primary');
-  }, [src, fallback]);
-
-  const handleError = (e) => {
-    onError?.(e);
-    if (stage === 'primary' && fallback && currentSrc !== fallback) {
-      setCurrentSrc(fallback);
-      setStage('fallback');
-      return;
-    }
-    if (stage !== 'pixel' && currentSrc !== TRANSPARENT_PIXEL) {
-      setCurrentSrc(TRANSPARENT_PIXEL);
-      setStage('pixel');
-    }
-  };
-
-  return (
-    <img
-      src={currentSrc}
-      alt={alt}
-      loading={loading}
-      decoding={decoding}
-      className={className}
-      style={style}
-      onError={handleError}
-      onLoad={onLoad}
-      {...rest}
-    />
-  );
-}
+export { SafeImage as SmartImage };
+export default SafeImage;
