@@ -1,25 +1,36 @@
 # ═══════════════════════════════════════════════════════════════
-# YOUSSEF DESIGN PORTFOLIO - Robots.txt
+# Youssef Design Portfolio - robots.txt
+# ═══════════════════════════════════════════════════════════════
+#
+# NOTE: The Sitemap directive intentionally uses a relative path
+# ("/sitemap.xml") instead of an absolute URL. RFC-compliant
+# crawlers (Googlebot, Bingbot, Applebot, etc.) resolve it
+# against the host they found this file on, so it works
+# transparently across both the Vercel deployment preview domain
+# (*.vercel.app) and the mapped custom domain
+# (youssef-portfolio.store) without requiring separate configs.
 # ═══════════════════════════════════════════════════════════════
 
 User-agent: *
 Allow: /
 
-# Allow all Google bots
-User-agent: Googlebot
-Allow: /
-
-User-agent: Googlebot-Image
-Allow: /
-
-User-agent: Googlebot-Mobile
-Allow: /
-
-# Sitemap location
-Sitemap: https://youssef-portoflio.store/sitemap.xml
-
-# Disallow admin panel
+# ── Back-office & authentication routes ─────────────────────────
+Disallow: /admin
 Disallow: /admin/
+Disallow: /api/
+Disallow: /callback
+Disallow: /callback/
+Disallow: /config
+Disallow: /config/
 
-# Crawl-delay for politeness
-Crawl-delay: 1
+# ── Sensitive file types ─────────────────────────────────────────
+Disallow: /*.sql$
+Disallow: /*.log$
+Disallow: /*.bak$
+Disallow: /*.zip$
+Disallow: /.htaccess
+Disallow: /.htpasswd
+Disallow: /.env
+
+# ── Sitemap (relative — resolves correctly on any host) ──────────
+Sitemap: /sitemap.xml

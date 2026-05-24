@@ -5,14 +5,29 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// vite.config.ts — production-ready with optional debug sourcemaps.
+// vite.config.ts — production-ready with concealed sourcemaps.
 //
-// To deploy with sourcemaps for debugging:
-//   1. In Vercel project settings -> Environment Variables, add:
-//        VITE_DEBUG_SOURCEMAPS = true
+// Sourcemap strategy:
+//   • Normal production (default): sourcemap = false
+//     Full sourcemap files are NOT generated at all. No .map files are
+//     written to dist/, so client browser DevTools have nothing to load.
+//     This is the safest mode for protecting proprietary infrastructure
+//     routes and internal code annotations from reverse engineering.
+//
+//   • Debug mode (opt-in): sourcemap = 'hidden'
+//     Full sourcemap files ARE generated and written to dist/, but the
+//     browser-visible bundle files contain NO `//# sourceMappingURL=`
+//     comment pointing at them. The maps are available to server-side
+//     error-tracking tools (e.g. Sentry's artifact upload, Datadog RUM)
+//     that are given the maps out-of-band, but remain invisible to anyone
+//     inspecting the live site in DevTools.
+//
+// To enable debug mode for a single deploy:
+//   1. In Vercel → Project Settings → Environment Variables, add:
+//        VITE_DEBUG_SOURCEMAPS = true   (Preview or Production scope)
 //   2. Trigger a redeploy.
-//   3. Open DevTools on the live site -> minified errors will resolve to original source.
-//   4. Remove the env var afterwards.
+//   3. Upload the generated .map files to your error-tracking service.
+//   4. Delete the env var and redeploy again to return to production mode.
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -43,7 +58,10 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
-      sourcemap: debug ? true : false,
+      // 'hidden'  → maps written to disk, NO sourceMappingURL comment in bundles.
+      //             Safe for server-side error tracking; invisible in client DevTools.
+      // false     → maps never written at all. Maximum concealment for production.
+      sourcemap: debug ? 'hidden' : false,
       minify: debug ? false : 'esbuild',
       emptyOutDir: true,
       target: 'es2020',
