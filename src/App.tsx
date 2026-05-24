@@ -27,7 +27,7 @@ import NotFound from "./pages/not-found";
 // localStorage key — persists across tabs and browser restarts so the ban
 // state is synchronised across all open viewports for the same device.
 const LOCAL_STORAGE_KEY = "youssef_session_token";
-const SESSION_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes rolling window
+const SESSION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30-day rolling window — sustains session across cold boots 0026 VPN swaps
 
 // ─── Helpers (pure functions — no hooks, no context) ─────────────────────────
 function generateUUID(): string {
@@ -485,7 +485,7 @@ function AppInner() {
       if (destroyed) return;
 
       ch = supabase
-        .channel(`app-multiplex-channel:${sessionToken}`, {
+        .channel(`app-session-${sessionToken}`, {
           config: { broadcast: { ack: false } },
         })
         // ── Path 1: broadcast — instant delivery (<50 ms), primary path ──

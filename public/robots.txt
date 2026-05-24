@@ -1,6 +1,5 @@
 # ═══════════════════════════════════════════════════════════════
-# Youssef Design Portfolio - robots.txt
-# Canonical: https://www.youssef-portfolio.store
+# Youssef Design Portfolio — robots.txt
 # ═══════════════════════════════════════════════════════════════
 
 User-agent: *
@@ -14,7 +13,7 @@ Disallow: /api/admin/
 Disallow: /config
 Disallow: /config/
 
-# Block sensitive files
+# Block sensitive file types
 Disallow: /*.sql$
 Disallow: /*.log$
 Disallow: /*.bak$
@@ -22,5 +21,5 @@ Disallow: /*.zip$
 Disallow: /.htaccess
 Disallow: /.htpasswd
 
-# Sitemap location
-Sitemap: https://www.youssef-portfolio.store/sitemap.xml
+# Sitemap — relative path (portable across domains / preview deploys)
+Sitemap: /sitemap.xml

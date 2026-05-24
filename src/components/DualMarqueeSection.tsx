@@ -44,11 +44,9 @@ const KEYFRAMES = `
   from { transform: translate3d(0, 0, 0); }
   to   { transform: translate3d(-50%, 0, 0); }
 }
-@keyframes marquee-right {
-  from { transform: translate3d(-50%, 0, 0); }
-  to   { transform: translate3d(0, 0, 0); }
-}
 `;
+// marquee-right removed — all three rows now scroll left for
+// uniform start-edge alignment and zero offset on initial paint.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -398,7 +396,7 @@ export function DualMarqueeSection() {
         </MarqueeRow>
       </div>
 
-      <MarqueeRow duration={25} direction="right" running={running}>
+      <MarqueeRow duration={25} direction="left" running={running}>
         {dupTools.map((t, i) => (
           <ToolCard key={`tool-${t.id}-${i}`} tool={t} />
         ))}

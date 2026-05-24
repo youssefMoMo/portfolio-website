@@ -1,52 +1,41 @@
 // src/components/BackgroundOverlay.tsx
 //
-// ─── REFACTOR NOTES ─────────────────────────────────────────────────────────
+// ─── IMPLEMENTATION NOTES ─────────────────────────────────────────────────────
 //
-//  MOBILE CRASH FIX — backgroundAttachment: "fixed" removed
-//    • `backgroundAttachment: "fixed"` triggers a full-page repaint on every
-//      scroll frame on iOS Safari and most Android browsers. The GPU cannot
-//      promote a fixed-attachment background to its own compositor layer
-//      (WebKit bug active since iOS 8). Result: continuous layout repaints,
-//      heavy FPS drops, and battery drain during any page scroll on mobile.
-//    • Fix: the property is removed entirely. The visual result — a background
-//      image that covers the viewport — is identical without it when the
-//      container is `position: fixed`. The containing div is already
-//      `fixed inset-0`, so the image stays anchored to the viewport with
-//      zero scroll repaints.
+//  1. backgroundAttachment: "fixed"
+//     Applied on desktop via CSS class. On iOS/Android the GPU cannot composite
+//     a fixed-attachment background into its own layer (WebKit bug, active
+//     since iOS 8), so we detect mobile via matchMedia and apply a CSS class
+//     that overrides the fixed attachment to "scroll" on those devices.
+//     The parent container is `position: fixed` so the image still pins to the
+//     viewport on mobile with zero scroll-repaint cost.
 //
-//  BLUR + SCALE OPTIMISATION
-//    • Combining `filter: blur(...)` with `transform: scale(...)` on the same
-//      element is expensive: the browser must rasterise the layer at a larger
-//      resolution before applying the blur kernel.
-//    • The scale is required only to hide the dark edges that appear when
-//      blur samples beyond the image boundary. Since `filter: blur(0.5px)`
-//      needs only ~1–2 px of bleed, the scale can be reduced from 1.03 to
-//      1.01 — a 66 % reduction in the overdraw area.
-//    • `will-change: transform` promotes the layer to its own compositor
-//      surface so subsequent theme changes (which toggle the filter) do not
-//      trigger a style recalc on the main thread.
-//    • On mobile (detected via `@media (max-width: 767px)` equivalent), the
-//      blur is removed entirely. A 0.5 px blur provides no perceptible
-//      softening on high-DPI mobile screens and only adds rasterisation cost.
+//  2. No blur / brightness filter on the image layer
+//     The destructive `filter: blur(0.5px) brightness(0.8)` is removed entirely.
+//     Contrast & readability are handled purely by the tint and vignette layers
+//     below the content, which compose on the GPU with zero main-thread cost.
 //
-//  LOCAL IMAGE FALLBACK
-//    • If `/images/global/bg.png` is unavailable, `onError` on a hidden <img>
-//      probe detects the failure and the layer switches to a CSS radial-gradient
-//      that approximates the original aesthetic — no broken-image box is shown.
+//  3. Pitch-black tint overlay
+//     A semi-transparent rgba(0,0,0,x) layer sits directly above the image to
+//     ensure typography contrast on all route backgrounds (Admin, Users, etc.).
 //
-//  REDUCED MOTION
-//    • The overlay honours `prefers-reduced-motion`. When the media query
-//      matches, no transform or filter is applied to the image layer.
+//  4. Full-perimeter responsive vignette / edge glow
+//     A radial-gradient layer applies a premium screen-edge darkening across
+//     all four viewport boundaries, scaling fluidly across Mobile/Tablet/Desktop.
+//
+//  5. Local image fallback
+//     A hidden <img> probe fires onError if bg.png is unavailable. The layer
+//     silently switches to a CSS gradient that approximates the original.
 
 import { useState, useEffect } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
-// ─── Local CSS-gradient fallback ─────────────────────────────────────────────
-// Shown if bg.png fails to load. Approximates the original dark/moody bg.
-const DARK_GRADIENT_FALLBACK =
-  "radial-gradient(ellipse at 50% 0%, #1a1a2e 0%, #0b0b0f 65%)";
-const LIGHT_GRADIENT_FALLBACK =
-  "radial-gradient(ellipse at 50% 0%, #e8e8f0 0%, #f5f5f7 65%)";
+// ─── Fallback gradients (shown if bg.png fails to load) ──────────────────────
+
+const DARK_FALLBACK =
+  "radial-gradient(ellipse at 50% 0%, #1a1a2e 0%, #0b0b0f 60%)";
+const LIGHT_FALLBACK =
+  "radial-gradient(ellipse at 50% 0%, #e8e8f0 0%, #f5f5f7 60%)";
 
 const BG_IMAGE_PATH = "/images/global/bg.png";
 
@@ -56,89 +45,62 @@ export function BackgroundOverlay() {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
-  // Whether the user prefers reduced motion — skip transform/filter when true
-  const [reducedMotion, setReducedMotion] = useState(false);
-  // Whether bg.png failed to load — use CSS gradient fallback
   const [imgFailed, setImgFailed] = useState(false);
-  // Whether we're on a narrow (mobile) viewport — skip blur on mobile
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // Reduced-motion preference
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mq.matches);
-    const onMqChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
-    mq.addEventListener("change", onMqChange);
-
-    // Mobile viewport (<768 px width)
-    const mobileQuery = window.matchMedia("(max-width: 767px)");
-    setIsMobile(mobileQuery.matches);
-    const onMobileChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mobileQuery.addEventListener("change", onMobileChange);
-
-    return () => {
-      mq.removeEventListener("change", onMqChange);
-      mobileQuery.removeEventListener("change", onMobileChange);
-    };
+    // Detect mobile viewport to disable backgroundAttachment: fixed on touch
+    // devices where it causes continuous full-page repaints.
+    const mq = window.matchMedia("(max-width: 767px)");
+    setIsMobile(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  // ── Image layer styles ────────────────────────────────────────────────────
+  // ── Layer 1: background image ─────────────────────────────────────────────
 
-  // On mobile: no blur, no scale — zero repaint cost during scroll.
-  // On desktop with reduced motion: no transform/filter either.
-  // On desktop normal: minimal scale (1.01) + very slight blur (0.5px).
-  const applyEffects = !isMobile && !reducedMotion;
-
-  const imageLayerStyle: React.CSSProperties = imgFailed
+  const imageStyle: React.CSSProperties = imgFailed
     ? {
-        // CSS gradient fallback — no image, no network dependency
-        background: isDark ? DARK_GRADIENT_FALLBACK : LIGHT_GRADIENT_FALLBACK,
+        background: isDark ? DARK_FALLBACK : LIGHT_FALLBACK,
       }
     : {
         backgroundImage: `url(${BG_IMAGE_PATH})`,
-        backgroundSize:     "cover",
+        backgroundSize: "cover",
         backgroundPosition: "center",
-        backgroundRepeat:   "no-repeat",
-        // backgroundAttachment: "fixed" intentionally omitted — see notes above.
-        // The parent `fixed inset-0` already pins the overlay to the viewport.
-        ...(applyEffects
-          ? {
-              // Reduced scale (1.01 vs old 1.03) covers the 1-2px blur bleed
-              // at a fraction of the original overdraw cost.
-              filter:          isDark
-                ? "blur(0.5px) brightness(0.8)"
-                : "blur(0.5px) brightness(0.92)",
-              transform:       "scale(1.01)",
-              transformOrigin: "center",
-              willChange:      "transform",
-            }
-          : {
-              // No effects on mobile or when reduced motion is preferred —
-              // background image still covers the viewport cleanly.
-              filter:          isDark ? "brightness(0.8)" : "brightness(0.92)",
-            }),
+        backgroundRepeat: "no-repeat",
+        // Fixed attachment makes the image stationary as the page scrolls —
+        // disabled on mobile where it degrades GPU performance (iOS WebKit bug).
+        backgroundAttachment: isMobile ? "scroll" : "fixed",
       };
 
-  // ── Cinematic gradient overlay ────────────────────────────────────────────
+  // ── Layer 2: pitch-black tint (readability / contrast) ───────────────────
 
-  const gradientOverlayStyle: React.CSSProperties = {
+  const tintStyle: React.CSSProperties = {
     background: isDark
-      ? [
-          "linear-gradient(180deg, rgba(0,0,0,0.40) 0%, rgba(11,11,15,0.55) 60%, rgba(11,11,15,0.70) 100%)",
-          "radial-gradient(ellipse at 50% 0%, transparent 40%, rgba(0,0,0,0.35) 100%)",
-        ].join(", ")
-      : [
-          "linear-gradient(180deg, rgba(245,245,247,0.60) 0%, rgba(245,245,247,0.75) 100%)",
-          "radial-gradient(ellipse at 50% 0%, transparent 40%, rgba(245,245,247,0.40) 100%)",
-        ].join(", "),
+      ? "rgba(0, 0, 0, 0.52)"
+      : "rgba(245, 245, 247, 0.58)",
   };
 
-  // ── Soft side vignette ────────────────────────────────────────────────────
+  // ── Layer 3: full-perimeter vignette / edge glow ──────────────────────────
+  // radial-gradient from each corner creates the premium screen-edge darkness.
+  // Using a single radial centred at 50% 50% expanded to cover all 4 edges.
 
   const vignetteStyle: React.CSSProperties = {
     background: isDark
-      ? "linear-gradient(to right, rgba(0,0,0,0.20) 0%, transparent 15%, transparent 85%, rgba(0,0,0,0.20) 100%)"
-      : "linear-gradient(to right, rgba(245,245,247,0.15) 0%, transparent 15%, transparent 85%, rgba(245,245,247,0.15) 100%)",
+      ? [
+          // Outer ring darkness — top, bottom, left, right edges
+          "radial-gradient(ellipse at 50% 0%,   transparent 55%, rgba(0,0,0,0.70) 100%)",
+          "radial-gradient(ellipse at 50% 100%, transparent 55%, rgba(0,0,0,0.70) 100%)",
+          "radial-gradient(ellipse at 0%  50%,  transparent 50%, rgba(0,0,0,0.55) 100%)",
+          "radial-gradient(ellipse at 100% 50%, transparent 50%, rgba(0,0,0,0.55) 100%)",
+        ].join(", ")
+      : [
+          "radial-gradient(ellipse at 50% 0%,   transparent 55%, rgba(200,200,210,0.55) 100%)",
+          "radial-gradient(ellipse at 50% 100%, transparent 55%, rgba(200,200,210,0.55) 100%)",
+          "radial-gradient(ellipse at 0%  50%,  transparent 50%, rgba(200,200,210,0.40) 100%)",
+          "radial-gradient(ellipse at 100% 50%, transparent 50%, rgba(200,200,210,0.40) 100%)",
+        ].join(", "),
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -150,8 +112,8 @@ export function BackgroundOverlay() {
       style={{ background: isDark ? "#0b0b0f" : "#f5f5f7" }}
     >
       {/*
-        Hidden <img> probe — detects bg.png load failure without rendering
-        a broken image box in the UI. Falls back to CSS gradient on error.
+        Hidden probe — detects bg.png failure without rendering a broken-image
+        box. Once onError fires, the component switches to the CSS gradient.
       */}
       {!imgFailed && (
         <img
@@ -165,13 +127,13 @@ export function BackgroundOverlay() {
         />
       )}
 
-      {/* Layer 1: image (or CSS gradient fallback) */}
-      <div className="absolute inset-0" style={imageLayerStyle} />
+      {/* Layer 1 — background image (fixed on desktop, scroll on mobile) */}
+      <div className="absolute inset-0" style={imageStyle} />
 
-      {/* Layer 2: cinematic gradient tint */}
-      <div className="absolute inset-0" style={gradientOverlayStyle} />
+      {/* Layer 2 — semi-transparent pitch-black tint for contrast */}
+      <div className="absolute inset-0" style={tintStyle} />
 
-      {/* Layer 3: side vignette for depth */}
+      {/* Layer 3 — full-perimeter vignette / edge glow */}
       <div className="absolute inset-0" style={vignetteStyle} />
     </div>
   );

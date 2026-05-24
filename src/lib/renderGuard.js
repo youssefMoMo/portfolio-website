@@ -1,34 +1,44 @@
 /**
  * renderGuard.js — temporary safety net for infinite re-render loops.
  *
- * Usage in src/main.tsx (DEV ONLY recommended):
- *   import { installRenderGuard } from '@/lib/renderGuard';
- *   if (import.meta.env.DEV) installRenderGuard();
+ * ⚠️  PRODUCTION GATE: the entire evaluation block is wrapped inside an
+ *     `import.meta.env.DEV` check. In production builds Vite tree-shakes
+ *     the dead branch out completely, leaving zero runtime footprint and
+ *     zero console side-effects.
  *
- * What it does:
- *   - Tracks setState calls per component within a sliding window
- *   - If a component triggers >threshold renders in <window ms, it logs a
- *     loud, single warning with a clear "this is the bug" pointer and
- *     temporarily SUPPRESSES further setState calls from that component
- *     to stop console spam (so you can read the trace).
- *   - Patches `console.error/warn` to deduplicate spam from React's own
- *     "Maximum update depth exceeded" message.
+ * Usage in src/main.tsx:
+ *   import { installRenderGuard } from '@/lib/renderGuard';
+ *   installRenderGuard(); // safe to call unconditionally — DEV gate is internal
+ *
+ * What it does (DEV only):
+ *   - Patches `console.error/warn` to deduplicate React's "Maximum update
+ *     depth exceeded" / "Cannot update a component" / "Too many re-renders"
+ *     spam so you can read the first useful stack trace.
+ *   - Attaches a global `error` listener that catches the same messages
+ *     surfaced via window.onerror and suppresses duplicates.
  *
  * Important: this is a DEBUG aid, not a fix. Find the offending useEffect
  * and add the missing dependency / remove the state update from render.
  */
 
 export function installRenderGuard({
-  threshold = 50, // renders per window before tripping
-  windowMs = 1000, // sliding window
+  threshold = 50, // renders per window before tripping (unused in js version)
+  windowMs = 1000, // sliding window ms (unused in js version)
 } = {}) {
+  // ── Production boundary ───────────────────────────────────────────────────
+  // Wrap ALL logic inside this DEV gate. Vite replaces `import.meta.env.DEV`
+  // with `false` in production builds, making the entire block dead code that
+  // the minifier drops — zero production footprint.
+  if (!import.meta.env.DEV) return;
+
   if (typeof window === "undefined") return;
   if (window.__renderGuardInstalled) return;
   window.__renderGuardInstalled = true;
 
-  // 1. Deduplicate React's "Maximum update depth" spam
+  // 1. Deduplicate React's "Maximum update depth" / related spam
   const origError = console.error;
   const seen = new Map();
+
   console.error = function (...args) {
     const key = String(args[0] || "").slice(0, 200);
     if (
@@ -53,7 +63,7 @@ export function installRenderGuard({
     origError.apply(console, args);
   };
 
-  // 2. Global error handler so we still see real errors
+  // 2. Global error handler — catches the same messages via window.onerror
   window.addEventListener("error", (e) => {
     if (e?.message && e.message.includes("Maximum update depth")) {
       origError.call(
@@ -66,7 +76,7 @@ export function installRenderGuard({
 
   origError.call(
     console,
-    "%c[RenderGuard] active — infinite-loop warnings will be deduplicated.",
+    "%c[RenderGuard] active (DEV) — infinite-loop warnings will be deduplicated.",
     "color:#ffb86b;font-weight:bold",
   );
 }
