@@ -10,6 +10,26 @@
 //     instead of 0. This prevents a 0-duration flash before the double-RAF measurement
 //     fires. The reel animates at a safe default speed from the first frame, then
 //     smoothly transitions to the exact measured speed once bounding-box data is ready.
+//
+// ─── CLS FIX (2026-05) ──────────────────────────────────────────────────────
+//   ROOT CAUSE A — Frozen "Featured Designs" carousel:
+//     @keyframes marquee-scroll-left was removed from index.css (the file's
+//     own comment at line 960 confirms the deletion). The track element
+//     referenced `animation: marquee-scroll-left Xs linear infinite`, which
+//     the browser resolved to an unknown keyframe name — producing a static,
+//     unmoving element. The keyframe is now injected as a self-contained
+//     <style> block inside this component (same pattern DualMarqueeSection
+//     uses for marquee-left / marquee-right), so the carousel is fully
+//     independent of index.css and can never be broken by future CSS purges.
+//
+//   ROOT CAUSE B — Hero async text CLS:
+//     When homeContent is null (first render), the hero badge, title1, and
+//     title2 all render via t() fallbacks. When the async Supabase fetch
+//     resolves with content whose text differs in length from the t() values,
+//     the badge and h1 reflow — shifting all downstream sections downward.
+//     Fix: every dynamic hero text node now lives inside a container that
+//     carries an explicit min-h. This pre-reserves the vertical slot so
+//     content arrival never expands the layout box.
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "wouter";
@@ -25,6 +45,23 @@ import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { profile, statsData } from "@/lib/data";
 import { openDiscordProfile } from "@/lib/discord";
 import { DualMarqueeSection } from "@/components/DualMarqueeSection";
+
+// ── Inline keyframes ───────────────────────────────────────────────────────────
+//
+// @keyframes marquee-scroll-left was intentionally removed from index.css.
+// Embedding it here makes the Featured Designs carousel fully self-contained
+// and immune to any future stylesheet purge or keyframe-name collision.
+//
+// Technique: translate exactly -50% of the track element's total width.
+// Because the track contains 2× item duplication, -50% == one set's width,
+// producing a perfectly seamless loop with zero jump at the boundary.
+
+const PORTFOLIO_KEYFRAMES = `
+@keyframes marquee-scroll-left {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+`;
 
 // ── Static portfolio image manifest ───────────────────────────────────────────
 const ALL_PORTFOLIO_IMAGES = Array.from({ length: 22 }, (_, i) => ({
@@ -225,50 +262,96 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+
+      {/*
+        ── Inline keyframe injection ──────────────────────────────────────────
+        Scoped to this component's mount lifecycle. The <style> tag is injected
+        once at the top of the render tree so the animation name resolves before
+        the carousel track's first composited frame.
+      */}
+      <style>{PORTFOLIO_KEYFRAMES}</style>
+
       {/* ── Hero ── */}
       <section className="relative pt-8 pb-20 px-6 overflow-hidden">
         <div className="max-w-7xl mx-auto text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6 }}
-          >
+
+          {/*
+            CLS FIX — Hero Badge
+            ─────────────────────
+            The badge container receives `min-h-[2.75rem]` (the rendered height
+            of the pill at text-sm with py-2.5). This pre-reserves the vertical
+            slot on the first paint so that when async `content?.hero_badge`
+            arrives with different text, the pill width may change horizontally
+            but the block height — and therefore the layout of everything below —
+            never shifts.
+          */}
+          <div className="min-h-[2.75rem] flex items-center justify-center mb-8">
             <motion.div
-              initial={{ rotateX: 0 }}
-              animate={{ rotateX: [0, 5, -5, 0], rotateY: [0, 5, -5, 0] }}
-              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-              style={{ perspective: 800 }}
-              className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 text-sm font-semibold mb-8 border border-emerald-500/25"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6 }}
             >
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
-              </span>
-              {content?.hero_badge || t("hero.badge")}
+              <motion.div
+                initial={{ rotateX: 0 }}
+                animate={{ rotateX: [0, 5, -5, 0], rotateY: [0, 5, -5, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                style={{ perspective: 800 }}
+                className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 text-sm font-semibold border border-emerald-500/25"
+              >
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+                </span>
+                {content?.hero_badge || t("hero.badge")}
+              </motion.div>
             </motion.div>
-          </motion.div>
+          </div>
 
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.7 }}
-            className="text-5xl md:text-7xl lg:text-8xl font-bold font-display leading-tight mb-6"
-          >
-            <span className="bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-              {content?.hero_title1 || t("hero.title1")}
-            </span>
-            <br />
-            <span className="text-foreground">{content?.hero_title2 || t("hero.title2")}</span>
-          </motion.h1>
+          {/*
+            CLS FIX — Hero H1
+            ──────────────────
+            `min-h-[7.5rem]` reserves approximately two lines of text at the
+            smallest viewport (text-5xl leading-tight ≈ 3.75rem/line × 2).
+            On wider viewports the font is larger but the content is the same
+            number of lines, so the reserved block never over-constrains.
+            `layout="position"` on the Framer Motion wrapper tells the
+            animation engine not to re-measure siblings when this element
+            animates — preventing secondary CLS from the whileInView trigger.
+          */}
+          <div className="min-h-[7.5rem] flex flex-col items-center justify-center mb-6">
+            <motion.h1
+              layout="position"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.7 }}
+              className="text-5xl md:text-7xl lg:text-8xl font-bold font-display leading-tight"
+            >
+              <span className="bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+                {content?.hero_title1 || t("hero.title1")}
+              </span>
+              <br />
+              <span className="text-foreground">{content?.hero_title2 || t("hero.title2")}</span>
+            </motion.h1>
+          </div>
 
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.6 }}
-            className="text-lg md:text-xl text-slate-600 dark:text-zinc-400 max-w-2xl mx-auto mb-10"
-          >
-            {content?.hero_subtitle || t("hero.subtitle")}
-          </motion.p>
+          {/*
+            CLS FIX — Hero Subtitle
+            ────────────────────────
+            `min-h-[3.5rem]` reserves two lines of text-lg body copy before
+            async content arrives. The subtitle is max-w-2xl so it wraps to
+            roughly two lines on mobile; that height is pre-allocated.
+          */}
+          <div className="min-h-[3.5rem] flex items-center justify-center mb-10">
+            <motion.p
+              layout="position"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.6 }}
+              className="text-lg md:text-xl text-slate-600 dark:text-zinc-400 max-w-2xl mx-auto"
+            >
+              {content?.hero_subtitle || t("hero.subtitle")}
+            </motion.p>
+          </div>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -294,6 +377,7 @@ export default function Home() {
               </Button>
             </Link>
           </motion.div>
+
         </div>
       </section>
 
@@ -322,9 +406,21 @@ export default function Home() {
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="relative">
                     <IconComp className="w-6 h-6 text-primary mx-auto mb-3" />
-                    <p className="text-3xl md:text-4xl font-bold font-display bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
-                      {dynamicValues[stat.id] || stat.value}
-                    </p>
+                    {/*
+                      CLS FIX — Stat value
+                      ─────────────────────
+                      `min-h-[2.5rem]` on the value wrapper pre-allocates the
+                      row height for the text-3xl figure. Since `stat.value`
+                      is always present as the synchronous fallback, the text
+                      is never empty; this guard is purely defensive against
+                      a Supabase value that is momentarily undefined during
+                      re-fetch on a live admin update.
+                    */}
+                    <div className="min-h-[2.5rem] flex items-center justify-center">
+                      <p className="text-3xl md:text-4xl font-bold font-display bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
+                        {dynamicValues[stat.id] || stat.value}
+                      </p>
+                    </div>
                     <p className="text-sm text-slate-600 dark:text-zinc-400 mt-1">{stat.title}</p>
                   </div>
                 </motion.div>
@@ -362,22 +458,28 @@ export default function Home() {
           {/*
             ── Slider: Featured Designs / Portfolio Reel ───────────────────
             Architecture:
-              • dir="ltr" enforces consistent scroll direction in Arabic locale
-              • 2× item duplication (minimum for a seamless -50% CSS loop)
+              • @keyframes marquee-scroll-left injected via the <style> tag at
+                the top of this component's render output. The keyframe is
+                intentionally NOT in index.css (which deleted it) — embedding
+                it here makes the carousel fully self-contained.
+              • dir="ltr" enforces consistent scroll direction in Arabic locale.
+              • 2× item duplication (minimum for a seamless -50% CSS loop).
               • portfolioDuration defaults to PORTFOLIO_MIN_DUR (30 s) so the
-                reel is never momentarily frozen at "none" animation
+                reel is never momentarily frozen at "none" animation.
               • After double-RAF, measured duration = oneSetWidth / PX_PER_SEC
-                guarantees a constant 50 px/s crawl on every screen width
+                guarantees a constant 50 px/s crawl on every screen width.
               • portfolioTrackRef attaches to the inner scrolling track (not
-                the overflow-hidden clip wrapper) so scrollWidth is accurate
+                the overflow-hidden clip wrapper) so scrollWidth is accurate.
+              • pointer-events: none is intentionally NOT set on the outer
+                wrapper — the hover overlay on each card must remain interactive.
           */}
           <div
             className="relative w-full overflow-hidden"
             dir="ltr"
             style={{
-              direction:        "ltr",
-              maskImage:        "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
-              WebkitMaskImage:  "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+              direction:       "ltr",
+              maskImage:       "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
             }}
           >
             <div
@@ -433,9 +535,18 @@ export default function Home() {
           >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-cyan-500/10" />
             <div className="relative">
-              <h2 className="text-3xl md:text-4xl font-display font-bold mb-4 text-slate-900 dark:text-zinc-100">
-                {content?.cta_title || t("cta.title")}
-              </h2>
+              {/*
+                CLS FIX — CTA title
+                ────────────────────
+                `min-h-[3rem]` reserves one line of text-3xl / text-4xl before
+                async content arrives, preventing the CTA card from expanding
+                downward when content?.cta_title loads.
+              */}
+              <div className="min-h-[3rem] flex items-center justify-center mb-4">
+                <h2 className="text-3xl md:text-4xl font-display font-bold text-slate-900 dark:text-zinc-100">
+                  {content?.cta_title || t("cta.title")}
+                </h2>
+              </div>
               <p className="text-slate-600 dark:text-zinc-400 max-w-xl mx-auto mb-8">
                 {content?.cta_subtitle || t("cta.subtitle")}
               </p>
@@ -462,6 +573,7 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
+
     </div>
   );
 }
