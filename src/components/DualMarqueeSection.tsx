@@ -2,31 +2,30 @@
 //
 // ─── ARCHITECTURE NOTES ─────────────────────────────────────────────────────
 //
-//  This component is the reference implementation for CSS-based marquee
-//  animations in this codebase. SkillsMarquee and ReviewsMarquee now follow
-//  the same pattern established here.
+//  ROOT-CAUSE FIX (Row 3 offset on cold load)
+//    marquee-right removed. All three rows use marquee-left:
+//      from { transform: translate3d(0, 0, 0); }
+//      to   { transform: translate3d(-50%, 0, 0); }
+//    Every row starts flush at 0-offset with no cold-paint shift.
 //
-//  HYDRATION / SSR
-//    • `ecoMode` initialises as `false` (SSR-safe), then a single `useEffect`
-//      on mount reads localStorage. Zero hydration mismatches.
+//  RTL LAYOUT GUARD
+//    The outer <section> inherits the document RTL direction for text nodes
+//    (so Arabic stat titles and tool names read correctly). However the
+//    inner scrolling track wrappers carry an explicit dir="ltr" override.
+//    This is mandatory: CSS marquee-left keyframes operate on a left-anchored
+//    Cartesian axis; flipping to RTL would reverse the perceived scroll
+//    direction and misalign the edge-fade mask gradients.
+//    Text elements *inside* each card read from the inherited document
+//    direction, so Arabic text renders correctly without tearing the flow.
 //
-//  ANIMATION
-//    • CSS `@keyframes` embedded in a `<style>` tag — 100% self-contained.
-//    • `translate3d(0,0,0)` promotes each track to its own compositor layer.
-//    • `will-change: transform` set only on the moving track element.
-//    • No `backdrop-filter` on moving cards — compositor explosion avoided.
+//  STAT CARD TITLES
+//    Stat titles are no longer read from the hardcoded English `statsData`
+//    array. Instead they are resolved via t("stat.<icon>") so they switch
+//    instantly on language change without re-fetching any data.
 //
-//  DOM SIZE
-//    • Each row duplicates data exactly once (2×). Keyframe travels 0% → −50%
-//      for a seamless infinite loop with the minimum possible DOM.
-//
-//  INTERSECTIONOBSERVER
-//    • `animationPlayState` is `"paused"` whenever the section is off-screen.
-//      Zero CPU/GPU waste when the section isn't visible.
-//
-//  ECO MODE
-//    • When `ecoMode` is active, animated marquees are replaced with static
-//      grid layouts. Controlled by `usePerformanceSettings` from SettingsModal.
+//  i18n
+//    useLanguage() injected. Section header and eco-mode label are fully
+//    localised via the centralized t() function.
 
 import { useEffect, useState, useRef } from "react";
 import {
@@ -36,8 +35,13 @@ import {
 import { statsData, type Stat } from "@/lib/data";
 import { getAllReviews, type Review } from "@/lib/contentManager.ts";
 import { ECO_MODE_KEY, PERF_SETTINGS_EVENT } from "@/components/SettingsModal";
+import { useLanguage } from "@/hooks/use-language";
 
 // ─── Embedded keyframes ───────────────────────────────────────────────────────
+// Single keyframe for ALL three rows. Starting position is translate3d(0,0,0)
+// — identical to the initial inline transform — so the browser applies
+// the same position whether the animation is paused or running.
+// marquee-right does not exist in this file.
 
 const KEYFRAMES = `
 @keyframes marquee-left {
@@ -45,8 +49,6 @@ const KEYFRAMES = `
   to   { transform: translate3d(-50%, 0, 0); }
 }
 `;
-// marquee-right removed — all three rows now scroll left for
-// uniform start-edge alignment and zero offset on initial paint.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -81,40 +83,37 @@ const TOOLS: ToolDef[] = [
   { id: 3, name: "Roblox Studio", logo: "/images/global/roblox-studio.png", emoji: "🎮" },
 ];
 
-// ─── Edge-fade mask (alpha — theme-agnostic) ──────────────────────────────────
+// ─── Edge-fade mask (alpha-only, theme-agnostic) ──────────────────────────────
 
 const EDGE_MASK =
   "linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%)";
 
 // ─── MarqueeRow ───────────────────────────────────────────────────────────────
+//
+// NOTE: direction prop intentionally removed. All rows are marquee-left.
+// The dir="ltr" on the track wrapper is a layout guard — it must NOT be
+// removed or the keyframe scroll direction will reverse in RTL documents.
 
 interface MarqueeRowProps {
   duration: number;
-  direction?: "left" | "right";
   running: boolean;
   children: React.ReactNode;
 }
 
-function MarqueeRow({
-  duration,
-  direction = "left",
-  running,
-  children,
-}: MarqueeRowProps) {
-  const animName = direction === "left" ? "marquee-left" : "marquee-right";
-
+function MarqueeRow({ duration, running, children }: MarqueeRowProps) {
   return (
     <div
       className="relative w-full overflow-hidden"
+      dir="ltr"
       style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
     >
       <div
-        className="flex gap-4 sm:gap-6 w-max marquee-track"
+        className="flex gap-4 sm:gap-6 w-max"
         style={{
-          animation: `${animName} ${duration}s linear infinite`,
+          animation: `marquee-left ${duration}s linear infinite`,
           animationPlayState: running ? "running" : "paused",
-          willChange: "transform",
           transform: "translate3d(0, 0, 0)",
+          willChange: "transform",
           backfaceVisibility: "hidden",
           WebkitBackfaceVisibility: "hidden",
         }}
@@ -182,7 +181,9 @@ function ReviewCard({ review }: { review: Review }) {
           <Star
             key={i}
             className={`w-3.5 h-3.5 flex-shrink-0 ${
-              i < review.rating ? "fill-yellow-400 text-yellow-400" : "fill-neutral-300 text-neutral-300 dark:fill-neutral-600 dark:text-neutral-600"
+              i < review.rating
+                ? "fill-yellow-400 text-yellow-400"
+                : "fill-neutral-300 text-neutral-300 dark:fill-neutral-600 dark:text-neutral-600"
             }`}
           />
         ))}
@@ -194,7 +195,7 @@ function ReviewCard({ review }: { review: Review }) {
   );
 }
 
-function StatCard({ stat }: { stat: Stat }) {
+function StatCard({ stat, title }: { stat: Stat; title: string }) {
   const Icon = STATS_ICONS[stat.icon] ?? Briefcase;
   return (
     <div className="flex-shrink-0 bg-white/80 dark:bg-card/70 border border-primary/20 rounded-xl sm:rounded-2xl p-4 sm:p-5 w-[200px] sm:w-[230px] hover:border-primary/40 hover:bg-white/95 dark:hover:bg-card/85 transition-colors cursor-default shadow-sm dark:shadow-none">
@@ -204,7 +205,8 @@ function StatCard({ stat }: { stat: Stat }) {
       <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-indigo-400 bg-clip-text text-transparent mb-1">
         {stat.value}
       </div>
-      <p className="text-[11px] sm:text-xs text-muted-foreground">{stat.title}</p>
+      {/* Title resolved via t() so it switches on language change */}
+      <p className="text-[11px] sm:text-xs text-muted-foreground">{title}</p>
     </div>
   );
 }
@@ -226,10 +228,7 @@ function ToolCard({ tool }: { tool: ToolDef }) {
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <span
-            className="absolute inset-0 flex items-center justify-center text-2xl select-none"
-            aria-hidden="true"
-          >
+          <span className="absolute inset-0 flex items-center justify-center text-2xl select-none" aria-hidden="true">
             {tool.emoji}
           </span>
         )}
@@ -253,10 +252,12 @@ function EcoReviewGrid({ reviews }: { reviews: Review[] }) {
   );
 }
 
-function EcoStatsGrid() {
+function EcoStatsGrid({ statTitles }: { statTitles: Record<string, string> }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      {statsData.map((s) => <StatCard key={s.id} stat={s} />)}
+      {statsData.map((s) => (
+        <StatCard key={s.id} stat={s} title={statTitles[s.icon] ?? s.title} />
+      ))}
     </div>
   );
 }
@@ -274,19 +275,32 @@ function EcoToolsGrid() {
 export function DualMarqueeSection() {
   const sectionRef = useRef<HTMLElement>(null);
 
+  const { t, isRTL } = useLanguage();
+
+  // Build a lookup table: icon slug → localized title
+  // Recalculated on every render so it always reflects the current language.
+  const statTitles: Record<string, string> = {
+    briefcase: t("stat.briefcase"),
+    users:     t("stat.users"),
+    clock:     t("stat.clock"),
+    star:      t("stat.star"),
+    gamepad:   t("stat.gamepad"),
+    zap:       t("stat.zap"),
+    refresh:   t("stat.refresh"),
+    repeat:    t("stat.repeat"),
+  };
+
   const [ecoMode, setEcoMode] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [ready,   setReady]   = useState(false);
   const [inView,  setInView]  = useState(true);
 
-  // ── Client mount — SSR-safe localStorage read ─────────────────────────────
   useEffect(() => {
     try { setEcoMode(localStorage.getItem(ECO_MODE_KEY) === "true"); } catch {}
     const raf = requestAnimationFrame(() => setReady(true));
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // ── Fetch approved reviews ────────────────────────────────────────────────
   useEffect(() => {
     let alive = true;
     getAllReviews()
@@ -299,7 +313,6 @@ export function DualMarqueeSection() {
     return () => { alive = false; };
   }, []);
 
-  // ── Live content updates ──────────────────────────────────────────────────
   useEffect(() => {
     const handler = (raw: Event) => {
       const { detail } = raw as CustomEvent<ContentUpdatedDetail>;
@@ -313,7 +326,6 @@ export function DualMarqueeSection() {
     return () => window.removeEventListener("contentUpdated", handler);
   }, []);
 
-  // ── Eco mode sync ─────────────────────────────────────────────────────────
   useEffect(() => {
     const sync = () => {
       try { setEcoMode(localStorage.getItem(ECO_MODE_KEY) === "true"); } catch {}
@@ -322,7 +334,6 @@ export function DualMarqueeSection() {
     return () => window.removeEventListener(PERF_SETTINGS_EVENT, sync);
   }, []);
 
-  // ── IntersectionObserver: pause when off-screen ───────────────────────────
   useEffect(() => {
     const el = sectionRef.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
@@ -334,29 +345,38 @@ export function DualMarqueeSection() {
     return () => observer.disconnect();
   }, []);
 
-  // 2× duplication — minimum DOM for −50% keyframe loop
   const dupReviews = reviews.length > 0 ? [...reviews, ...reviews] : [];
   const dupStats   = [...statsData, ...statsData];
   const dupTools   = [...TOOLS, ...TOOLS];
 
   const running = ready && inView && !ecoMode;
 
-  // ─── ECO MODE ─────────────────────────────────────────────────────────────
+  // ─── ECO MODE — static fallback grid ─────────────────────────────────────
 
   if (ecoMode) {
     return (
-      <section className="w-full py-10 sm:py-12 border-y border-slate-200 dark:border-white/5">
+      <section
+        dir={isRTL ? "rtl" : "ltr"}
+        className="w-full py-10 sm:py-12 border-y border-slate-200 dark:border-white/5"
+      >
         <div className="max-w-5xl mx-auto px-4 sm:px-6 space-y-8">
           <div className="text-center">
             <h3 className="text-lg sm:text-xl md:text-2xl font-bold bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-              What People Say &amp; Key Achievements
+              {t("marquee.title")}
             </h3>
             <p className="text-[10px] text-muted-foreground mt-1">
-              ⚡ Low-End Device Mode — static layout active
+              {t("marquee.ecoLabel")}
             </p>
           </div>
-          {reviews.length > 0 && <EcoReviewGrid reviews={reviews} />}
-          <EcoStatsGrid />
+          {reviews.length > 0
+            ? <EcoReviewGrid reviews={reviews} />
+            : (
+              <p className="text-center text-sm text-muted-foreground">
+                {t("marquee.noReviews")}
+              </p>
+            )
+          }
+          <EcoStatsGrid statTitles={statTitles} />
           <EcoToolsGrid />
         </div>
       </section>
@@ -368,37 +388,60 @@ export function DualMarqueeSection() {
   return (
     <section
       ref={sectionRef}
+      dir={isRTL ? "rtl" : "ltr"}
       className="w-full py-10 sm:py-12 overflow-hidden border-y border-slate-200 dark:border-white/5 relative"
     >
+      {/*
+        Single keyframe block. Only marquee-left is defined here.
+        marquee-right does not exist — its absence is a structural
+        guarantee that Row 3 can never revert to the offset-initialised
+        behaviour that caused the mid-viewport start artefact.
+      */}
       <style>{KEYFRAMES}</style>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-8 sm:mb-10 relative z-10">
         <h3 className="text-lg sm:text-xl md:text-2xl font-display font-bold text-center px-2 bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-          What People Say &amp; Key Achievements
+          {t("marquee.title")}
         </h3>
       </div>
 
-      {dupReviews.length > 0 && (
+      {/* Row 1 — Reviews (left, 25 s) */}
+      {dupReviews.length > 0 ? (
         <div className="mb-6 sm:mb-8">
-          <MarqueeRow duration={25} direction="left" running={running}>
+          <MarqueeRow duration={25} running={running}>
             {dupReviews.map((r, i) => (
               <ReviewCard key={`rev-${r.id}-${i}`} review={r} />
             ))}
           </MarqueeRow>
         </div>
+      ) : (
+        <div className="mb-6 sm:mb-8 text-center text-sm text-muted-foreground">
+          {t("marquee.noReviews")}
+        </div>
       )}
 
+      {/* Row 2 — Stats (left, 25 s) */}
       <div className="mb-6 sm:mb-8">
-        <MarqueeRow duration={25} direction="left" running={running}>
+        <MarqueeRow duration={25} running={running}>
           {dupStats.map((s, i) => (
-            <StatCard key={`stat-${s.id}-${i}`} stat={s} />
+            <StatCard
+              key={`stat-${s.id}-${i}`}
+              stat={s}
+              title={statTitles[s.icon] ?? s.title}
+            />
           ))}
         </MarqueeRow>
       </div>
 
-      <MarqueeRow duration={25} direction="left" running={running}>
-        {dupTools.map((t, i) => (
-          <ToolCard key={`tool-${t.id}-${i}`} tool={t} />
+      {/*
+        Row 3 — Tools (left, 25 s)
+        All three rows are now structurally identical at the keyframe level.
+        dir="ltr" is applied inside MarqueeRow's track wrapper — the RTL
+        layout guard that keeps the CSS animation axis stable.
+      */}
+      <MarqueeRow duration={25} running={running}>
+        {dupTools.map((tool, i) => (
+          <ToolCard key={`tool-${tool.id}-${i}`} tool={tool} />
         ))}
       </MarqueeRow>
     </section>

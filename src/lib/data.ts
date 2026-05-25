@@ -81,91 +81,132 @@ export interface Profile {
   portfolioItems: PortfolioItem[];
 }
 
-export type TranslationKey = 
+// ─── TranslationKey union ─────────────────────────────────────────────────────
+// Every hardcoded UI string in the app must map to exactly one key here.
+// Add new keys at the bottom of their namespace cluster — never rename existing
+// keys (that is a breaking change requiring a grep across all consumers).
+
+export type TranslationKey =
+  // Navigation
   | "nav.home" | "nav.portfolio" | "nav.games" | "nav.pricing" | "nav.reviews" | "nav.policies"
+  | "nav.discord"
+  // Buttons
   | "btn.portfolio" | "btn.pricing" | "btn.discord" | "btn.contact" | "btn.hire"
+  // Hero
   | "hero.badge" | "hero.title1" | "hero.title2" | "hero.subtitle"
+  // Stats — home page grid (reuse stat.* keys below)
   | "stats.projects" | "stats.clients" | "stats.rating" | "stats.years"
+  // Stat card titles — keyed by the icon slug so DualMarqueeSection can look them up
+  | "stat.briefcase" | "stat.users" | "stat.clock" | "stat.star"
+  | "stat.gamepad"   | "stat.zap"   | "stat.refresh" | "stat.repeat"
+  // CTA Section
   | "cta.title" | "cta.subtitle" | "cta.plan" | "cta.discord"
-  | "portfolio.badge" | "portfolio.title" | "portfolio.subtitle" | "portfolio.cta" | "portfolio.ctaText" | "portfolio.discuss"
-  | "pricing.badge" | "pricing.title" | "pricing.subtitle" | "pricing.hint" | "pricing.featured" | "pricing.goWith" | "pricing.whyTitle" | "pricing.faqTitle" | "pricing.stillQ" | "pricing.contactDiscord"
-  | "reviews.badge" | "reviews.title" | "reviews.subtitle" | "reviews.based" | "reviews.reviewsText" | "reviews.ctaTitle" | "reviews.ctaText" | "reviews.writeReview"
-  | "policies.badge" | "policies.title" | "policies.subtitle" | "policies.questionsTitle" | "policies.askDiscord" | "policies.contactDiscord" | "policies.noPolicies"
-  | "games.badge" | "games.title" | "games.subtitle" | "games.loading" | "games.error" | "games.errorTitle" | "games.retry" | "games.reload" | "games.defaultName" | "games.credit" | "games.playNow" | "games.noGamesTitle" | "games.noGamesText" | "games.ctaTitle" | "games.ctaText" | "games.contactDiscord"
-  | "admin.panelTitle" | "admin.discordStepDesc" | "admin.passwordStepDesc" | "admin.discordIdLabel" | "admin.discordIdHelp" | "admin.verifyDiscord" | "admin.passwordLabel" | "admin.passwordPlaceholder" | "admin.showPassword" | "admin.hidePassword" | "admin.login" | "admin.changeDiscordId" | "admin.devNotice" | "admin.verifiedTitle" | "admin.discordIdMasked" | "admin.goToDashboard" | "admin.logout" | "admin.invalidIdTitle" | "admin.invalidIdDesc" | "admin.notRegisteredTitle" | "admin.notRegisteredDesc" | "admin.verifiedDesc" | "admin.errorTitle" | "admin.errorDesc" | "admin.loginSuccessTitle" | "admin.loginSuccessDesc" | "admin.wrongPasswordTitle" | "admin.wrongPasswordDesc" | "admin.logoutTitle" | "admin.logoutDesc"
+  // Portfolio Page
+  | "portfolio.badge" | "portfolio.title" | "portfolio.subtitle"
+  | "portfolio.cta"   | "portfolio.ctaText" | "portfolio.discuss"
+  // Pricing Page
+  | "pricing.badge"  | "pricing.title"    | "pricing.subtitle"  | "pricing.hint"
+  | "pricing.featured" | "pricing.goWith" | "pricing.whyTitle"  | "pricing.faqTitle"
+  | "pricing.stillQ" | "pricing.contactDiscord"
+  | "pricing.includes" | "pricing.unlimited" | "pricing.revisions"
+  | "pricing.orderTitle" | "pricing.copyMsg" | "pricing.copied" | "pricing.openDM"
+  // Reviews Page
+  | "reviews.badge"  | "reviews.title"      | "reviews.subtitle"
+  | "reviews.based"  | "reviews.reviewsText" | "reviews.ctaTitle"
+  | "reviews.ctaText" | "reviews.writeReview"
+  // Policies Page
+  | "policies.badge" | "policies.title"         | "policies.subtitle"
+  | "policies.questionsTitle" | "policies.askDiscord" | "policies.contactDiscord"
+  | "policies.noPolicies"    | "policies.sections"   | "policies.contactHint"
+  // Games Page
+  | "games.badge"     | "games.title"      | "games.subtitle"  | "games.loading"
+  | "games.error"     | "games.errorTitle" | "games.retry"     | "games.reload"
+  | "games.defaultName" | "games.credit"   | "games.playNow"
+  | "games.noGamesTitle" | "games.noGamesText"
+  | "games.ctaTitle"  | "games.ctaText"    | "games.contactDiscord"
+  // Admin Login
+  | "admin.panelTitle" | "admin.discordStepDesc" | "admin.passwordStepDesc"
+  | "admin.discordIdLabel" | "admin.discordIdHelp" | "admin.verifyDiscord"
+  | "admin.passwordLabel"  | "admin.passwordPlaceholder"
+  | "admin.showPassword"   | "admin.hidePassword"
+  | "admin.login" | "admin.changeDiscordId" | "admin.devNotice"
+  | "admin.verifiedTitle"  | "admin.discordIdMasked" | "admin.goToDashboard"
+  | "admin.logout"
+  | "admin.invalidIdTitle" | "admin.invalidIdDesc"
+  | "admin.notRegisteredTitle" | "admin.notRegisteredDesc"
+  | "admin.verifiedDesc"   | "admin.errorTitle" | "admin.errorDesc"
+  | "admin.loginSuccessTitle" | "admin.loginSuccessDesc"
+  | "admin.wrongPasswordTitle" | "admin.wrongPasswordDesc"
+  | "admin.logoutTitle"    | "admin.logoutDesc"
+  // Admin — Reviews Tab
+  | "admin.reviews.title"    | "admin.reviews.desc"
+  | "admin.reviews.newBtn"   | "admin.reviews.createTitle" | "admin.reviews.editTitle"
+  | "admin.reviews.createBtn" | "admin.reviews.saveBtn"
+  | "admin.reviews.filterAll" | "admin.reviews.filterPending"
+  | "admin.reviews.filterApproved" | "admin.reviews.filterRejected"
+  | "admin.reviews.approve"  | "admin.reviews.reject"
+  | "admin.reviews.refresh"  | "admin.reviews.noReviews" | "admin.reviews.createFirst"
+  | "admin.reviews.pin"      | "admin.reviews.unpin"     | "admin.reviews.featured"
+  | "admin.reviews.autoApprove" | "admin.reviews.pinFeat" | "admin.reviews.verified"
+  | "admin.reviews.created"  | "admin.reviews.live"      | "admin.reviews.asPending"
+  | "admin.reviews.statusApproved" | "admin.reviews.statusPending" | "admin.reviews.statusRejected"
+  // Admin — Users Tab
+  | "admin.users.title"    | "admin.users.modPanel"
+  | "admin.users.banUser"  | "admin.users.unbanUser" | "admin.users.liveAlert"
+  | "admin.users.banBtn"   | "admin.users.alreadyBanned"
+  | "admin.users.unbanBtn" | "admin.users.notBanned"
+  | "admin.users.sendAlert" | "admin.users.clearAlert"
+  | "admin.users.actions"  | "admin.users.refresh"
+  | "admin.users.noSessions" | "admin.users.noMatch"
+  | "admin.users.total"    | "admin.users.active"  | "admin.users.banned"
+  | "admin.users.dbError"
+  | "admin.users.reasonPlaceholder" | "admin.users.welcomeBack" | "admin.users.msgPlaceholder"
+  | "admin.users.inactive" | "admin.users.loading"
+  // Admin — Games Tab
+  | "admin.games.title"    | "admin.games.desc"
+  | "admin.games.addTitle" | "admin.games.editTitle"
+  | "admin.games.placeId"  | "admin.games.gameName"
+  | "admin.games.creator"  | "admin.games.displayOrder" | "admin.games.published"
+  | "admin.games.saving"   | "admin.games.updateBtn"    | "admin.games.addBtn"
+  | "admin.games.noGames"  | "admin.games.refresh"
+  | "admin.games.howTitle" | "admin.games.how1" | "admin.games.how2" | "admin.games.how3"
+  // Settings Modal
+  | "settings.title"      | "settings.customize"
+  | "settings.language"   | "settings.theme"       | "settings.performance"
+  | "settings.contact"
+  | "settings.perfBooster" | "settings.perfBoosterDesc"
+  | "settings.ecoMode"     | "settings.ecoModeDesc"  | "settings.ecoActive"
+  | "settings.openDiscord" | "settings.closeLabel"
+  | "settings.themeLight"  | "settings.themeDark"    | "settings.themeSystem"
+  | "settings.copyright"
+  // Marquee Section
+  | "marquee.title" | "marquee.ecoLabel" | "marquee.noReviews"
+  // About Section
+  | "about.badge" | "about.title" | "about.intro"
+  | "about.offerTitle" | "about.offer1" | "about.offer2" | "about.offer3"
+  | "about.offer4" | "about.offer5" | "about.offer6"
+  | "about.whyTitle" | "about.why1" | "about.why2" | "about.why3" | "about.why4"
+  | "about.ratesTitle" | "about.rate1Label" | "about.rate1Price"
+  | "about.rate2Label" | "about.rate2Price"
+  | "about.paymentTitle" | "about.payment"
+  | "about.deliveryTitle" | "about.delivery"
+  | "about.cta"
+  | "about.skill1" | "about.skill2" | "about.skill3" | "about.skill4"
+  // Not Found
   | "notFound.message" | "notFound.description" | "notFound.goHome"
+  // Footer
   | "footer.tagline" | "footer.role" | "footer.transform" | "footer.follow" | "footer.rights"
+  // Common
   | "loading" | "error" | "success" | "cancel" | "save" | "delete" | "edit" | "add" | "close" | "submit";
 
-export type Language = 'en' | 'ar' | 'es';
+export type Language = "en" | "ar" | "es";
 
 export type Translations = Record<Language, Record<TranslationKey, string>>;
 
 // ═══════════════════════════════════════════════════════════════
-// TRANSLATIONS
-// ═══════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════
-// 🌐 LOCALIZATION ARCHITECTURE — FUTURE OPTIMIZATION GUIDE
-// ═══════════════════════════════════════════════════════════════
-//
-// CURRENT APPROACH (synchronous, co-located):
-//   All three locale dictionaries (en, ar, es) are inlined here and
-//   shipped in the main bundle on every page load, regardless of the
-//   user's active language. At current scale (~3 languages × ~100 keys)
-//   the overhead is negligible, but this becomes a liability when
-//   adding more locales or richer content namespaces.
-//
-// FUTURE-PROOFING STRATEGY — Code Splitting via Dynamic Imports:
-//
-//   Step 1 — Extract each language into its own JSON module:
-//     src/locales/en.json   (English strings)
-//     src/locales/ar.json   (Arabic strings)
-//     src/locales/es.json   (Spanish strings)
-//
-//   Step 2 — Replace the static `translations` object with a loader:
-//
-//     // src/lib/i18n.ts
-//     import type { Language, TranslationKey } from '@/lib/data';
-//
-//     const _localeCache = new Map<Language, Record<TranslationKey, string>>();
-//
-//     export async function loadLocale(
-//       lang: Language
-//     ): Promise<Record<TranslationKey, string>> {
-//       if (_localeCache.has(lang)) return _localeCache.get(lang)!;
-//       // Vite/Rollup statically analyses this pattern and emits one
-//       // code-split chunk per locale (e.g. assets/en-Bk3xP.js):
-//       const mod = await import(`./locales/${lang}.json`);
-//       _localeCache.set(lang, mod.default);
-//       return mod.default;
-//     }
-//
-//   Step 3 — Preload the detected locale before first render:
-//
-//     // src/main.tsx
-//     import { loadLocale } from '@/lib/i18n';
-//     const detectedLang = (navigator.language.slice(0, 2) as Language) ?? 'en';
-//     await loadLocale(detectedLang);   // fires before ReactDOM.createRoot
-//     ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
-//
-//   Step 4 — Update `useLanguage` hook so that on language switch it calls
-//     `loadLocale(lang)` instead of importing from this file directly.
-//     Wrap lazy switches in React.Suspense with an `en` fallback so the
-//     UI never flickers during the async chunk fetch.
-//
-//   WHY THIS MATTERS:
-//   • Reduces initial bundle by ~(n-1)/n for n languages (currently ~67%).
-//   • Each locale JSON chunk is independently cacheable by the CDN/SW.
-//   • Enables adding new locales without touching the core bundle at all.
-//   • `import(`./locales/${lang}.json`)` is statically analysable by
-//     Vite/Rollup, so it emits deterministic chunk filenames for optimal
-//     cache invalidation on locale-only content changes.
-//
-//   MIGRATION GATE:
-//   `translations.ts` has been DEPRECATED and deleted as of this refactor.
-//   All consumers MUST import `translations`, `TranslationKey`, `Language`,
-//   `getTranslation`, and `getTranslations` exclusively from `@/lib/data`.
+// TRANSLATIONS — Monolithic dictionary, all 3 locales inline.
+// Future-proofing: see the LOCALIZATION ARCHITECTURE comment
+// in the original file for the code-splitting migration path.
 // ═══════════════════════════════════════════════════════════════
 
 export const translations: Translations = {
@@ -177,32 +218,43 @@ export const translations: Translations = {
     "nav.pricing": "Pricing",
     "nav.reviews": "Reviews",
     "nav.policies": "Policies",
-    
+    "nav.discord": "Discord",
+
     // Buttons
     "btn.portfolio": "View Portfolio",
     "btn.pricing": "See Pricing",
     "btn.discord": "Join Discord",
     "btn.contact": "Contact Me",
     "btn.hire": "Hire Me",
-    
+
     // Hero Section
     "hero.badge": "Available for Projects",
     "hero.title1": "Crafting Immersive",
     "hero.title2": "User Interfaces",
     "hero.subtitle": "Crafting immersive and high-quality user interfaces for your Roblox experiences.",
-    
-    // Stats
+
+    // Stats (home grid labels)
     "stats.projects": "Projects",
     "stats.clients": "Clients",
     "stats.rating": "Rating",
     "stats.years": "Years Experience",
-    
+
+    // Stat card titles (keyed by icon slug for marquee + home page)
+    "stat.briefcase": "Projects Completed",
+    "stat.users": "Happy Clients",
+    "stat.clock": "Years of Experience",
+    "stat.star": "5-Star Reviews",
+    "stat.gamepad": "Games Launched",
+    "stat.zap": "Response Time",
+    "stat.refresh": "Revision Rate",
+    "stat.repeat": "Client Retention",
+
     // CTA Section
     "cta.title": "Ready to Transform Your Game?",
     "cta.subtitle": "Elevate your Roblox experience with premium, professional UI design that players love.",
     "cta.plan": "Choose a Plan",
     "cta.discord": "Contact on Discord",
-    
+
     // Portfolio Page
     "portfolio.badge": "My Work",
     "portfolio.title": "Featured Designs",
@@ -210,19 +262,26 @@ export const translations: Translations = {
     "portfolio.cta": "Want to Work Together?",
     "portfolio.ctaText": "Let's create something amazing together. Get in touch and let's discuss your project.",
     "portfolio.discuss": "Discuss Your Project",
-    
+
     // Pricing Page
     "pricing.badge": "Pricing Plans",
     "pricing.title": "Simple, Transparent Pricing",
     "pricing.subtitle": "Choose the perfect plan for your needs",
     "pricing.hint": "All plans include high-quality designs, source files, and professional support. Payment can be made via PayPal or Robux.",
     "pricing.featured": "Most Popular",
-    "pricing.goWith": "Get Started",
+    "pricing.goWith": "Go with this plan",
     "pricing.whyTitle": "Why Choose Me?",
     "pricing.faqTitle": "Frequently Asked Questions",
     "pricing.stillQ": "Still Have Questions?",
     "pricing.contactDiscord": "Contact on Discord",
-    
+    "pricing.includes": "Includes:",
+    "pricing.unlimited": "Unlimited",
+    "pricing.revisions": "revisions",
+    "pricing.orderTitle": "Order Message",
+    "pricing.copyMsg": "Copy Message",
+    "pricing.copied": "Copied!",
+    "pricing.openDM": "Open Discord DM",
+
     // Reviews Page
     "reviews.badge": "Testimonials",
     "reviews.title": "Latest Reviews",
@@ -232,7 +291,7 @@ export const translations: Translations = {
     "reviews.ctaTitle": "Have we worked together?",
     "reviews.ctaText": "I'd love to hear your thoughts on the design process and final results.",
     "reviews.writeReview": "Write a Review",
-    
+
     // Policies Page
     "policies.badge": "Legal",
     "policies.title": "Policies & Terms",
@@ -241,7 +300,9 @@ export const translations: Translations = {
     "policies.askDiscord": "Ask on Discord",
     "policies.contactDiscord": "Contact on Discord",
     "policies.noPolicies": "No policies added yet. Add policies from the admin dashboard.",
-    
+    "policies.sections": "Policy Sections",
+    "policies.contactHint": "Have questions about any of these policies? Reach out directly on Discord.",
+
     // Games Page
     "games.badge": "Live Games",
     "games.title": "Games I Designed UI For",
@@ -259,8 +320,8 @@ export const translations: Translations = {
     "games.ctaTitle": "Want Your Game Featured Here?",
     "games.ctaText": "Upgrade your game's interface to increase player retention and monetization.",
     "games.contactDiscord": "Let's Talk Design",
-    
-    // Admin Pages
+
+    // Admin Login
     "admin.panelTitle": "Admin Panel",
     "admin.discordStepDesc": "Enter your Discord ID to continue",
     "admin.passwordStepDesc": "Enter your password to access the admin panel",
@@ -291,19 +352,150 @@ export const translations: Translations = {
     "admin.wrongPasswordDesc": "Please try again",
     "admin.logoutTitle": "Logged Out",
     "admin.logoutDesc": "You have been successfully logged out",
-    
-    // Not Found Page
+
+    // Admin — Reviews Tab
+    "admin.reviews.title": "Reviews",
+    "admin.reviews.desc": "Create, moderate and manage customer feedback",
+    "admin.reviews.newBtn": "New Review",
+    "admin.reviews.createTitle": "Create New Review",
+    "admin.reviews.editTitle": "Edit Review",
+    "admin.reviews.createBtn": "Create Review",
+    "admin.reviews.saveBtn": "Save Changes",
+    "admin.reviews.filterAll": "All",
+    "admin.reviews.filterPending": "Pending",
+    "admin.reviews.filterApproved": "Approved",
+    "admin.reviews.filterRejected": "Rejected",
+    "admin.reviews.approve": "Approve",
+    "admin.reviews.reject": "Reject",
+    "admin.reviews.refresh": "Refresh",
+    "admin.reviews.noReviews": "No reviews found",
+    "admin.reviews.createFirst": "Create the first review",
+    "admin.reviews.pin": "Pin",
+    "admin.reviews.unpin": "Unpin",
+    "admin.reviews.featured": "Featured / Pinned",
+    "admin.reviews.autoApprove": "Auto-Approve (public)",
+    "admin.reviews.pinFeat": "Pin / Feature",
+    "admin.reviews.verified": "Verified Client",
+    "admin.reviews.created": "Review created",
+    "admin.reviews.live": "Live on public site",
+    "admin.reviews.asPending": "Saved as pending",
+    "admin.reviews.statusApproved": "Approved",
+    "admin.reviews.statusPending": "Pending",
+    "admin.reviews.statusRejected": "Rejected",
+
+    // Admin — Users Tab
+    "admin.users.title": "Sessions",
+    "admin.users.modPanel": "Moderation Panel",
+    "admin.users.banUser": "Ban User",
+    "admin.users.unbanUser": "Unban User",
+    "admin.users.liveAlert": "Live Alert",
+    "admin.users.banBtn": "Ban Session",
+    "admin.users.alreadyBanned": "Already Banned",
+    "admin.users.unbanBtn": "Unban Session",
+    "admin.users.notBanned": "Not Banned",
+    "admin.users.sendAlert": "Send",
+    "admin.users.clearAlert": "Clear alert",
+    "admin.users.actions": "Actions",
+    "admin.users.refresh": "Refresh",
+    "admin.users.noSessions": "No sessions yet.",
+    "admin.users.noMatch": "No sessions match this filter.",
+    "admin.users.total": "Total",
+    "admin.users.active": "Active",
+    "admin.users.banned": "Banned",
+    "admin.users.dbError": "Database Error",
+    "admin.users.reasonPlaceholder": "Reason (optional)",
+    "admin.users.welcomeBack": "Welcome-back message",
+    "admin.users.msgPlaceholder": "Message shown to this user now…",
+    "admin.users.inactive": "Inactive",
+    "admin.users.loading": "Loading sessions…",
+
+    // Admin — Games Tab
+    "admin.games.title": "Games",
+    "admin.games.desc": "Manage Roblox games — changes apply live instantly",
+    "admin.games.addTitle": "Add New Game",
+    "admin.games.editTitle": "Edit Game",
+    "admin.games.placeId": "Place ID",
+    "admin.games.gameName": "Game Name (optional — auto from Roblox)",
+    "admin.games.creator": "Creator Name",
+    "admin.games.displayOrder": "Display Order",
+    "admin.games.published": "Published (visible on site)",
+    "admin.games.saving": "Saving…",
+    "admin.games.updateBtn": "Update Game",
+    "admin.games.addBtn": "Add Game",
+    "admin.games.noGames": "No games yet — add one above",
+    "admin.games.refresh": "Refresh",
+    "admin.games.howTitle": "How it works:",
+    "admin.games.how1": "· Add a Place ID → game appears on the Games page immediately",
+    "admin.games.how2": "· Click 🔄 to sync icon, name & visits from Roblox API",
+    "admin.games.how3": "· Toggle publish/hide without deleting",
+
+    // Settings Modal
+    "settings.title": "Settings",
+    "settings.customize": "Customize your experience",
+    "settings.language": "Language",
+    "settings.theme": "Theme",
+    "settings.performance": "Performance",
+    "settings.contact": "Contact",
+    "settings.perfBooster": "Performance Booster",
+    "settings.perfBoosterDesc": "Prioritizes strict rendering loops & reduces repaints",
+    "settings.ecoMode": "Low-End Device Mode",
+    "settings.ecoModeDesc": "Disables animations, particles & marquees — replaces with static grids",
+    "settings.ecoActive": "Eco Mode active — all marquees, canvas particles and complex transitions are replaced with lightweight static layouts.",
+    "settings.openDiscord": "Open Discord DM",
+    "settings.closeLabel": "Close settings",
+    "settings.themeLight": "Light",
+    "settings.themeDark": "Dark",
+    "settings.themeSystem": "System",
+    "settings.copyright": "© 2026 Youssef Design — All Rights Reserved",
+
+    // Marquee Section
+    "marquee.title": "What People Say & Key Achievements",
+    "marquee.ecoLabel": "⚡ Low-End Device Mode — static layout active",
+    "marquee.noReviews": "No reviews yet — be the first!",
+
+    // About Section
+    "about.badge":         "About Me",
+    "about.title":         "Behind the Pixels",
+    "about.intro":         "Hi! I'm Youssef, a 20-year-old full-time UI/UX designer with over 2 years of experience crafting unique, cartoony, and interactive interfaces for Roblox games. If you need a professional designer who gets your game the visibility it deserves — you're in the right place.",
+    "about.offerTitle":    "What I Offer",
+    "about.offer1":        "Professional & creative UI design",
+    "about.offer2":        "UX-optimised layouts",
+    "about.offer3":        "Direct asset porting inside Roblox Studio",
+    "about.offer4":        "Scaled & optimised for every device",
+    "about.offer5":        "Fast turnaround with smooth communication",
+    "about.offer6":        "Competitive rates with a quality guarantee",
+    "about.whyTitle":      "Why Choose Me?",
+    "about.why1":          "Up to 5 free revisions until you're 100% satisfied",
+    "about.why2":          "Full transparency — you're kept informed every step of the way",
+    "about.why3":          "Frequent updates & instant responses as a full-time designer",
+    "about.why4":          "Money-back guarantee if you're not satisfied",
+    "about.ratesTitle":    "Rates",
+    "about.rate1Label":    "UI Design",
+    "about.rate1Price":    "$15 / frame (or 4,000 Robux / frame, tax included)",
+    "about.rate2Label":    "UI Import",
+    "about.rate2Price":    "$5 / frame (porting to all devices)",
+    "about.paymentTitle":  "Payment",
+    "about.payment":       "PayPal or Robux. Robux pricing already reflects the applicable tax.",
+    "about.deliveryTitle": "Delivery",
+    "about.delivery":      "Final files delivered as clean PNGs or ported directly into your Roblox project. 100% refund guaranteed if you're not satisfied.",
+    "about.cta":           "Ready to bring your Roblox project to life? Let's talk today.",
+    "about.skill1":        "UI/UX Design",
+    "about.skill2":        "Roblox Studio",
+    "about.skill3":        "Game Interfaces",
+    "about.skill4":        "Brand Identity",
+
+    // Not Found
     "notFound.message": "Page not found",
     "notFound.description": "The page you're looking for doesn't exist or has been moved.",
     "notFound.goHome": "Go Home",
-    
+
     // Footer
     "footer.tagline": "Crafting digital experiences for the next generation of gaming.",
     "footer.role": "Professional Roblox UI/UX Designer",
     "footer.transform": "Transforming ideas into immersive experiences",
     "footer.follow": "Follow Me",
     "footer.rights": "Youssef Design. All rights reserved.",
-    
+
     // Common
     "loading": "Loading...",
     "error": "Error",
@@ -314,9 +506,9 @@ export const translations: Translations = {
     "edit": "Edit",
     "add": "Add",
     "close": "Close",
-    "submit": "Submit"
+    "submit": "Submit",
   },
-  
+
   ar: {
     // Navigation
     "nav.home": "الرئيسية",
@@ -325,53 +517,71 @@ export const translations: Translations = {
     "nav.pricing": "الأسعار",
     "nav.reviews": "التقييمات",
     "nav.policies": "الشروط",
-    
+    "nav.discord": "ديسكورد",
+
     // Buttons
     "btn.portfolio": "شاهد أعمالي",
     "btn.pricing": "شاهد الأسعار",
     "btn.discord": "انضم للديسكورد",
     "btn.contact": "تواصل معي",
     "btn.hire": "وظفني",
-    
-    // Hero Section
+
+    // Hero
     "hero.badge": "متاح للمشاريع",
     "hero.title1": "أصمم واجهات",
     "hero.title2": "تفاعلية احترافية",
     "hero.subtitle": "أصمم واجهات مستخدم غامرة وعالية الجودة لتجارب Roblox الخاصة بك.",
-    
+
     // Stats
     "stats.projects": "المشاريع",
     "stats.clients": "العملاء",
     "stats.rating": "التقييم",
     "stats.years": "سنوات الخبرة",
-    
-    // CTA Section
+
+    // Stat card titles
+    "stat.briefcase": "مشاريع مكتملة",
+    "stat.users": "عملاء سعداء",
+    "stat.clock": "سنوات الخبرة",
+    "stat.star": "تقييمات 5 نجوم",
+    "stat.gamepad": "ألعاب أُطلقت",
+    "stat.zap": "وقت الاستجابة",
+    "stat.refresh": "معدل المراجعات",
+    "stat.repeat": "احتفاظ بالعملاء",
+
+    // CTA
     "cta.title": "هل أنت جاهز لتطوير لعبتك؟",
     "cta.subtitle": "ارتقِ بتجربة Roblox الخاصة بك مع تصميم UI احترافي ومتميز يحبه اللاعبون.",
     "cta.plan": "اختر الخطة",
     "cta.discord": "تواصل على ديسكورد",
-    
-    // Portfolio Page
+
+    // Portfolio
     "portfolio.badge": "أعمالي",
     "portfolio.title": "تصاميم مميزة",
     "portfolio.subtitle": "استكشف مجموعتي من تصاميم UI/UX لألعاب وتطبيقات Roblox",
     "portfolio.cta": "هل تريد العمل معاً؟",
     "portfolio.ctaText": "لنصنع شيئاً مذهلاً معاً. تواصل معي ودعنا نناقش مشروعك.",
     "portfolio.discuss": "ناقش مشروعك",
-    
-    // Pricing Page
+
+    // Pricing
     "pricing.badge": "خطط الأسعار",
     "pricing.title": "أسعار بسيطة وواضحة",
     "pricing.subtitle": "اختر الخطة المثالية لاحتياجاتك",
     "pricing.hint": "جميع الخطط تتضمن تصاميم عالية الجودة، الملفات المصدرية، ودعم احترافي. يمكن الدفع عبر PayPal أو Robux.",
     "pricing.featured": "الأكثر شعبية",
-    "pricing.goWith": "ابدأ الآن",
+    "pricing.goWith": "اختر هذه الخطة",
     "pricing.whyTitle": "لماذا تختارني؟",
     "pricing.faqTitle": "الأسئلة الشائعة",
     "pricing.stillQ": "هل لا تزال لديك أسئلة؟",
     "pricing.contactDiscord": "تواصل على ديسكورد",
-    
-    // Reviews Page
+    "pricing.includes": "يتضمن:",
+    "pricing.unlimited": "غير محدود",
+    "pricing.revisions": "مراجعات",
+    "pricing.orderTitle": "رسالة الطلب",
+    "pricing.copyMsg": "نسخ الرسالة",
+    "pricing.copied": "تم النسخ!",
+    "pricing.openDM": "فتح رسالة ديسكورد",
+
+    // Reviews
     "reviews.badge": "شهادات العملاء",
     "reviews.title": "أحدث التقييمات",
     "reviews.subtitle": "شاهد ما يقوله عملائي عن العمل معي",
@@ -380,8 +590,8 @@ export const translations: Translations = {
     "reviews.ctaTitle": "هل عملنا معاً؟",
     "reviews.ctaText": "يسعدني سماع أفكارك عن عملية التصميم والنتائج النهائية.",
     "reviews.writeReview": "اكتب تقييمك",
-    
-    // Policies Page
+
+    // Policies
     "policies.badge": "قانوني",
     "policies.title": "الشروط والأحكام",
     "policies.subtitle": "افهم سياسات وشروط عملي",
@@ -389,8 +599,10 @@ export const translations: Translations = {
     "policies.askDiscord": "اسأل على ديسكورد",
     "policies.contactDiscord": "تواصل على ديسكورد",
     "policies.noPolicies": "لم تتم إضافة أي سياسات بعد. أضف سياسات من لوحة التحكم.",
-    
-    // Games Page
+    "policies.sections": "أقسام السياسات",
+    "policies.contactHint": "هل لديك أسئلة حول هذه السياسات؟ تواصل مباشرةً على ديسكورد.",
+
+    // Games
     "games.badge": "الألعاب المباشرة",
     "games.title": "ألعاب صممت واجهاتها",
     "games.subtitle": "استكشف بعض تجارب Roblox الناجحة التي تتميز بواجهات المستخدم المخصصة التي صممتها.",
@@ -407,8 +619,8 @@ export const translations: Translations = {
     "games.ctaTitle": "هل تريد أن تُعرض لعبتك هنا؟",
     "games.ctaText": "قم بترقية واجهة لعبتك لزيادة احتفاظ اللاعبين وتحقيق الإيرادات.",
     "games.contactDiscord": "دعنا نتحدث عن التصميم",
-    
-    // Admin Pages
+
+    // Admin Login
     "admin.panelTitle": "لوحة التحكم",
     "admin.discordStepDesc": "أدخل معرف ديسكورد للمتابعة",
     "admin.passwordStepDesc": "أدخل كلمة المرور للوصول إلى لوحة التحكم",
@@ -439,19 +651,150 @@ export const translations: Translations = {
     "admin.wrongPasswordDesc": "يرجى المحاولة مرة أخرى",
     "admin.logoutTitle": "تم الخروج",
     "admin.logoutDesc": "تم تسجيل الخروج بنجاح",
-    
-    // Not Found Page
+
+    // Admin — Reviews Tab
+    "admin.reviews.title": "التقييمات",
+    "admin.reviews.desc": "إنشاء التقييمات وإشرافها وإدارتها",
+    "admin.reviews.newBtn": "تقييم جديد",
+    "admin.reviews.createTitle": "إنشاء تقييم جديد",
+    "admin.reviews.editTitle": "تعديل التقييم",
+    "admin.reviews.createBtn": "إنشاء تقييم",
+    "admin.reviews.saveBtn": "حفظ التغييرات",
+    "admin.reviews.filterAll": "الكل",
+    "admin.reviews.filterPending": "قيد الانتظار",
+    "admin.reviews.filterApproved": "موافق عليه",
+    "admin.reviews.filterRejected": "مرفوض",
+    "admin.reviews.approve": "موافقة",
+    "admin.reviews.reject": "رفض",
+    "admin.reviews.refresh": "تحديث",
+    "admin.reviews.noReviews": "لم يُعثر على تقييمات",
+    "admin.reviews.createFirst": "إنشاء أول تقييم",
+    "admin.reviews.pin": "تثبيت",
+    "admin.reviews.unpin": "إلغاء التثبيت",
+    "admin.reviews.featured": "مثبت / مميز",
+    "admin.reviews.autoApprove": "موافقة تلقائية (عام)",
+    "admin.reviews.pinFeat": "تثبيت / تمييز",
+    "admin.reviews.verified": "عميل موثق",
+    "admin.reviews.created": "تم إنشاء التقييم",
+    "admin.reviews.live": "مرئي على الموقع",
+    "admin.reviews.asPending": "محفوظ كمعلق",
+    "admin.reviews.statusApproved": "موافق عليه",
+    "admin.reviews.statusPending": "قيد الانتظار",
+    "admin.reviews.statusRejected": "مرفوض",
+
+    // Admin — Users Tab
+    "admin.users.title": "الجلسات",
+    "admin.users.modPanel": "لوحة الإشراف",
+    "admin.users.banUser": "حظر المستخدم",
+    "admin.users.unbanUser": "رفع الحظر",
+    "admin.users.liveAlert": "تنبيه مباشر",
+    "admin.users.banBtn": "حظر الجلسة",
+    "admin.users.alreadyBanned": "محظور بالفعل",
+    "admin.users.unbanBtn": "رفع حظر الجلسة",
+    "admin.users.notBanned": "غير محظور",
+    "admin.users.sendAlert": "إرسال",
+    "admin.users.clearAlert": "مسح التنبيه",
+    "admin.users.actions": "إجراءات",
+    "admin.users.refresh": "تحديث",
+    "admin.users.noSessions": "لا توجد جلسات بعد.",
+    "admin.users.noMatch": "لا توجد جلسات تطابق هذا الفلتر.",
+    "admin.users.total": "الإجمالي",
+    "admin.users.active": "نشط",
+    "admin.users.banned": "محظور",
+    "admin.users.dbError": "خطأ في قاعدة البيانات",
+    "admin.users.reasonPlaceholder": "السبب (اختياري)",
+    "admin.users.welcomeBack": "رسالة الترحيب",
+    "admin.users.msgPlaceholder": "رسالة تظهر لهذا المستخدم الآن…",
+    "admin.users.inactive": "غير نشط",
+    "admin.users.loading": "جاري تحميل الجلسات…",
+
+    // Admin — Games Tab
+    "admin.games.title": "الألعاب",
+    "admin.games.desc": "إدارة ألعاب روبلوكس — التغييرات تُطبَّق فوراً",
+    "admin.games.addTitle": "إضافة لعبة جديدة",
+    "admin.games.editTitle": "تعديل اللعبة",
+    "admin.games.placeId": "معرف المكان",
+    "admin.games.gameName": "اسم اللعبة (اختياري — تلقائي من روبلوكس)",
+    "admin.games.creator": "اسم المبدع",
+    "admin.games.displayOrder": "ترتيب العرض",
+    "admin.games.published": "منشور (مرئي على الموقع)",
+    "admin.games.saving": "جاري الحفظ…",
+    "admin.games.updateBtn": "تحديث اللعبة",
+    "admin.games.addBtn": "إضافة لعبة",
+    "admin.games.noGames": "لا توجد ألعاب بعد — أضف واحدة أعلاه",
+    "admin.games.refresh": "تحديث",
+    "admin.games.howTitle": "كيف يعمل:",
+    "admin.games.how1": "· أضف معرف المكان → تظهر اللعبة فوراً في صفحة الألعاب",
+    "admin.games.how2": "· انقر 🔄 لمزامنة الأيقونة والاسم والزيارات من Roblox API",
+    "admin.games.how3": "· بدّل النشر/الإخفاء بدون حذف",
+
+    // Settings Modal
+    "settings.title": "الإعدادات",
+    "settings.customize": "خصّص تجربتك",
+    "settings.language": "اللغة",
+    "settings.theme": "المظهر",
+    "settings.performance": "الأداء",
+    "settings.contact": "تواصل",
+    "settings.perfBooster": "معزز الأداء",
+    "settings.perfBoosterDesc": "يُحسّن حلقات العرض ويقلل إعادة الرسم",
+    "settings.ecoMode": "وضع الأجهزة المحدودة",
+    "settings.ecoModeDesc": "يُعطّل الحركات والجسيمات والشرائط — يستبدلها بشبكات ثابتة",
+    "settings.ecoActive": "وضع التوفير نشط — جميع الشرائط والجسيمات والانتقالات المعقدة تُستبدل بتخطيطات ثابتة خفيفة.",
+    "settings.openDiscord": "فتح رسالة ديسكورد",
+    "settings.closeLabel": "إغلاق الإعدادات",
+    "settings.themeLight": "فاتح",
+    "settings.themeDark": "داكن",
+    "settings.themeSystem": "النظام",
+    "settings.copyright": "© 2026 يوسف ديزاين — جميع الحقوق محفوظة",
+
+    // Marquee Section
+    "marquee.title": "ما يقوله الناس والإنجازات الرئيسية",
+    "marquee.ecoLabel": "⚡ وضع الأجهزة المحدودة — التخطيط الثابت نشط",
+    "marquee.noReviews": "لا توجد تقييمات بعد — كن الأول!",
+
+    // About Section
+    "about.badge":         "عني",
+    "about.title":         "خلف البكسلات",
+    "about.intro":         "مرحباً! أنا يوسف، مصمم UI/UX بدوام كامل عمري 20 عاماً وأكثر من سنتين من الخبرة في تصميم واجهات مستخدم فريدة وتفاعلية لألعاب Roblox. إذا كنت تحتاج مصمماً محترفاً يمنح لعبتك الظهور الذي تستحقه — فأنت في المكان الصحيح.",
+    "about.offerTitle":    "ما أقدمه",
+    "about.offer1":        "تصميم UI احترافي وإبداعي",
+    "about.offer2":        "تخطيطات محسّنة لتجربة المستخدم",
+    "about.offer3":        "استيراد الأصول مباشرةً داخل Roblox Studio",
+    "about.offer4":        "مُحسَّن لجميع الأجهزة",
+    "about.offer5":        "تسليم سريع مع تواصل سلس",
+    "about.offer6":        "أسعار تنافسية مع ضمان الجودة",
+    "about.whyTitle":      "لماذا أنا؟",
+    "about.why1":          "ما يصل إلى 5 تعديلات مجانية حتى تكون راضياً 100%",
+    "about.why2":          "شفافية تامة — أُبقيك على اطلاع في كل خطوة",
+    "about.why3":          "تواصل دائم وتحديثات فورية بوصفي مصمماً بدوام كامل",
+    "about.why4":          "ضمان استرداد المال إذا لم تكن راضياً",
+    "about.ratesTitle":    "الأسعار",
+    "about.rate1Label":    "تصميم UI",
+    "about.rate1Price":    "15 دولار / إطار (أو 4,000 روبوكس / إطار، الضريبة مشمولة)",
+    "about.rate2Label":    "استيراد UI",
+    "about.rate2Price":    "5 دولار / إطار (نقل لجميع الأجهزة)",
+    "about.paymentTitle":  "طرق الدفع",
+    "about.payment":       "PayPal أو Robux. سعر الروبوكس يعكس الضريبة المطبّقة بالفعل.",
+    "about.deliveryTitle": "التسليم",
+    "about.delivery":      "ملفات نهائية كصور PNG نظيفة أو منقولة مباشرةً إلى مشروعك. ضمان استرداد 100% إذا لم تكن راضياً.",
+    "about.cta":           "هل أنت مستعد لإحياء مشروعك على Roblox؟ تواصل معي اليوم.",
+    "about.skill1":        "تصميم UI/UX",
+    "about.skill2":        "Roblox Studio",
+    "about.skill3":        "واجهات الألعاب",
+    "about.skill4":        "هوية العلامة التجارية",
+
+    // Not Found
     "notFound.message": "الصفحة غير موجودة",
     "notFound.description": "الصفحة التي تبحث عنها غير موجودة أو تم نقلها.",
     "notFound.goHome": "العودة للرئيسية",
-    
+
     // Footer
     "footer.tagline": "نصنع تجارب رقمية لجيل الألعاب القادم.",
     "footer.role": "مصمم واجهات روبلوكس محترف",
     "footer.transform": "تحويل الأفكار إلى تجارب غامرة",
     "footer.follow": "تابعني",
     "footer.rights": "يوسف ديزاين. جميع الحقوق محفوظة.",
-    
+
     // Common
     "loading": "جاري التحميل...",
     "error": "خطأ",
@@ -462,9 +805,9 @@ export const translations: Translations = {
     "edit": "تعديل",
     "add": "إضافة",
     "close": "إغلاق",
-    "submit": "إرسال"
+    "submit": "إرسال",
   },
-  
+
   es: {
     // Navigation
     "nav.home": "Inicio",
@@ -473,53 +816,71 @@ export const translations: Translations = {
     "nav.pricing": "Precios",
     "nav.reviews": "Reseñas",
     "nav.policies": "Políticas",
-    
+    "nav.discord": "Discord",
+
     // Buttons
     "btn.portfolio": "Ver Portafolio",
     "btn.pricing": "Ver Precios",
     "btn.discord": "Unirse a Discord",
     "btn.contact": "Contáctame",
     "btn.hire": "Contrátame",
-    
-    // Hero Section
+
+    // Hero
     "hero.badge": "Disponible para Proyectos",
     "hero.title1": "Creando Interfaces",
     "hero.title2": "Inmersivas",
     "hero.subtitle": "Creando interfaces de usuario inmersivas y de alta calidad para tus experiencias de Roblox.",
-    
+
     // Stats
     "stats.projects": "Proyectos",
     "stats.clients": "Clientes",
     "stats.rating": "Calificación",
     "stats.years": "Años de Experiencia",
-    
-    // CTA Section
+
+    // Stat card titles
+    "stat.briefcase": "Proyectos Completados",
+    "stat.users": "Clientes Satisfechos",
+    "stat.clock": "Años de Experiencia",
+    "stat.star": "Reseñas de 5 Estrellas",
+    "stat.gamepad": "Juegos Lanzados",
+    "stat.zap": "Tiempo de Respuesta",
+    "stat.refresh": "Tasa de Revisiones",
+    "stat.repeat": "Retención de Clientes",
+
+    // CTA
     "cta.title": "¿Listo para Transformar tu Juego?",
     "cta.subtitle": "Eleva tu experiencia de Roblox con un diseño UI profesional y premium que los jugadores adoran.",
     "cta.plan": "Elegir un Plan",
     "cta.discord": "Contactar en Discord",
-    
-    // Portfolio Page
+
+    // Portfolio
     "portfolio.badge": "Mi Trabajo",
     "portfolio.title": "Diseños Destacados",
     "portfolio.subtitle": "Explora mi colección de diseños UI/UX para juegos y aplicaciones de Roblox",
     "portfolio.cta": "¿Quieres Trabajar Juntos?",
     "portfolio.ctaText": "Creemos algo increíble juntos. Ponte en contacto y discutamos tu proyecto.",
     "portfolio.discuss": "Discutir Tu Proyecto",
-    
-    // Pricing Page
+
+    // Pricing
     "pricing.badge": "Planes de Precios",
     "pricing.title": "Precios Simples y Transparentes",
     "pricing.subtitle": "Elige el plan perfecto para tus necesidades",
     "pricing.hint": "Todos los planes incluyen diseños de alta calidad, archivos fuente y soporte profesional. El pago se puede realizar mediante PayPal o Robux.",
     "pricing.featured": "Más Popular",
-    "pricing.goWith": "Comenzar",
+    "pricing.goWith": "Ir con este plan",
     "pricing.whyTitle": "¿Por Qué Elegirme?",
     "pricing.faqTitle": "Preguntas Frecuentes",
     "pricing.stillQ": "¿Aún Tienes Preguntas?",
     "pricing.contactDiscord": "Contactar en Discord",
-    
-    // Reviews Page
+    "pricing.includes": "Incluye:",
+    "pricing.unlimited": "Ilimitado",
+    "pricing.revisions": "revisiones",
+    "pricing.orderTitle": "Mensaje de Pedido",
+    "pricing.copyMsg": "Copiar Mensaje",
+    "pricing.copied": "¡Copiado!",
+    "pricing.openDM": "Abrir DM de Discord",
+
+    // Reviews
     "reviews.badge": "Testimonios",
     "reviews.title": "Últimas Reseñas",
     "reviews.subtitle": "Mira lo que mis clientes dicen sobre trabajar conmigo",
@@ -528,8 +889,8 @@ export const translations: Translations = {
     "reviews.ctaTitle": "¿Hemos trabajado juntos?",
     "reviews.ctaText": "Me encantaría escuchar tus pensamientos sobre el proceso de diseño y los resultados finales.",
     "reviews.writeReview": "Escribir una Reseña",
-    
-    // Policies Page
+
+    // Policies
     "policies.badge": "Legal",
     "policies.title": "Políticas y Términos",
     "policies.subtitle": "Comprende mis políticas y términos de trabajo",
@@ -537,8 +898,10 @@ export const translations: Translations = {
     "policies.askDiscord": "Preguntar en Discord",
     "policies.contactDiscord": "Contactar en Discord",
     "policies.noPolicies": "No se han añadido políticas aún. Añade políticas desde el panel de administración.",
-    
-    // Games Page
+    "policies.sections": "Secciones de Políticas",
+    "policies.contactHint": "¿Tienes preguntas sobre estas políticas? Contáctanos directamente en Discord.",
+
+    // Games
     "games.badge": "Juegos en Vivo",
     "games.title": "Juegos para los que Diseñé la UI",
     "games.subtitle": "Explora algunas de las exitosas experiencias de Roblox que cuentan con mis interfaces de usuario personalizadas.",
@@ -555,8 +918,8 @@ export const translations: Translations = {
     "games.ctaTitle": "¿Quieres que tu Juego Aparezca Aquí?",
     "games.ctaText": "Mejora la interfaz de tu juego para aumentar la retención de jugadores y la monetización.",
     "games.contactDiscord": "Hablemos de Diseño",
-    
-    // Admin Pages
+
+    // Admin Login
     "admin.panelTitle": "Panel de Administración",
     "admin.discordStepDesc": "Ingresa tu ID de Discord para continuar",
     "admin.passwordStepDesc": "Ingresa tu contraseña para acceder al panel de administración",
@@ -587,19 +950,150 @@ export const translations: Translations = {
     "admin.wrongPasswordDesc": "Por favor intenta de nuevo",
     "admin.logoutTitle": "Sesión Cerrada",
     "admin.logoutDesc": "Has cerrado sesión exitosamente",
-    
-    // Not Found Page
+
+    // Admin — Reviews Tab
+    "admin.reviews.title": "Reseñas",
+    "admin.reviews.desc": "Crear, moderar y gestionar comentarios de clientes",
+    "admin.reviews.newBtn": "Nueva Reseña",
+    "admin.reviews.createTitle": "Crear Nueva Reseña",
+    "admin.reviews.editTitle": "Editar Reseña",
+    "admin.reviews.createBtn": "Crear Reseña",
+    "admin.reviews.saveBtn": "Guardar Cambios",
+    "admin.reviews.filterAll": "Todos",
+    "admin.reviews.filterPending": "Pendiente",
+    "admin.reviews.filterApproved": "Aprobado",
+    "admin.reviews.filterRejected": "Rechazado",
+    "admin.reviews.approve": "Aprobar",
+    "admin.reviews.reject": "Rechazar",
+    "admin.reviews.refresh": "Actualizar",
+    "admin.reviews.noReviews": "No se encontraron reseñas",
+    "admin.reviews.createFirst": "Crear la primera reseña",
+    "admin.reviews.pin": "Fijar",
+    "admin.reviews.unpin": "Desfijar",
+    "admin.reviews.featured": "Destacado / Fijado",
+    "admin.reviews.autoApprove": "Aprobación automática (público)",
+    "admin.reviews.pinFeat": "Fijar / Destacar",
+    "admin.reviews.verified": "Cliente Verificado",
+    "admin.reviews.created": "Reseña creada",
+    "admin.reviews.live": "En vivo en el sitio",
+    "admin.reviews.asPending": "Guardado como pendiente",
+    "admin.reviews.statusApproved": "Aprobado",
+    "admin.reviews.statusPending": "Pendiente",
+    "admin.reviews.statusRejected": "Rechazado",
+
+    // Admin — Users Tab
+    "admin.users.title": "Sesiones",
+    "admin.users.modPanel": "Panel de Moderación",
+    "admin.users.banUser": "Banear Usuario",
+    "admin.users.unbanUser": "Desbanear Usuario",
+    "admin.users.liveAlert": "Alerta en Vivo",
+    "admin.users.banBtn": "Banear Sesión",
+    "admin.users.alreadyBanned": "Ya Baneado",
+    "admin.users.unbanBtn": "Desbanear Sesión",
+    "admin.users.notBanned": "No Baneado",
+    "admin.users.sendAlert": "Enviar",
+    "admin.users.clearAlert": "Borrar alerta",
+    "admin.users.actions": "Acciones",
+    "admin.users.refresh": "Actualizar",
+    "admin.users.noSessions": "No hay sesiones aún.",
+    "admin.users.noMatch": "No hay sesiones que coincidan con este filtro.",
+    "admin.users.total": "Total",
+    "admin.users.active": "Activo",
+    "admin.users.banned": "Baneado",
+    "admin.users.dbError": "Error de Base de Datos",
+    "admin.users.reasonPlaceholder": "Razón (opcional)",
+    "admin.users.welcomeBack": "Mensaje de bienvenida",
+    "admin.users.msgPlaceholder": "Mensaje mostrado a este usuario ahora…",
+    "admin.users.inactive": "Inactivo",
+    "admin.users.loading": "Cargando sesiones…",
+
+    // Admin — Games Tab
+    "admin.games.title": "Juegos",
+    "admin.games.desc": "Gestionar juegos de Roblox — los cambios se aplican en vivo",
+    "admin.games.addTitle": "Agregar Nuevo Juego",
+    "admin.games.editTitle": "Editar Juego",
+    "admin.games.placeId": "ID de Lugar",
+    "admin.games.gameName": "Nombre del Juego (opcional — auto desde Roblox)",
+    "admin.games.creator": "Nombre del Creador",
+    "admin.games.displayOrder": "Orden de Visualización",
+    "admin.games.published": "Publicado (visible en el sitio)",
+    "admin.games.saving": "Guardando…",
+    "admin.games.updateBtn": "Actualizar Juego",
+    "admin.games.addBtn": "Agregar Juego",
+    "admin.games.noGames": "No hay juegos aún — agrega uno arriba",
+    "admin.games.refresh": "Actualizar",
+    "admin.games.howTitle": "Cómo funciona:",
+    "admin.games.how1": "· Agrega un Place ID → el juego aparece en la página de Juegos inmediatamente",
+    "admin.games.how2": "· Haz clic en 🔄 para sincronizar icono, nombre y visitas desde la API de Roblox",
+    "admin.games.how3": "· Alterna publicar/ocultar sin eliminar",
+
+    // Settings Modal
+    "settings.title": "Configuración",
+    "settings.customize": "Personaliza tu experiencia",
+    "settings.language": "Idioma",
+    "settings.theme": "Tema",
+    "settings.performance": "Rendimiento",
+    "settings.contact": "Contacto",
+    "settings.perfBooster": "Potenciador de Rendimiento",
+    "settings.perfBoosterDesc": "Prioriza los ciclos de renderizado y reduce repintados",
+    "settings.ecoMode": "Modo Dispositivo de Gama Baja",
+    "settings.ecoModeDesc": "Desactiva animaciones, partículas y marquesinas — reemplaza con cuadrículas estáticas",
+    "settings.ecoActive": "Modo Eco activo — todas las marquesinas, partículas y transiciones complejas se reemplazan con diseños estáticos ligeros.",
+    "settings.openDiscord": "Abrir DM de Discord",
+    "settings.closeLabel": "Cerrar ajustes",
+    "settings.themeLight": "Claro",
+    "settings.themeDark": "Oscuro",
+    "settings.themeSystem": "Sistema",
+    "settings.copyright": "© 2026 Youssef Design — Todos los Derechos Reservados",
+
+    // Marquee Section
+    "marquee.title": "Lo que Dicen y Logros Clave",
+    "marquee.ecoLabel": "⚡ Modo Dispositivo de Gama Baja — diseño estático activo",
+    "marquee.noReviews": "¡Aún no hay reseñas — sé el primero!",
+
+    // About Section
+    "about.badge":         "Sobre mí",
+    "about.title":         "Detrás de los Píxeles",
+    "about.intro":         "¡Hola! Soy Youssef, diseñador UI/UX a tiempo completo con 20 años y más de 2 años de experiencia creando interfaces únicas, animadas e interactivas para juegos de Roblox. Si necesitas un diseñador profesional que le dé a tu juego la visibilidad que merece, estás en el lugar indicado.",
+    "about.offerTitle":    "Qué Ofrezco",
+    "about.offer1":        "Diseño UI profesional y creativo",
+    "about.offer2":        "Layouts optimizados para UX",
+    "about.offer3":        "Importación directa de assets en Roblox Studio",
+    "about.offer4":        "Escalado y optimizado para todos los dispositivos",
+    "about.offer5":        "Entrega rápida con comunicación fluida",
+    "about.offer6":        "Precios competitivos con garantía de calidad",
+    "about.whyTitle":      "¿Por Qué Yo?",
+    "about.why1":          "Hasta 5 revisiones gratuitas hasta que estés 100% satisfecho",
+    "about.why2":          "Total transparencia — te mantengo informado en cada paso",
+    "about.why3":          "Actualizaciones frecuentes y respuestas inmediatas como diseñador a tiempo completo",
+    "about.why4":          "Garantía de devolución si no estás satisfecho",
+    "about.ratesTitle":    "Tarifas",
+    "about.rate1Label":    "Diseño UI",
+    "about.rate1Price":    "$15 / frame (o 4,000 Robux / frame, impuesto incluido)",
+    "about.rate2Label":    "Importar UI",
+    "about.rate2Price":    "$5 / frame (porteo a todos los dispositivos)",
+    "about.paymentTitle":  "Pago",
+    "about.payment":       "PayPal o Robux. El precio en Robux ya incluye el impuesto aplicable.",
+    "about.deliveryTitle": "Entrega",
+    "about.delivery":      "Archivos finales como PNGs limpios o integrados directamente en tu proyecto de Roblox. Garantía de reembolso del 100% si no estás satisfecho.",
+    "about.cta":           "¿Listo para dar vida a tu proyecto de Roblox? Contáctame hoy.",
+    "about.skill1":        "Diseño UI/UX",
+    "about.skill2":        "Roblox Studio",
+    "about.skill3":        "Interfaces de Juegos",
+    "about.skill4":        "Identidad de Marca",
+
+    // Not Found
     "notFound.message": "Página no encontrada",
     "notFound.description": "La página que buscas no existe o ha sido movida.",
     "notFound.goHome": "Ir al Inicio",
-    
+
     // Footer
     "footer.tagline": "Creando experiencias digitales para la próxima generación de juegos.",
     "footer.role": "Diseñador Profesional de UI/UX para Roblox",
     "footer.transform": "Transformando ideas en experiencias inmersivas",
     "footer.follow": "Sígueme",
     "footer.rights": "Youssef Design. Todos los derechos reservados.",
-    
+
     // Common
     "loading": "Cargando...",
     "error": "Error",
@@ -610,8 +1104,8 @@ export const translations: Translations = {
     "edit": "Editar",
     "add": "Agregar",
     "close": "Cerrar",
-    "submit": "Enviar"
-  }
+    "submit": "Enviar",
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════

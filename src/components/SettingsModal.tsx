@@ -14,23 +14,14 @@
 // Event bus:
 //   `yd-perf-settings-changed` (window CustomEvent) — fired on every toggle.
 //   PerformanceOptimizer, DualMarqueeSection, SkillsMarquee, ReviewsMarquee
-//   all subscribe and react within the same tab. SettingsModal does NOT need
-//   to know about those consumers; the event is the contract.
+//   all subscribe and react within the same tab.
 
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { DISCORD_PROFILE_URL } from "@/lib/discord";
 import {
-  X,
-  Moon,
-  Sun,
-  Monitor,
-  Globe,
-  MessageSquare,
-  Sparkles,
-  Zap,
-  Leaf,
-  Info,
+  X, Moon, Sun, Monitor, Globe, MessageSquare,
+  Sparkles, Zap, Leaf, Info,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useLanguage } from "@/hooks/use-language";
@@ -43,18 +34,6 @@ export const ECO_MODE_KEY        = "yd_eco_mode";
 export const PERF_SETTINGS_EVENT = "yd-perf-settings-changed";
 
 // ─── usePerformanceSettings ───────────────────────────────────────────────────
-//
-// Shared hook — import this in every component that reads or writes performance
-// toggles. Direct localStorage access with literal key strings is a leak; use
-// this hook exclusively.
-//
-// Guarantees:
-//   • SSR-safe: initial state is read inside useState initialiser (no top-level
-//     window/localStorage access during server render).
-//   • Cross-component sync: the `yd-perf-settings-changed` window event keeps
-//     all hook instances in the same tab in sync after any write.
-//   • `setEcoMode` manages the `eco-mode` class on <html> so CSS-driven
-//     conditional rules activate/deactivate without any extra effect in consumers.
 
 export function usePerformanceSettings() {
   const readBool = (key: string): boolean => {
@@ -64,7 +43,6 @@ export function usePerformanceSettings() {
   const [perfBoost, setPerfBoostState] = useState(() => readBool(PERF_BOOST_KEY));
   const [ecoMode,   setEcoModeState]   = useState(() => readBool(ECO_MODE_KEY));
 
-  // Sync from other hook instances (or external writes) via event bus
   useEffect(() => {
     const sync = () => {
       setPerfBoostState(readBool(PERF_BOOST_KEY));
@@ -74,7 +52,6 @@ export function usePerformanceSettings() {
     return () => window.removeEventListener(PERF_SETTINGS_EVENT, sync);
   }, []);
 
-  // Apply eco-mode class on mount and whenever the value changes
   useEffect(() => {
     if (ecoMode) {
       document.documentElement.classList.add("eco-mode");
@@ -142,7 +119,7 @@ const FLAG_IMAGES: Record<string, string> = {
 };
 const FLAG_EMOJI: Record<string, string> = { en: "🇺🇸", ar: "🇸🇦", es: "🇪🇸" };
 
-// ─── Toggle Switch sub-component ─────────────────────────────────────────────
+// ─── ToggleSwitch ──────────────────────────────────────────────────────────────
 
 function ToggleSwitch({
   checked,
@@ -179,15 +156,16 @@ type SettingsModalProps = { isOpen: boolean; onClose: () => void };
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { theme, setTheme }             = useTheme();
-  const { lang, setLang }               = useLanguage();
+  const { lang, setLang, t, isRTL }     = useLanguage();
   const { perfBoost, setPerfBoost, ecoMode, setEcoMode } = usePerformanceSettings();
   const [flagErrors, setFlagErrors]     = useState<Record<string, boolean>>({});
 
+  // Theme labels are resolved via t() so they switch instantly on language change
   const themes = useMemo(() => [
-    { value: "light",  label: "Light",  icon: Sun,     color: "from-amber-400 to-orange-400" },
-    { value: "dark",   label: "Dark",   icon: Moon,    color: "from-indigo-500 to-purple-500" },
-    { value: "system", label: "System", icon: Monitor, color: "from-cyan-400 to-blue-500" },
-  ], []);
+    { value: "light",  labelKey: "settings.themeLight",  icon: Sun,     color: "from-amber-400 to-orange-400" },
+    { value: "dark",   labelKey: "settings.themeDark",   icon: Moon,    color: "from-indigo-500 to-purple-500" },
+    { value: "system", labelKey: "settings.themeSystem", icon: Monitor, color: "from-cyan-400 to-blue-500" },
+  ] as const, []);
 
   const languages = useMemo(() => [
     { value: "en", label: "English", color: "from-blue-500 to-indigo-500" },
@@ -218,13 +196,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   // Body scroll lock with scrollbar compensation
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return;
-    const body                = document.body;
-    const html                = document.documentElement;
-    const scrollbarWidth      = window.innerWidth - html.clientWidth;
-    const prev = {
-      overflow:      body.style.overflow,
-      paddingRight:  body.style.paddingRight,
-    };
+    const body           = document.body;
+    const html           = document.documentElement;
+    const scrollbarWidth = window.innerWidth - html.clientWidth;
+    const prev = { overflow: body.style.overflow, paddingRight: body.style.paddingRight };
     body.style.overflow = "hidden";
     if (scrollbarWidth > 0) body.style.paddingRight = scrollbarWidth + "px";
     return () => {
@@ -247,15 +222,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             onClick={onClose}
           />
 
-          {/* Slide-in panel */}
+          {/* Slide-in panel — always slides from right regardless of RTL */}
           <motion.div
             variants={modalVariants}
             initial="hidden" animate="visible" exit="exit"
             className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] pointer-events-none"
+            dir={isRTL ? "rtl" : "ltr"}
           >
             <div className="h-full bg-card border-l border-white/10 shadow-2xl pointer-events-auto overflow-hidden flex flex-col">
 
-              {/* ── Header ───────────────────────────────────────────── */}
+              {/* ── Header ─────────────────────────────────────────── */}
               <motion.div
                 initial={{ opacity: 0, y: -14 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -272,9 +248,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                   </motion.div>
                   <div>
-                    <h2 className="text-base sm:text-lg font-bold">Settings</h2>
+                    <h2 className="text-base sm:text-lg font-bold">{t("settings.title")}</h2>
                     <p className="text-[10px] sm:text-xs text-muted-foreground">
-                      Customize your experience
+                      {t("settings.customize")}
                     </p>
                   </div>
                 </div>
@@ -283,13 +259,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
                   className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                  aria-label="Close settings"
+                  aria-label={t("settings.closeLabel")}
                 >
                   <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </motion.button>
               </motion.div>
 
-              {/* ── Scrollable content ───────────────────────────────── */}
+              {/* ── Scrollable content ──────────────────────────────── */}
               <motion.div
                 variants={containerVariants}
                 initial="hidden" animate="visible"
@@ -300,7 +276,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <motion.div variants={itemVariants} className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-                    <span>Language</span>
+                    <span>{t("settings.language")}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {languages.map((langOption, index) => {
@@ -311,11 +287,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           key={langOption.value}
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
-                          transition={{
-                            delay: 0.45 + index * 0.1,
-                            type: "spring",
-                            stiffness: 300,
-                          }}
+                          transition={{ delay: 0.45 + index * 0.1, type: "spring", stiffness: 300 }}
                           whileHover={{ scale: 1.08 }}
                           whileTap={{ scale: 0.93 }}
                           onClick={() => handleLanguageChange(langOption.value)}
@@ -339,17 +311,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 alt={langOption.label}
                                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover shadow-sm"
                                 onError={() =>
-                                  setFlagErrors((prev) => ({
-                                    ...prev,
-                                    [langOption.value]: true,
-                                  }))
+                                  setFlagErrors((prev) => ({ ...prev, [langOption.value]: true }))
                                 }
                               />
                             )}
                             <span className={`text-[10px] sm:text-xs font-semibold ${
-                              isActive
-                                ? "text-white"
-                                : "text-muted-foreground group-hover:text-foreground"
+                              isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
                             }`}>
                               {langOption.label}
                             </span>
@@ -371,28 +338,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <motion.div variants={itemVariants} className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-                    <span>Theme</span>
+                    <span>{t("settings.theme")}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                    {themes.map((t, index) => {
-                      const Icon     = t.icon;
-                      const isActive = theme === t.value;
+                    {themes.map((th, index) => {
+                      const Icon     = th.icon;
+                      const isActive = theme === th.value;
                       return (
                         <motion.button
-                          key={t.value}
+                          key={th.value}
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
-                          transition={{
-                            delay: 0.55 + index * 0.1,
-                            type: "spring",
-                            stiffness: 300,
-                          }}
+                          transition={{ delay: 0.55 + index * 0.1, type: "spring", stiffness: 300 }}
                           whileHover={{ scale: 1.08 }}
                           whileTap={{ scale: 0.93 }}
-                          onClick={() => handleThemeChange(t.value)}
+                          onClick={() => handleThemeChange(th.value)}
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
                             isActive
-                              ? "bg-gradient-to-br " + t.color + " border-transparent shadow-lg"
+                              ? "bg-gradient-to-br " + th.color + " border-transparent shadow-lg"
                               : "bg-background/50 border-white/10 hover:border-white/20"
                           }`}
                         >
@@ -406,17 +369,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               transition={{ delay: 0.55 + index * 0.1, type: "spring" }}
                             >
                               <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${
-                                isActive
-                                  ? "text-white"
-                                  : "text-muted-foreground group-hover:text-foreground"
+                                isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
                               }`} />
                             </motion.div>
                             <span className={`text-[10px] sm:text-xs font-semibold ${
-                              isActive
-                                ? "text-white"
-                                : "text-muted-foreground group-hover:text-foreground"
+                              isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
                             }`}>
-                              {t.label}
+                              {t(th.labelKey)}
                             </span>
                           </div>
                           {isActive && (
@@ -432,11 +391,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 </motion.div>
 
-                {/* ── Performance Section ──────────────────────────── */}
+                {/* ── Performance ─────────────────────────────────── */}
                 <motion.div variants={itemVariants} className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-                    <span>Performance</span>
+                    <span>{t("settings.performance")}</span>
                   </div>
 
                   <div className="space-y-2.5">
@@ -447,11 +406,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <div className="flex items-center gap-1.5">
                           <Zap className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                           <p className="text-xs sm:text-sm font-semibold text-foreground">
-                            Performance Booster
+                            {t("settings.perfBooster")}
                           </p>
                         </div>
                         <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                          Prioritizes strict rendering loops &amp; reduces repaints
+                          {t("settings.perfBoosterDesc")}
                         </p>
                       </div>
                       <ToggleSwitch
@@ -473,11 +432,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             ecoMode ? "text-emerald-400" : "text-muted-foreground"
                           }`} />
                           <p className="text-xs sm:text-sm font-semibold text-foreground">
-                            Low-End Device Mode
+                            {t("settings.ecoMode")}
                           </p>
                         </div>
                         <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-                          Disables animations, particles &amp; marquees — replaces with static grids
+                          {t("settings.ecoModeDesc")}
                         </p>
                       </div>
                       <ToggleSwitch
@@ -498,8 +457,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         >
                           <Info className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
                           <p className="text-[10px] text-emerald-300/80 leading-relaxed">
-                            Eco Mode active — all marquees, canvas particles and complex
-                            transitions are replaced with lightweight static layouts.
+                            {t("settings.ecoActive")}
                           </p>
                         </motion.div>
                       )}
@@ -512,7 +470,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <motion.div variants={itemVariants} className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-                    <span>Contact</span>
+                    <span>{t("settings.contact")}</span>
                   </div>
                   <motion.a
                     href={DISCORD_PROFILE_URL}
@@ -528,13 +486,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     >
                       <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                     </motion.div>
-                    <span>Open Discord DM</span>
+                    <span>{t("settings.openDiscord")}</span>
                   </motion.a>
                 </motion.div>
 
               </motion.div>
 
-              {/* ── Footer ───────────────────────────────────────────── */}
+              {/* ── Footer ──────────────────────────────────────────── */}
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -542,7 +500,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 className="p-4 border-t border-white/10 bg-card/50 backdrop-blur-xl"
               >
                 <p className="text-[10px] sm:text-xs text-center text-muted-foreground">
-                  © 2026 Youssef Design — All Rights Reserved
+                  {t("settings.copyright")}
                 </p>
               </motion.div>
 

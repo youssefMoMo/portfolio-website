@@ -3,18 +3,15 @@
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import {
-  banUser,
-  unbanUser,
-  sendAdminMessage,
-  clearAdminMessage,
-} from "@/lib/adminApi";
+import { banUser, unbanUser, sendAdminMessage, clearAdminMessage } from "@/lib/adminApi";
 import {
   ShieldBan, ShieldCheck, Send, X, Loader2, RefreshCw,
   AlertCircle, ChevronDown, ChevronUp, Search, Users,
 } from "lucide-react";
+import { useLanguage } from "@/hooks/use-language";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
 interface Session {
   id: string;
   session_token: string;
@@ -25,24 +22,20 @@ interface Session {
   unban_message: string | null;
   admin_message: string | null;
   last_seen: string;
-  updated_at: string;       // ← included so heartbeat freshness is never missed
+  updated_at: string;
 }
 
-// Select both last_seen AND updated_at — heartbeat writes both;
-// we use whichever is more recent so no tick is ever missed.
 const SAFE_SELECT = [
   "id", "session_token", "current_page", "country",
   "is_banned", "ban_reason", "unban_message", "admin_message",
   "last_seen", "updated_at",
 ].join(", ");
 
-// Active = seen within the last 90 s.
-// Heartbeat fires every 30 s → 90 s = 3 missed heartbeats of grace period.
-// This is timezone-safe: both Date.now() and new Date(isoUTC).getTime()
-// return UTC epoch milliseconds, so no Cairo / UTC offset problem exists.
-const ACTIVE_THRESHOLD_MS = 300_000; // 5 minutes — covers 10× the 30 s heartbeat interval
+// Active = seen within last 5 minutes (10× the 30s heartbeat interval)
+const ACTIVE_THRESHOLD_MS = 300_000;
 
-// ─── useNow — ticks every 15 s so active dots repaint without a full fetch ────
+// ─── useNow — ticks every 15s so active dots repaint without a full fetch ─────
+
 function useNow(intervalMs = 15_000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -52,10 +45,9 @@ function useNow(intervalMs = 15_000): number {
   return now;
 }
 
-// ─── Active check (pure, deterministic) ──────────────────────────────────────
+// ─── Active check ─────────────────────────────────────────────────────────────
+
 function checkActive(session: Session, nowMs: number): boolean {
-  // Use the more recent of last_seen / updated_at so a heartbeat that only
-  // touches updated_at still keeps the user green.
   const ts = Math.max(
     session.last_seen  ? new Date(session.last_seen ).getTime() : 0,
     session.updated_at ? new Date(session.updated_at).getTime() : 0,
@@ -65,6 +57,7 @@ function checkActive(session: Session, nowMs: number): boolean {
 }
 
 // ─── Country flags ────────────────────────────────────────────────────────────
+
 const COUNTRY_FLAGS: Record<string, string> = {
   "United States": "🇺🇸", "Egypt": "🇪🇬", "United Kingdom": "🇬🇧",
   "Germany": "🇩🇪", "France": "🇫🇷", "Japan": "🇯🇵", "Canada": "🇨🇦",
@@ -80,6 +73,7 @@ function getFlag(country: string | null): string {
 }
 
 // ─── Route badge ──────────────────────────────────────────────────────────────
+
 function routeBadgeClass(page: string | null): string {
   const p = page || "/";
   if (p.startsWith("/admin"))     return "bg-violet-500/15 text-violet-300 border-violet-500/25";
@@ -92,6 +86,7 @@ function routeBadgeClass(page: string | null): string {
 }
 
 // ─── Time helper ──────────────────────────────────────────────────────────────
+
 function timeAgo(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
@@ -104,13 +99,13 @@ function timeAgo(iso: string | null | undefined): string {
 }
 
 // ─── Payload sanitiser ────────────────────────────────────────────────────────
-// SANITIZATION: Use .trim() only — the old regex /^\.+/ stripped literal
-// leading dots (e.g. "..." or ".hidden") which are valid message content.
+
 function sanitisePayloadString(raw: string, maxLen = 500): string {
   return raw.trim().slice(0, maxLen);
 }
 
 // ─── Feedback flash ───────────────────────────────────────────────────────────
+
 function useFeedback() {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const flash = useCallback((text: string, ok = true) => {
@@ -120,7 +115,8 @@ function useFeedback() {
   return { msg, flash };
 }
 
-// ─── Action Tray ──────────────────────────────────────────────────────────────
+// ─── ActionTray ───────────────────────────────────────────────────────────────
+
 function ActionTray({
   session,
   onRefresh,
@@ -130,6 +126,7 @@ function ActionTray({
   onRefresh: () => void;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const [banReason,    setBanReason]    = useState(session.ban_reason    || "");
   const [unbanMsg,     setUnbanMsg]     = useState(session.unban_message || "");
   const [broadcastMsg, setBroadcastMsg] = useState(session.admin_message || "");
@@ -154,7 +151,7 @@ function ActionTray({
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30">
-          Moderation Panel
+          {t("admin.users.modPanel")}
         </span>
         {feedback && (
           <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
@@ -165,68 +162,87 @@ function ActionTray({
             {feedback.text}
           </span>
         )}
-        <button onClick={onClose} className="text-white/25 hover:text-white/60 transition-colors" aria-label="Close panel">
+        <button
+          onClick={onClose}
+          className="text-white/25 hover:text-white/60 transition-colors"
+          aria-label={t("close")}
+        >
           <X size={14} />
         </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-white/5">
-        {/* Ban */}
+
+        {/* ── Ban ────────────────────────────────────────── */}
         <div className="p-4 space-y-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-red-400/60">Ban User</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-red-400/60">
+            {t("admin.users.banUser")}
+          </p>
           <input
             type="text"
             value={banReason}
             onChange={(e) => setBanReason(e.target.value.slice(0, 500))}
-            placeholder="Reason (optional)"
+            placeholder={t("admin.users.reasonPlaceholder")}
             className="w-full rounded-lg border border-white/8 bg-white/4 px-3 py-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-red-500/40 transition-colors"
           />
           <button
-            onClick={() => act("ban", () => banUser({
-              sessionId: session.id,
-              sessionToken: session.session_token,
-              reason: sanitisePayloadString(banReason) || undefined,
-            }), "Banned")}
+            onClick={() =>
+              act("ban", () => banUser({
+                sessionId:    session.id,
+                sessionToken: session.session_token,
+                reason:       sanitisePayloadString(banReason) || undefined,
+              }), t("admin.users.banUser"))
+            }
             disabled={!!busy || session.is_banned === true}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600/80 hover:bg-red-500 disabled:opacity-35 px-3 py-2 text-xs font-semibold text-white transition-all"
           >
-            {busy === "ban" ? <Loader2 size={12} className="animate-spin" /> : <ShieldBan size={12} />}
-            {session.is_banned ? "Already Banned" : "Ban Session"}
+            {busy === "ban"
+              ? <Loader2 size={12} className="animate-spin" />
+              : <ShieldBan size={12} />}
+            {session.is_banned ? t("admin.users.alreadyBanned") : t("admin.users.banBtn")}
           </button>
         </div>
 
-        {/* Unban */}
+        {/* ── Unban ──────────────────────────────────────── */}
         <div className="p-4 space-y-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400/60">Unban User</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400/60">
+            {t("admin.users.unbanUser")}
+          </p>
           <input
             type="text"
             value={unbanMsg}
             onChange={(e) => setUnbanMsg(e.target.value.slice(0, 500))}
-            placeholder="Welcome-back message"
+            placeholder={t("admin.users.welcomeBack")}
             className="w-full rounded-lg border border-white/8 bg-white/4 px-3 py-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-emerald-500/40 transition-colors"
           />
           <button
-            onClick={() => act("unban", () => unbanUser({
-              sessionId: session.id,
-              sessionToken: session.session_token,
-              unbanMessage: sanitisePayloadString(unbanMsg) || undefined,
-            }), "Unbanned")}
+            onClick={() =>
+              act("unban", () => unbanUser({
+                sessionId:    session.id,
+                sessionToken: session.session_token,
+                unbanMessage: sanitisePayloadString(unbanMsg) || undefined,
+              }), t("admin.users.unbanUser"))
+            }
             disabled={!!busy || session.is_banned !== true}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 disabled:opacity-35 px-3 py-2 text-xs font-semibold text-white transition-all"
           >
-            {busy === "unban" ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />}
-            {session.is_banned ? "Unban Session" : "Not Banned"}
+            {busy === "unban"
+              ? <Loader2 size={12} className="animate-spin" />
+              : <ShieldCheck size={12} />}
+            {session.is_banned ? t("admin.users.unbanBtn") : t("admin.users.notBanned")}
           </button>
         </div>
 
-        {/* Broadcast */}
+        {/* ── Broadcast ──────────────────────────────────── */}
         <div className="p-4 space-y-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-400/60">Live Alert</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-400/60">
+            {t("admin.users.liveAlert")}
+          </p>
           <input
             type="text"
             value={broadcastMsg}
             onChange={(e) => setBroadcastMsg(e.target.value.slice(0, 500))}
-            placeholder="Message shown to this user now…"
+            placeholder={t("admin.users.msgPlaceholder")}
             className="w-full rounded-lg border border-white/8 bg-white/4 px-3 py-2 text-xs text-white placeholder:text-white/25 focus:outline-none focus:border-amber-500/40 transition-colors"
           />
           <div className="flex gap-2">
@@ -235,25 +251,32 @@ function ActionTray({
                 const safe = sanitisePayloadString(broadcastMsg);
                 if (!safe) return;
                 act("send", () => sendAdminMessage({
-                  sessionId: session.id,
+                  sessionId:    session.id,
                   sessionToken: session.session_token,
-                  message: safe,
-                }), "Alert sent");
+                  message:      safe,
+                }), t("admin.users.sendAlert"));
               }}
               disabled={!!busy || !broadcastMsg.trim()}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-amber-600/80 hover:bg-amber-500 disabled:opacity-35 px-3 py-2 text-xs font-semibold text-white transition-all"
             >
-              {busy === "send" ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              Send
+              {busy === "send"
+                ? <Loader2 size={12} className="animate-spin" />
+                : <Send size={12} />}
+              {t("admin.users.sendAlert")}
             </button>
             {session.admin_message && (
               <button
-                onClick={() => act("clear", () => clearAdminMessage(session.id, session.session_token), "Cleared")}
+                onClick={() =>
+                  act("clear", () => clearAdminMessage(session.id, session.session_token),
+                    t("admin.users.clearAlert"))
+                }
                 disabled={!!busy}
-                title="Clear active alert"
+                title={t("admin.users.clearAlert")}
                 className="flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/8 disabled:opacity-35 px-3 py-2 text-white/50 hover:text-white transition-all"
               >
-                {busy === "clear" ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
+                {busy === "clear"
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <X size={12} />}
               </button>
             )}
           </div>
@@ -263,28 +286,28 @@ function ActionTray({
             </p>
           )}
         </div>
+
       </div>
     </div>
   );
 }
 
-// ─── Session Card ─────────────────────────────────────────────────────────────
+// ─── SessionCard ──────────────────────────────────────────────────────────────
+
 function SessionCard({
   session,
   nowMs,
   onRefresh,
 }: {
   session: Session;
-  nowMs: number;        // ← passed from parent so the whole list re-paints together
+  nowMs: number;
   onRefresh: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const { t }                         = useLanguage();
+  const [expanded, setExpanded]       = useState(false);
+  const active                        = checkActive(session, nowMs);
+  const banned                        = session.is_banned === true;
 
-  // Active status recalculated on every render (nowMs changes every 15 s)
-  const active = checkActive(session, nowMs);
-  const banned = session.is_banned === true;
-
-  // Freshest timestamp for display
   const displayTs = (() => {
     const ls = session.last_seen  ? new Date(session.last_seen ).getTime() : 0;
     const ua = session.updated_at ? new Date(session.updated_at).getTime() : 0;
@@ -297,8 +320,10 @@ function SessionCard({
         ? "border-red-500/30 border-l-[3px] border-l-red-500"
         : "border-white/7 hover:border-white/12"
     } bg-white/[0.025]`}>
+
       {/* Main row */}
       <div className="flex items-center gap-3 px-4 py-3.5">
+
         {/* Status dot + token */}
         <div className="flex items-center gap-2.5 min-w-0 w-[140px] shrink-0">
           <span className="relative flex-shrink-0 h-2.5 w-2.5">
@@ -329,7 +354,7 @@ function SessionCard({
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {banned && (
             <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-400 ring-1 ring-red-500/25">
-              BANNED
+              {t("admin.users.banned").toUpperCase()}
             </span>
           )}
           {session.admin_message && (
@@ -347,12 +372,13 @@ function SessionCard({
           <button
             onClick={() => setExpanded((v) => !v)}
             className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/4 hover:bg-white/8 px-2.5 py-1.5 text-[11px] font-medium text-white/40 hover:text-white/80 transition-all"
-            aria-label={expanded ? "Close panel" : "Open actions"}
+            aria-label={expanded ? t("close") : t("admin.users.actions")}
           >
-            Actions
+            {t("admin.users.actions")}
             {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
           </button>
         </div>
+
       </div>
 
       {expanded && (
@@ -363,6 +389,7 @@ function SessionCard({
 }
 
 // ─── Legend ───────────────────────────────────────────────────────────────────
+
 function LegendItem({ dot, label }: { dot: string; label: string }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -372,34 +399,36 @@ function LegendItem({ dot, label }: { dot: string; label: string }) {
   );
 }
 
-// ─── Main UsersTab ─────────────────────────────────────────────────────────────
-// Memoize SessionCard so that the 15-second useNow tick only causes a re-render
-// for cards whose *active status* actually flipped — not for all 200 cards.
-// The comparator re-renders only when: session data changed OR isActive changed.
+// ─── Memoized card — only re-renders when data or active status changes ────────
+
 const SessionCardMemo = React.memo(
   SessionCard,
   (prev, next) => {
-    if (prev.session !== next.session) return false; // data changed → re-render
+    if (prev.session !== next.session) return false;
     const prevActive = checkActive(prev.session, prev.nowMs);
     const nextActive = checkActive(next.session, next.nowMs);
-    return prevActive === nextActive; // only re-render when activity flips
+    return prevActive === nextActive;
   }
 );
 
+// ─── Main UsersTab ────────────────────────────────────────────────────────────
+
 export default function UsersTab() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState<string | null>(null);
-  const [search,   setSearch]   = useState("");
-  const [filter,   setFilter]   = useState<"all" | "active" | "banned">("all");
+  const { t }                                          = useLanguage();
+  const [sessions, setSessions]                        = useState<Session[]>([]);
+  const [loading,  setLoading]                         = useState(true);
+  const [error,    setError]                           = useState<string | null>(null);
+  const [search,   setSearch]                          = useState("");
+  const [filter,   setFilter]                          = useState<"all" | "active" | "banned">("all");
+  const nowMs                                          = useNow(15_000);
+  const pollTimerRef                                   = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // nowMs ticks every 15 s — forces all SessionCards to re-evaluate isActive
-  // without a full network fetch, so active dots repaint the instant a heartbeat lands.
-  const nowMs = useNow(15_000);
+  const filterLabels: Record<string, string> = {
+    all:    t("admin.reviews.filterAll"),
+    active: t("admin.users.active"),
+    banned: t("admin.users.banned"),
+  };
 
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Full fetch ──────────────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -409,63 +438,49 @@ export default function UsersTab() {
         .select(SAFE_SELECT)
         .order("last_seen", { ascending: false })
         .limit(200);
-
       if (qErr) {
-        setError("Could not load sessions: " + qErr.message);
+        setError(`${t("admin.users.dbError")}: ${qErr.message}`);
         setSessions([]);
       } else {
         setSessions((data || []) as unknown as Session[]);
       }
     } catch (err: unknown) {
-      setError("Failed to connect: " + (err instanceof Error ? err.message : "Unknown error"));
+      setError(`${t("admin.users.dbError")}: ${err instanceof Error ? err.message : "Unknown error"}`);
       setSessions([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
-  // ── Boot fetch + 15 s fallback poll ────────────────────────────────────
   useEffect(() => {
     fetchSessions();
     pollTimerRef.current = setInterval(fetchSessions, 15_000);
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    };
+    return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
   }, [fetchSessions]);
 
-  // ── Realtime: INSERT / UPDATE / DELETE on user_sessions ────────────────
+  // Realtime Supabase subscription
   useEffect(() => {
     const ch = supabase
       .channel("admin:user_sessions:live")
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "user_sessions" },
         (payload) => {
           const row = payload.new as Session;
-          setSessions((prev) => {
-            if (prev.some((s) => s.id === row.id)) return prev;
-            return [row, ...prev];
-          });
+          setSessions((prev) => prev.some((s) => s.id === row.id) ? prev : [row, ...prev]);
         }
       )
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "UPDATE", schema: "public", table: "user_sessions" },
         (payload) => {
           const row = payload.new as Session;
-          setSessions((prev) =>
-            prev.map((s) => s.id === row.id ? { ...s, ...row } : s)
-          );
-          // Stop the poll timer from clobbering a fresh realtime update
-          // by resetting it so the next poll is 15 s from NOW.
+          setSessions((prev) => prev.map((s) => s.id === row.id ? { ...s, ...row } : s));
           if (pollTimerRef.current) {
             clearInterval(pollTimerRef.current);
             pollTimerRef.current = setInterval(fetchSessions, 15_000);
           }
         }
       )
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "DELETE", schema: "public", table: "user_sessions" },
         (payload) => {
           const old = payload.old as { id?: string };
@@ -473,17 +488,14 @@ export default function UsersTab() {
         }
       )
       .subscribe((status) => {
-        // Fallback: tighten poll to 5 s if realtime channel can't connect
         if (status === "CHANNEL_ERROR") {
           if (pollTimerRef.current) clearInterval(pollTimerRef.current);
           pollTimerRef.current = setInterval(fetchSessions, 5_000);
         }
       });
-
     return () => { supabase.removeChannel(ch); };
   }, [fetchSessions]);
 
-  // ── Derived counts (recalculate every time nowMs ticks) ─────────────
   const activeCnt = sessions.filter((s) => checkActive(s, nowMs)).length;
   const bannedCnt = sessions.filter((s) => s.is_banned).length;
 
@@ -501,12 +513,13 @@ export default function UsersTab() {
 
   return (
     <div className="space-y-5">
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total",  value: sessions.length, color: "text-white/70"   },
-          { label: "Active", value: activeCnt,        color: "text-emerald-400" },
-          { label: "Banned", value: bannedCnt,        color: "text-red-400"    },
+          { label: t("admin.users.total"),  value: sessions.length, color: "text-white/70"    },
+          { label: t("admin.users.active"), value: activeCnt,       color: "text-emerald-400" },
+          { label: t("admin.users.banned"), value: bannedCnt,       color: "text-red-400"     },
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-xl border border-white/7 bg-white/[0.025] px-4 py-3">
             <p className={"text-2xl font-bold tabular-nums " + color}>{value}</p>
@@ -539,7 +552,7 @@ export default function UsersTab() {
                   : "text-white/35 hover:text-white/60"
               )}
             >
-              {f}
+              {filterLabels[f]}
             </button>
           ))}
         </div>
@@ -550,7 +563,7 @@ export default function UsersTab() {
           className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/4 hover:bg-white/8 disabled:opacity-40 px-3 py-2 text-xs text-white/50 hover:text-white/80 transition-colors"
         >
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-          Refresh
+          {t("admin.users.refresh")}
         </button>
 
         <span className="text-xs text-white/25 tabular-nums">
@@ -563,7 +576,7 @@ export default function UsersTab() {
         <div className="rounded-xl border border-red-500/20 bg-red-950/15 p-4 flex items-start gap-3">
           <AlertCircle size={15} className="text-red-400 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-red-400">Database Error</p>
+            <p className="text-sm font-medium text-red-400">{t("admin.users.dbError")}</p>
             <p className="text-xs text-red-400/60 mt-1">{error}</p>
           </div>
         </div>
@@ -573,13 +586,13 @@ export default function UsersTab() {
       {loading && sessions.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3">
           <Loader2 className="animate-spin text-white/20" size={28} />
-          <p className="text-xs text-white/20">Loading sessions…</p>
+          <p className="text-xs text-white/20">{t("admin.users.loading")}</p>
         </div>
       ) : !error && filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3">
           <Users size={32} className="text-white/10" />
           <p className="text-sm text-white/25">
-            {search || filter !== "all" ? "No sessions match this filter." : "No sessions yet."}
+            {search || filter !== "all" ? t("admin.users.noMatch") : t("admin.users.noSessions")}
           </p>
         </div>
       ) : (
@@ -597,9 +610,10 @@ export default function UsersTab() {
 
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-white/5">
-        <LegendItem dot="bg-emerald-400 animate-pulse" label={`Active (< ${ACTIVE_THRESHOLD_MS / 1000}s)`} />
-        <LegendItem dot="bg-white/15"                  label="Inactive" />
+        <LegendItem dot="bg-emerald-400 animate-pulse" label={`${t("admin.users.active")} (< ${ACTIVE_THRESHOLD_MS / 1000}s)`} />
+        <LegendItem dot="bg-white/15"                  label={t("admin.users.inactive")} />
       </div>
+
     </div>
   );
 }

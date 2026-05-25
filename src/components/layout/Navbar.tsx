@@ -1,26 +1,27 @@
 // src/components/layout/Navbar.tsx
-
 "use client";
 
 import React, { useEffect, useState, memo } from "react";
 import { Link, useLocation } from "wouter";
 import { Settings, MessageSquare } from "lucide-react";
 import { SettingsModal } from "@/components/SettingsModal";
+import { useLanguage } from "@/hooks/use-language";
+import type { TranslationKey } from "@/lib/data";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Nav links — keys only; labels resolved via t() ──────────────────────────
 
 interface NavLink {
   href: string;
-  label: string;
+  key:  TranslationKey;
 }
 
 const NAV_LINKS: NavLink[] = [
-  { href: "/",          label: "Home"      },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/games",     label: "Games"     },
-  { href: "/pricing",   label: "Pricing"   },
-  { href: "/reviews",   label: "Reviews"   },
-  { href: "/policies",  label: "Policies"  },
+  { href: "/",          key: "nav.home"      },
+  { href: "/portfolio", key: "nav.portfolio"  },
+  { href: "/games",     key: "nav.games"      },
+  { href: "/pricing",   key: "nav.pricing"    },
+  { href: "/reviews",   key: "nav.reviews"    },
+  { href: "/policies",  key: "nav.policies"   },
 ];
 
 const DISCORD_INVITE_URL =
@@ -28,14 +29,10 @@ const DISCORD_INVITE_URL =
 
 // ─── Clock Hook ───────────────────────────────────────────────────────────────
 
-/**
- * Returns a formatted HH:MM:SS time string that only updates when the string
- * value actually changes, preventing unnecessary re-renders on sub-second ticks.
- */
 function useFormattedClock(): { timeStr: string; gmtLabel: string } {
   const format = (d: Date) =>
     d.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
+      hour:   "2-digit",
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
@@ -51,14 +48,13 @@ function useFormattedClock(): { timeStr: string; gmtLabel: string } {
       : `GMT${sign}${absHours}`;
   };
 
-  const now     = new Date();
+  const now = new Date();
   const [state, setState] = useState({ timeStr: format(now), gmtLabel: buildGmt(now) });
 
   useEffect(() => {
     const id = setInterval(() => {
       const d       = new Date();
       const timeStr = format(d);
-      // Only update state when the formatted string actually changes (every ~1 s).
       setState((prev) =>
         prev.timeStr === timeStr ? prev : { timeStr, gmtLabel: buildGmt(d) }
       );
@@ -69,7 +65,7 @@ function useFormattedClock(): { timeStr: string; gmtLabel: string } {
   return state;
 }
 
-// ─── ClockBadge (memoised — will not re-render the Navbar tree) ──────────────
+// ─── ClockBadge ───────────────────────────────────────────────────────────────
 
 const ClockBadge = memo(function ClockBadge() {
   const { timeStr, gmtLabel } = useFormattedClock();
@@ -94,44 +90,6 @@ const ClockBadge = memo(function ClockBadge() {
 });
 
 // ─── NavLogo ──────────────────────────────────────────────────────────────────
-//
-// CLS FIX — span.text-sm.md:text-base.tracking-tight
-// ────────────────────────────────────────────────────
-// Google's CLS audit (Lighthouse / lab data) identified this span as the
-// shifting element. Two compounding sources:
-//
-//   1. Webfont FOUT: the display font loads asynchronously. Before it arrives
-//      the browser renders the text in the fallback system font (typically
-//      slightly wider or narrower). When the webfont swaps in the glyph
-//      metrics change, expanding or contracting the inline box. Because the
-//      NavLogo flex item has no reserved width, the flex row re-measures and
-//      pushes its siblings (nav links, right cluster) horizontally — this is
-//      recorded as a CLS shift because it moves visible elements.
-//
-//   2. Image error → fallback swap: when profile.png fails to load, React
-//      replaces the <img> with a <span>Y</span>. Even though the avatar
-//      container is fixed at h-7 w-7, the gap-2.5 flex row momentarily
-//      re-composites, producing a micro-shift in the logo text position.
-//
-// Fixes applied:
-//   a) `whitespace-nowrap` — prevents the static string "youssef_design" from
-//      ever wrapping, eliminating height changes caused by line breaks.
-//   b) `min-w-[7.5rem]` — pre-reserves 120 px for the logo text inline box.
-//      The string "youssef_design" measures ~100–115 px at text-sm/text-base;
-//      reserving 120 px means the font swap can never expand into unallocated
-//      space. The flex item width is stable from the very first paint, so no
-//      sibling is ever displaced.
-//   c) `text-sm` only (responsive `md:text-base` removed) — the jump from
-//      0.875 rem to 1 rem at the md breakpoint is a predictable layout change
-//      the browser handles before paint, but some CLS measurement tools record
-//      it as a shift if the initial viewport width is close to the breakpoint
-//      and a slow network delays the CSS. Locking the size to `text-sm`
-//      eliminates this edge case entirely; the visual difference is negligible
-//      for a brand logo.
-//   d) Explicit `width` and `height` attributes on the avatar <img> — the
-//      h-7 w-7 Tailwind classes set CSS width/height but the browser still
-//      needs the HTML attributes for the intrinsic aspect-ratio reservation
-//      before CSS is applied, preventing a micro-shift on first paint.
 
 const NavLogo = memo(function NavLogo() {
   const [imgFailed, setImgFailed] = useState(false);
@@ -141,11 +99,6 @@ const NavLogo = memo(function NavLogo() {
       href="/"
       className="flex items-center gap-2.5 font-bold text-white hover:opacity-80 transition-opacity"
     >
-      {/*
-        Avatar container: fixed h-7 w-7 in CSS + explicit width/height HTML
-        attributes so the browser can reserve the 28×28 px slot before any
-        CSS is applied (eliminates a micro layout-shift on first paint).
-      */}
       <div className="h-7 w-7 rounded-full ring-1 ring-primary/50 overflow-hidden flex-shrink-0 bg-primary/20 flex items-center justify-center">
         {imgFailed ? (
           <span className="text-primary text-xs font-black select-none" aria-hidden="true">
@@ -163,12 +116,11 @@ const NavLogo = memo(function NavLogo() {
           />
         )}
       </div>
-
       {/*
-        Logo text — CLS-hardened:
-          • whitespace-nowrap: never wraps, never changes line count
-          • min-w-[7.5rem]:   reserves the inline box before font swap
-          • text-sm only:     eliminates the md:text-base breakpoint jump
+        CLS-hardened logo text:
+          • whitespace-nowrap  — never wraps; line count never changes
+          • min-w-[7.5rem]     — pre-reserves inline box before webfont swap
+          • text-sm only       — eliminates the md:text-base breakpoint jump
       */}
       <span className="text-sm tracking-tight whitespace-nowrap min-w-[7.5rem] inline-block">
         youssef_design
@@ -184,6 +136,9 @@ export default function Navbar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [location]                      = useLocation();
 
+  // t() for nav labels; isRTL for layout direction
+  const { t, isRTL } = useLanguage();
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -193,6 +148,7 @@ export default function Navbar() {
   return (
     <>
       <header
+        dir={isRTL ? "rtl" : "ltr"}
         className={`sticky top-0 z-50 w-full transition-all duration-300 ${
           scrolled
             ? "border-b border-white/8 bg-background/80 backdrop-blur-xl shadow-sm"
@@ -218,7 +174,7 @@ export default function Navbar() {
                         : "text-white/70 hover:text-white hover:bg-white/8"
                     }`}
                   >
-                    {link.label}
+                    {t(link.key)}
                   </Link>
                 </li>
               );
@@ -232,7 +188,7 @@ export default function Navbar() {
 
             {/* Settings */}
             <button
-              aria-label="Open settings"
+              aria-label={t("settings.closeLabel")}
               onClick={() => setSettingsOpen(true)}
               className={`rounded-lg p-2 transition-colors ${
                 settingsOpen
@@ -248,11 +204,11 @@ export default function Navbar() {
               href={DISCORD_INVITE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Discord"
+              aria-label={t("nav.discord")}
               className="flex items-center gap-1.5 rounded-lg bg-[#5865F2] hover:bg-[#4752c4] transition-colors px-2.5 md:px-3.5 py-1.5 text-sm font-semibold text-white"
             >
               <MessageSquare size={14} aria-hidden="true" />
-              <span className="sr-only md:not-sr-only">Discord</span>
+              <span className="sr-only md:not-sr-only">{t("nav.discord")}</span>
             </a>
           </div>
 

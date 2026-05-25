@@ -1,4 +1,4 @@
-// src/pages/admin/ReviewsTab.tsx — Full admin CRUD for reviews
+// src/pages/admin/ReviewsTab.tsx — Full admin CRUD for reviews (fully translated)
 import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,16 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/hooks/use-language";
 import { reviewsApi, type Review } from "@/lib/adminApi";
 
 type FilterKey = "all" | "pending" | "approved" | "rejected";
-
-const FILTER_CONFIG: Record<FilterKey, { label: string; color: string; badge: string }> = {
-  all:      { label: "All",      color: "border-white/20 text-white",         badge: "bg-white/10" },
-  pending:  { label: "Pending",  color: "border-amber-500/40 text-amber-400", badge: "bg-amber-500/15" },
-  approved: { label: "Approved", color: "border-green-500/40 text-green-400", badge: "bg-green-500/15" },
-  rejected: { label: "Rejected", color: "border-red-500/40 text-red-400",     badge: "bg-red-500/15" },
-};
 
 // ── Star rating input ──────────────────────────────────────────
 function StarInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -36,11 +30,9 @@ function StarInput({ value, onChange }: { value: number; onChange: (v: number) =
           onClick={() => onChange(i)}
           className="transition-transform hover:scale-110"
         >
-          <Star
-            className={`w-6 h-6 transition-colors ${
-              i <= (hover || value) ? "fill-yellow-400 text-yellow-400" : "fill-white/10 text-white/20"
-            }`}
-          />
+          <Star className={`w-6 h-6 transition-colors ${
+            i <= (hover || value) ? "fill-yellow-400 text-yellow-400" : "fill-white/10 text-white/20"
+          }`} />
         </button>
       ))}
     </div>
@@ -67,7 +59,7 @@ const EMPTY_FORM: ReviewFormData = {
   project_type: "UI Design",
   avatar: "",
   date: new Date().toISOString().split("T")[0],
-  approved: false,   // new reviews start as pending — admin must explicitly approve
+  approved: false,
   featured: false,
   verified: false,
 };
@@ -83,6 +75,7 @@ function ReviewFormPanel({
   onCancel: () => void;
   mode: "create" | "edit";
 }) {
+  const { t } = useLanguage();
   const [form, setForm] = useState<ReviewFormData>({ ...EMPTY_FORM, ...initial });
   const [busy, setBusy] = useState(false);
 
@@ -92,11 +85,7 @@ function ReviewFormPanel({
   const handleSave = async () => {
     if (!form.name.trim() || !form.text.trim()) return;
     setBusy(true);
-    try {
-      await onSave(form);
-    } finally {
-      setBusy(false);
-    }
+    try { await onSave(form); } finally { setBusy(false); }
   };
 
   const field = (label: string, icon: React.ReactNode, children: React.ReactNode) => (
@@ -110,6 +99,12 @@ function ReviewFormPanel({
 
   const inputCls = "bg-white dark:bg-background/50 border-slate-200 dark:border-white/10 text-slate-900 dark:text-foreground text-sm focus:border-primary/40";
 
+  const toggleLabels: Record<string, string> = {
+    approved: t("admin.reviews.autoApprove"),
+    featured: t("admin.reviews.pinFeat"),
+    verified: t("admin.reviews.verified"),
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -10 }}
@@ -119,8 +114,10 @@ function ReviewFormPanel({
     >
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm flex items-center gap-2">
-          {mode === "create" ? <Plus className="w-4 h-4 text-primary" /> : <Edit3 className="w-4 h-4 text-primary" />}
-          {mode === "create" ? "Create New Review" : "Edit Review"}
+          {mode === "create"
+            ? <><Plus className="w-4 h-4 text-primary" /> {t("admin.reviews.createTitle")}</>
+            : <><Edit3 className="w-4 h-4 text-primary" /> {t("admin.reviews.editTitle")}</>
+          }
         </h3>
         <button onClick={onCancel} className="p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-white transition-colors">
           <X className="w-4 h-4" />
@@ -131,7 +128,7 @@ function ReviewFormPanel({
         {field("Client Name *", <User className="w-3.5 h-3.5" />,
           <Input className={inputCls} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. John Doe" />
         )}
-        {field("Username / Avatar (initial)", <ImageIcon className="w-3.5 h-3.5" />,
+        {field("Username / Avatar", <ImageIcon className="w-3.5 h-3.5" />,
           <Input className={inputCls} value={form.avatar} onChange={(e) => set("avatar", e.target.value)} placeholder="Optional initial or emoji" />
         )}
         {field("Project Type", <Layers className="w-3.5 h-3.5" />,
@@ -156,29 +153,19 @@ function ReviewFormPanel({
         />
       )}
 
-      {/* Toggles */}
       <div className="flex flex-wrap gap-3 pt-1">
-        {(["approved", "featured", "verified"] as const).map((key) => {
-          const labels: Record<string, string> = {
-            approved: "Auto-Approve (public)",
-            featured: "Pin / Feature",
-            verified: "Verified Client",
-          };
-          return (
-            <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-              <div
-                className={`w-8 h-4.5 rounded-full transition-colors relative ${form[key] ? "bg-primary" : "bg-white/10"}`}
-                style={{ height: "18px" }}
-                onClick={() => set(key, !form[key])}
-              >
-                <div
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${form[key] ? "translate-x-4" : "translate-x-0.5"}`}
-                />
-              </div>
-              <span className="text-xs text-muted-foreground">{labels[key]}</span>
-            </label>
-          );
-        })}
+        {(["approved", "featured", "verified"] as const).map((key) => (
+          <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+            <div
+              className={`w-8 h-4.5 rounded-full transition-colors relative ${form[key] ? "bg-primary" : "bg-white/10"}`}
+              style={{ height: "18px" }}
+              onClick={() => set(key, !form[key])}
+            >
+              <div className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${form[key] ? "translate-x-4" : "translate-x-0.5"}`} />
+            </div>
+            <span className="text-xs text-muted-foreground">{toggleLabels[key]}</span>
+          </label>
+        ))}
       </div>
 
       <div className="flex gap-2 pt-1">
@@ -189,9 +176,9 @@ function ReviewFormPanel({
           className="gap-1.5"
         >
           {busy && <div className="animate-spin h-3 w-3 border-2 border-current border-t-transparent rounded-full" />}
-          {mode === "create" ? "Create Review" : "Save Changes"}
+          {mode === "create" ? t("admin.reviews.createBtn") : t("admin.reviews.saveBtn")}
         </Button>
-        <Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" variant="outline" onClick={onCancel}>{t("cancel")}</Button>
       </div>
     </motion.div>
   );
@@ -202,7 +189,9 @@ function Stars({ rating }: { rating: number }) {
   return (
     <span className="flex gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
-        <Star key={i} className={`w-3.5 h-3.5 ${i <= rating ? "fill-yellow-400 text-yellow-400" : "fill-neutral-300 text-neutral-400 dark:fill-neutral-600 dark:text-neutral-600"}`} />
+        <Star key={i} className={`w-3.5 h-3.5 ${
+          i <= rating ? "fill-yellow-400 text-yellow-400" : "fill-neutral-300 text-neutral-400 dark:fill-neutral-600 dark:text-neutral-600"
+        }`} />
       ))}
     </span>
   );
@@ -211,6 +200,7 @@ function Stars({ rating }: { rating: number }) {
 // ── Single review card ─────────────────────────────────────────
 function ReviewCard({ review, onAction }: { review: Review; onAction: () => void }) {
   const { toast }             = useToast();
+  const { t }                 = useLanguage();
   const [busy, setBusy]       = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
@@ -219,10 +209,16 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
     setBusy(action);
     try {
       await reviewsApi[action](review.id);
-      toast({ title: action === "approve" ? "✅ Approved" : action === "reject" ? "🚫 Rejected" : "🗑️ Deleted" });
+      toast({
+        title: action === "approve"
+          ? `✅ ${t("admin.reviews.statusApproved")}`
+          : action === "reject"
+          ? `🚫 ${t("admin.reviews.statusRejected")}`
+          : `🗑️ ${t("delete")}`,
+      });
       onAction();
     } catch (e: unknown) {
-      toast({ title: "❌ Error", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+      toast({ title: `❌ ${t("error")}`, description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setBusy(null);
     }
@@ -232,10 +228,10 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
     setBusy("pin");
     try {
       await reviewsApi.pin(review.id, !review.featured);
-      toast({ title: review.featured ? "📌 Unpinned" : "📌 Pinned to top" });
+      toast({ title: review.featured ? `📌 ${t("admin.reviews.unpin")}` : `📌 ${t("admin.reviews.pin")}` });
       onAction();
     } catch (e: unknown) {
-      toast({ title: "❌ Error", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+      toast({ title: `❌ ${t("error")}`, description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setBusy(null);
     }
@@ -244,43 +240,43 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
   const handleEditSave = async (data: ReviewFormData) => {
     setBusy("edit");
     try {
-      // Build avatar value: trim whitespace; empty string → omit the key entirely
       const avatarVal = data.avatar?.trim() || undefined;
       await reviewsApi.update(review.id, {
-        name: data.name,
-        text: data.text,
-        rating: data.rating,
-        project_type: data.project_type,
-        date: data.date,
-        verified: data.verified,
-        featured: data.featured,
+        name: data.name, text: data.text, rating: data.rating,
+        project_type: data.project_type, date: data.date,
+        verified: data.verified, featured: data.featured,
         ...(avatarVal !== undefined ? { avatar: avatarVal } : {}),
       });
-      toast({ title: "✅ Updated" });
+      toast({ title: `✅ ${t("success")}` });
       setEditing(false);
       onAction();
     } catch (e: unknown) {
-      toast({ title: "❌ Error", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+      toast({ title: `❌ ${t("error")}`, description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setBusy(null);
     }
   };
 
-  // Resolve status from canonical column first, fall back to legacy booleans
   const resolvedStatus: "approved" | "rejected" | "pending" =
     review.status === "approved" || review.approved
       ? "approved"
       : review.status === "rejected" || review.rejected
       ? "rejected"
       : "pending";
+
   const statusBadge =
     resolvedStatus === "approved"
       ? "bg-green-500/15 text-green-400"
       : resolvedStatus === "rejected"
       ? "bg-red-500/15 text-red-400"
       : "bg-amber-500/15 text-amber-400";
+
   const statusLabel =
-    resolvedStatus === "approved" ? "Approved" : resolvedStatus === "rejected" ? "Rejected" : "Pending";
+    resolvedStatus === "approved"
+      ? t("admin.reviews.statusApproved")
+      : resolvedStatus === "rejected"
+      ? t("admin.reviews.statusRejected")
+      : t("admin.reviews.statusPending");
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
@@ -288,7 +284,7 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
         <CardContent className="p-5 space-y-3">
           {review.featured && (
             <div className="flex items-center gap-1 text-[10px] text-primary font-medium">
-              <Pin className="w-3 h-3" /> Featured / Pinned
+              <Pin className="w-3 h-3" /> {t("admin.reviews.featured")}
             </div>
           )}
 
@@ -301,7 +297,6 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
             />
           ) : (
             <>
-              {/* Header */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
@@ -320,7 +315,6 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
 
               <p className="text-sm text-muted-foreground leading-relaxed">{review.text}</p>
 
-              {/* Actions */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 {resolvedStatus !== "approved" && (
                   <Button size="sm" variant="outline"
@@ -328,7 +322,7 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
                     onClick={() => act("approve")} disabled={!!busy}
                   >
                     {busy === "approve" ? <div className="animate-spin h-3 w-3 border-2 border-current border-t-transparent rounded-full" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                    Approve
+                    {t("admin.reviews.approve")}
                   </Button>
                 )}
                 {resolvedStatus !== "rejected" && (
@@ -337,25 +331,26 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
                     onClick={() => act("reject")} disabled={!!busy}
                   >
                     {busy === "reject" ? <div className="animate-spin h-3 w-3 border-2 border-current border-t-transparent rounded-full" /> : <XCircle className="w-3.5 h-3.5" />}
-                    Reject
+                    {t("admin.reviews.reject")}
                   </Button>
                 )}
                 <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground hover:text-foreground"
                   onClick={() => setEditing(true)}>
-                  <Edit3 className="w-3.5 h-3.5" /> Edit
+                  <Edit3 className="w-3.5 h-3.5" /> {t("edit")}
                 </Button>
                 <Button size="sm" variant="ghost"
                   className={`gap-1.5 ${review.featured ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
                   onClick={handlePin} disabled={!!busy}
                 >
-                  <Pin className="w-3.5 h-3.5" /> {review.featured ? "Unpin" : "Pin"}
+                  <Pin className="w-3.5 h-3.5" />
+                  {review.featured ? t("admin.reviews.unpin") : t("admin.reviews.pin")}
                 </Button>
                 <Button size="sm" variant="ghost"
                   className="gap-1.5 text-red-400 hover:text-red-500 ml-auto"
                   onClick={() => act("delete")} disabled={!!busy}
                 >
                   {busy === "delete" ? <div className="animate-spin h-3 w-3 border-2 border-current border-t-transparent rounded-full" /> : <Trash2 className="w-3.5 h-3.5" />}
-                  Delete
+                  {t("delete")}
                 </Button>
               </div>
             </>
@@ -366,15 +361,23 @@ function ReviewCard({ review, onAction }: { review: Review; onAction: () => void
   );
 }
 
-
 // ── Main tab ───────────────────────────────────────────────────
 export default function ReviewsTab() {
   const { toast }               = useToast();
+  const { t }                   = useLanguage();
   const [reviews, setReviews]   = useState<Review[]>([]);
   const [filter, setFilter]     = useState<FilterKey>("all");
   const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+
+  // Filter config — built from t() so labels switch on language change
+  const FILTER_CONFIG: Record<FilterKey, { label: string; color: string; badge: string }> = {
+    all:      { label: t("admin.reviews.filterAll"),      color: "border-white/20 text-white",         badge: "bg-white/10" },
+    pending:  { label: t("admin.reviews.filterPending"),  color: "border-amber-500/40 text-amber-400", badge: "bg-amber-500/15" },
+    approved: { label: t("admin.reviews.filterApproved"), color: "border-green-500/40 text-green-400", badge: "bg-green-500/15" },
+    rejected: { label: t("admin.reviews.filterRejected"), color: "border-red-500/40 text-red-400",     badge: "bg-red-500/15" },
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -382,7 +385,7 @@ export default function ReviewsTab() {
       const data = await reviewsApi.list(filter, page);
       setReviews(Array.isArray(data) ? data : []);
     } catch (e: unknown) {
-      toast({ title: "❌ Failed to load reviews", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+      toast({ title: `❌ ${t("error")}`, description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -395,11 +398,14 @@ export default function ReviewsTab() {
   const handleCreate = async (data: ReviewFormData) => {
     try {
       await reviewsApi.create(data);
-      toast({ title: "✅ Review created", description: data.approved ? "Live on public site" : "Saved as pending" });
+      toast({
+        title: `✅ ${t("admin.reviews.created")}`,
+        description: data.approved ? t("admin.reviews.live") : t("admin.reviews.asPending"),
+      });
       setShowCreate(false);
       load();
     } catch (e: unknown) {
-      toast({ title: "❌ Failed to create", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+      toast({ title: `❌ ${t("error")}`, description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     }
   };
 
@@ -426,8 +432,8 @@ export default function ReviewsTab() {
                 <MessageSquare className="w-6 h-6 text-white" />
               </div>
               <div>
-                <CardTitle className="text-2xl">Reviews ({reviews.length})</CardTitle>
-                <CardDescription>Create, moderate and manage customer feedback</CardDescription>
+                <CardTitle className="text-2xl">{t("admin.reviews.title")} ({reviews.length})</CardTitle>
+                <CardDescription>{t("admin.reviews.desc")}</CardDescription>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -435,10 +441,12 @@ export default function ReviewsTab() {
                 variant="outline" size="sm" className="gap-2"
                 onClick={() => setShowCreate((v) => !v)}
               >
-                <Plus className="w-4 h-4" /> {showCreate ? "Cancel" : "New Review"}
+                <Plus className="w-4 h-4" />
+                {showCreate ? t("cancel") : t("admin.reviews.newBtn")}
               </Button>
               <Button variant="outline" size="sm" className="gap-2" onClick={load} disabled={loading}>
-                <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+                <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                {t("admin.reviews.refresh")}
               </Button>
             </div>
           </div>
@@ -465,7 +473,6 @@ export default function ReviewsTab() {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Create form */}
           <AnimatePresence>
             {showCreate && (
               <ReviewFormPanel
@@ -483,9 +490,9 @@ export default function ReviewsTab() {
           ) : reviews.length === 0 ? (
             <div className="text-center py-16 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
               <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
-              <p className="text-muted-foreground mb-4">No {filter !== "all" ? filter : ""} reviews found</p>
+              <p className="text-muted-foreground mb-4">{t("admin.reviews.noReviews")}</p>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowCreate(true)}>
-                <Plus className="w-4 h-4" /> Create the first review
+                <Plus className="w-4 h-4" /> {t("admin.reviews.createFirst")}
               </Button>
             </div>
           ) : (
@@ -496,7 +503,6 @@ export default function ReviewsTab() {
             </AnimatePresence>
           )}
 
-          {/* Pagination */}
           {reviews.length >= 20 && (
             <div className="flex items-center justify-center gap-3 pt-2">
               <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="gap-1.5">

@@ -1,106 +1,89 @@
-// src/components/layout/Footer.tsx
-
-import { motion } from "framer-motion";
-import { Twitter, MessageSquare } from "lucide-react";
+// src/components/layout/Footer.tsx — fully translated
+import { Link } from "wouter";
+import { MessageSquare } from "lucide-react";
 import { useLanguage } from "@/hooks/use-language";
-import { DISCORD_PROFILE_URL } from "@/lib/discord";
+import { profile } from "@/lib/data";
+import { DISCORD_INVITE_URL } from "@/lib/discord";
 
-export function Footer() {
+const NAV_LINKS_KEYS = [
+  { href: "/",          key: "nav.home"      },
+  { href: "/portfolio", key: "nav.portfolio"  },
+  { href: "/games",     key: "nav.games"      },
+  { href: "/pricing",   key: "nav.pricing"    },
+  { href: "/reviews",   key: "nav.reviews"    },
+  { href: "/policies",  key: "nav.policies"   },
+] as const;
+
+export default function Footer() {
   const { t, isRTL } = useLanguage();
-  const currentYear = new Date().getFullYear();
 
   return (
     <footer
-      className="w-full bg-white/80 dark:bg-card/40 backdrop-blur-xl border-t border-slate-200 dark:border-white/5 py-12"
       dir={isRTL ? "rtl" : "ltr"}
+      className="relative z-10 border-t border-white/5 bg-background/40 backdrop-blur-xl mt-auto"
     >
-      <div className="max-w-7xl mx-auto px-6">
-
-        {/* Three-column grid — stacks on mobile, horizontal on md+ */}
-        <div className="flex flex-col md:flex-row gap-y-8 md:gap-y-0 md:gap-x-8 mb-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-8">
 
           {/* Brand */}
-          <div className={`flex-1 text-center ${isRTL ? "md:text-right" : "md:text-left"}`}>
-            <h3 className="font-display text-xl font-bold mb-2">
-              Youssef<span className="text-primary">.</span>
-            </h3>
-            <p className="text-muted-foreground text-sm">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center ring-1 ring-primary/40">
+                <span className="text-primary font-black text-xs select-none">Y</span>
+              </div>
+              <span className="font-bold text-sm tracking-tight text-white">youssef_design</span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-[220px]">
               {t("footer.tagline")}
             </p>
           </div>
 
-          {/* Tagline */}
-          <div className="flex-1 text-center">
-            <p className="text-foreground font-medium mb-2">
-              {t("footer.role")}
+          {/* Navigation */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              {t("footer.follow")}
             </p>
-            <p className="text-muted-foreground text-sm">
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {NAV_LINKS_KEYS.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {t(link.key)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Contact */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              {t("settings.contact")}
+            </p>
+            <a
+              href={DISCORD_INVITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/30 text-[#7289da] text-xs font-medium transition-colors"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              {t("nav.discord")}
+            </a>
+            <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
               {t("footer.transform")}
             </p>
           </div>
 
-          {/* Socials */}
-          <div className={`flex-1 text-center ${isRTL ? "md:text-left" : "md:text-right"}`}>
-            <h4 className="font-semibold mb-4">
-              {t("footer.follow")}
-            </h4>
-            <div
-              className={`flex justify-center gap-4 ${
-                isRTL ? "md:justify-start" : "md:justify-end"
-              }`}
-            >
-              {/* Twitter / X */}
-              <motion.a
-                href="https://x.com/_YoussefMoMo"
-                target="_blank"
-                rel="noopener noreferrer"
-                whileHover={{ scale: 1.1, y: -2 }}
-                className="p-2 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
-                aria-label="Follow Youssef on Twitter / X"
-              >
-                <Twitter className="w-5 h-5 text-primary" aria-hidden="true" />
-              </motion.a>
-
-              {/* Discord */}
-              <motion.a
-                href={DISCORD_PROFILE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                whileHover={{ scale: 1.1, y: -2 }}
-                className="p-2 rounded-full bg-[#5865F2]/10 hover:bg-[#5865F2]/20 transition-colors"
-                aria-label="Connect with Youssef on Discord"
-              >
-                <MessageSquare className="w-5 h-5 text-[#5865F2]" aria-hidden="true" />
-              </motion.a>
-            </div>
-          </div>
         </div>
 
         {/* Bottom bar */}
-        <div className="pt-8 border-t border-slate-200 dark:border-white/5 text-center">
-          <p className="text-muted-foreground text-sm flex items-center justify-center gap-2 flex-wrap">
-            © {currentYear}{" "}
-            {t("footer.rights")}
-
-            {/* Accessible animated heart */}
-            <svg
-              role="img"
-              aria-label="Love and devotion"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              className="w-4 h-4 fill-red-500 text-red-500 inline-block"
-              aria-hidden="false"
-              focusable="false"
-            >
-              <title>Love and devotion</title>
-              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-            </svg>
-          </p>
+        <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-muted-foreground">
+          <span>© 2026 {t("footer.rights")}</span>
+          <span>{t("footer.role")}</span>
         </div>
-
       </div>
     </footer>
   );
 }
-
-export default Footer;

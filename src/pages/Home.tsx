@@ -421,7 +421,7 @@ export default function Home() {
                         {dynamicValues[stat.id] || stat.value}
                       </p>
                     </div>
-                    <p className="text-sm text-slate-600 dark:text-zinc-400 mt-1">{stat.title}</p>
+                    <p className="text-sm text-slate-600 dark:text-zinc-400 mt-1">{t(`stat.${stat.icon}` as import("@/lib/data").TranslationKey)}</p>
                   </div>
                 </motion.div>
               );
