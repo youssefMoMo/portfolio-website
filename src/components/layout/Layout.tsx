@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState, useCallback } from "react";
 import Navbar from "./Navbar";
-import { Footer } from "./Footer";
+import Footer from "./Footer";
 import { useLocation } from "wouter";
 import { BackgroundOverlay } from "@/components/BackgroundOverlay";
 
