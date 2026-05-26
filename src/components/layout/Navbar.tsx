@@ -75,8 +75,8 @@ const ClockBadge = memo(function ClockBadge() {
       className="flex items-center gap-1.5"
       aria-label={`Current time: ${timeStr} ${gmtLabel}`}
     >
-      <div className="flex items-center rounded-lg border border-white/20 bg-zinc-900/90 backdrop-blur-sm px-3 py-1">
-        <span className="font-mono text-sm font-bold text-white tracking-wider leading-none tabular-nums">
+      <div className="flex items-center rounded-lg border border-neutral-300 dark:border-white/20 bg-neutral-100 dark:bg-zinc-900/90 backdrop-blur-sm px-3 py-1">
+        <span className="font-mono text-sm font-bold text-neutral-800 dark:text-white tracking-wider leading-none tabular-nums">
           {timeStr}
         </span>
       </div>
@@ -97,7 +97,7 @@ const NavLogo = memo(function NavLogo() {
   return (
     <Link
       href="/"
-      className="flex items-center gap-2.5 font-bold text-white hover:opacity-80 transition-opacity"
+      className="flex items-center gap-2.5 font-bold text-neutral-900 dark:text-white hover:opacity-80 transition-opacity"
     >
       <div className="h-7 w-7 rounded-full ring-1 ring-primary/50 overflow-hidden flex-shrink-0 bg-primary/20 flex items-center justify-center">
         {imgFailed ? (
@@ -170,8 +170,8 @@ export default function Navbar() {
                     href={link.href}
                     className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                       isActive
-                        ? "text-white bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/8"
+                        ? "text-neutral-900 dark:text-white bg-neutral-900/10 dark:bg-white/10"
+                        : "text-neutral-600 dark:text-white/70 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-900/8 dark:hover:bg-white/8"
                     }`}
                   >
                     {t(link.key)}
@@ -193,7 +193,7 @@ export default function Navbar() {
               className={`rounded-lg p-2 transition-colors ${
                 settingsOpen
                   ? "text-primary bg-primary/10"
-                  : "text-white/50 hover:text-white hover:bg-white/8"
+                  : "text-neutral-500 dark:text-white/50 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-900/8 dark:hover:bg-white/8"
               }`}
             >
               <Settings size={16} />

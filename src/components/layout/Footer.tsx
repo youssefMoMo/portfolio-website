@@ -10,6 +10,7 @@
 import { Link } from "wouter";
 import { MessageSquare } from "lucide-react";
 import { useLanguage } from "@/hooks/use-language";
+import { useState } from "react";
 
 // ─── Discord invite URL ───────────────────────────────────────────────────────
 //
@@ -40,6 +41,7 @@ const NAV_LINKS = [
 
 export default function Footer() {
   const { t, isRTL } = useLanguage();
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   return (
     <footer
@@ -52,13 +54,25 @@ export default function Footer() {
           {/* ── Brand ──────────────────────────────────────────────────── */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center ring-1 ring-primary/40 flex-shrink-0">
-                <span
-                  className="text-primary font-black text-xs select-none"
-                  aria-hidden="true"
-                >
-                  Y
-                </span>
+              <div className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center ring-1 ring-primary/40 flex-shrink-0 overflow-hidden">
+                {avatarFailed ? (
+                  <span
+                    className="text-primary font-black text-xs select-none"
+                    aria-hidden="true"
+                  >
+                    Y
+                  </span>
+                ) : (
+                  <img
+                    src="/images/global/profile.png"
+                    alt=""
+                    aria-hidden="true"
+                    width={28}
+                    height={28}
+                    className="h-full w-full object-cover"
+                    onError={() => setAvatarFailed(true)}
+                  />
+                )}
               </div>
               <span className="font-bold text-sm tracking-tight text-white whitespace-nowrap">
                 youssef_design

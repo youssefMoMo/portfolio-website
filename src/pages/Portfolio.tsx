@@ -222,7 +222,7 @@ function Lightbox({
         exit={{ scale: 0.94, y: 20 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-5xl flex flex-col lg:flex-row gap-0 bg-[#0e0e14]/95 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+        className="relative w-full max-w-5xl flex flex-col lg:flex-row gap-0 bg-neutral-950/95 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
       >
         {/* Image pane */}
         <div className="relative flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-white/[0.02] to-transparent min-h-[300px]">

@@ -46,19 +46,14 @@ export function BackgroundOverlay() {
   const isDark = resolvedTheme === "dark";
 
   const [imgFailed, setImgFailed] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    // Detect mobile viewport to disable backgroundAttachment: fixed on touch
-    // devices where it causes continuous full-page repaints.
-    const mq = window.matchMedia("(max-width: 767px)");
-    setIsMobile(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
 
   // ── Layer 1: background image ─────────────────────────────────────────────
+  //
+  // NOTE: backgroundAttachment: "fixed" is intentionally absent here.
+  // The container div is already `position: fixed`, so the background is
+  // inherently viewport-pinned. Adding background-attachment: fixed inside
+  // a fixed container creates a "double-fixed" compound that causes the
+  // background image to not render at all on Chromium and WebKit.
 
   const imageStyle: React.CSSProperties = imgFailed
     ? {
@@ -69,9 +64,6 @@ export function BackgroundOverlay() {
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
-        // Fixed attachment makes the image stationary as the page scrolls —
-        // disabled on mobile where it degrades GPU performance (iOS WebKit bug).
-        backgroundAttachment: isMobile ? "scroll" : "fixed",
       };
 
   // ── Layer 2: pitch-black tint (readability / contrast) ───────────────────

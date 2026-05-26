@@ -229,14 +229,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] pointer-events-none"
             dir={isRTL ? "rtl" : "ltr"}
           >
-            <div className="h-full bg-card border-l border-white/10 shadow-2xl pointer-events-auto overflow-hidden flex flex-col">
+            <div className="h-full bg-card border-l border-neutral-200 dark:border-white/10 shadow-2xl pointer-events-auto overflow-hidden flex flex-col">
 
               {/* ── Header ─────────────────────────────────────────── */}
               <motion.div
                 initial={{ opacity: 0, y: -14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.28, type: "spring", stiffness: 200 }}
-                className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 bg-card/50 backdrop-blur-xl"
+                className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-200 dark:border-white/10 bg-card/50 backdrop-blur-xl"
               >
                 <div className="flex items-center gap-2.5">
                   <motion.div
@@ -294,7 +294,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
                             isActive
                               ? "bg-gradient-to-br " + langOption.color + " border-transparent shadow-lg"
-                              : "bg-background/50 border-white/10 hover:border-white/20"
+                              : "bg-neutral-100 dark:bg-background/50 border-neutral-200 dark:border-white/10 hover:border-neutral-300 dark:hover:border-white/20"
                           }`}
                         >
                           {!isActive && (
@@ -356,7 +356,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
                             isActive
                               ? "bg-gradient-to-br " + th.color + " border-transparent shadow-lg"
-                              : "bg-background/50 border-white/10 hover:border-white/20"
+                              : "bg-neutral-100 dark:bg-background/50 border-neutral-200 dark:border-white/10 hover:border-neutral-300 dark:hover:border-white/20"
                           }`}
                         >
                           {!isActive && (
@@ -401,7 +401,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <div className="space-y-2.5">
 
                     {/* Performance Booster */}
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-background/50 px-4 py-3.5">
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-background/50 px-4 py-3.5">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <Zap className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
@@ -423,8 +423,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     {/* Low-End Device (Eco) Mode */}
                     <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3.5 transition-colors duration-300 ${
                       ecoMode
-                        ? "border-emerald-500/40 bg-emerald-950/20"
-                        : "border-white/10 bg-background/50"
+                        ? "border-emerald-500/40 bg-emerald-950/20 dark:bg-emerald-950/20"
+                        : "border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-background/50"
                     }`}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -497,7 +497,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.72 }}
-                className="p-4 border-t border-white/10 bg-card/50 backdrop-blur-xl"
+                className="p-4 border-t border-neutral-200 dark:border-white/10 bg-card/50 backdrop-blur-xl"
               >
                 <p className="text-[10px] sm:text-xs text-center text-muted-foreground">
                   {t("settings.copyright")}

@@ -38,15 +38,36 @@ import { ECO_MODE_KEY, PERF_SETTINGS_EVENT } from "@/components/SettingsModal";
 import { useLanguage } from "@/hooks/use-language";
 
 // ─── Embedded keyframes ───────────────────────────────────────────────────────
-// Single keyframe for ALL three rows. Starting position is translate3d(0,0,0)
-// — identical to the initial inline transform — so the browser applies
-// the same position whether the animation is paused or running.
-// marquee-right does not exist in this file.
+//
+// Two keyframes are defined: marquee-ltr (LTR languages: en, es) and
+// marquee-rtl (RTL languages: ar).
+//
+// LTR (en, es):
+//   Track initialises at translate3d(0, 0, 0) — flush at the LEFT edge of
+//   its own containing block — and scrolls towards translate3d(-50%, 0, 0),
+//   disappearing off the LEFT edge of the viewport.
+//
+// RTL (ar):
+//   Track initialises at translate3d(-50%, 0, 0) — pre-shifted to the LEFT
+//   edge — and scrolls towards translate3d(0, 0, 0), effectively moving to
+//   the RIGHT and disappearing off the RIGHT edge. This is the mirror-image
+//   of the LTR animation, matching natural Arabic reading direction.
+//
+// Both keyframe start positions match the initial inline transform so the
+// browser paints the same state whether the animation is paused or running
+// (eliminates the cold-load mid-screen flash).
 
-const KEYFRAMES = `
-@keyframes marquee-left {
+const KEYFRAMES_LTR = `
+@keyframes marquee-ltr {
   from { transform: translate3d(0, 0, 0); }
   to   { transform: translate3d(-50%, 0, 0); }
+}
+`;
+
+const KEYFRAMES_RTL = `
+@keyframes marquee-rtl {
+  from { transform: translate3d(-50%, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
 }
 `;
 
@@ -97,10 +118,22 @@ const EDGE_MASK =
 interface MarqueeRowProps {
   duration: number;
   running: boolean;
+  rtl?: boolean;
   children: React.ReactNode;
 }
 
-function MarqueeRow({ duration, running, children }: MarqueeRowProps) {
+function MarqueeRow({ duration, running, rtl = false, children }: MarqueeRowProps) {
+  // The animation name selects the pre-injected keyframe block:
+  //   marquee-rtl → Arabic: starts at -50% (left edge), moves right toward 0%
+  //   marquee-ltr → LTR: starts at 0% (right edge), moves left toward -50%
+  //
+  // dir="ltr" on the wrapper is a mandatory layout guard — it must NOT be
+  // removed. CSS keyframe transforms operate on a left-anchored Cartesian
+  // axis; flipping to RTL would reverse the perceived scroll direction and
+  // misalign the edge-fade mask gradients.
+  const animName      = rtl ? "marquee-rtl" : "marquee-ltr";
+  const initialOffset = rtl ? "translate3d(-50%, 0, 0)" : "translate3d(0, 0, 0)";
+
   return (
     <div
       className="relative w-full overflow-hidden"
@@ -110,9 +143,9 @@ function MarqueeRow({ duration, running, children }: MarqueeRowProps) {
       <div
         className="flex gap-4 sm:gap-6 w-max"
         style={{
-          animation: `marquee-left ${duration}s linear infinite`,
+          animation: `${animName} ${duration}s linear infinite`,
           animationPlayState: running ? "running" : "paused",
-          transform: "translate3d(0, 0, 0)",
+          transform: initialOffset,
           willChange: "transform",
           backfaceVisibility: "hidden",
           WebkitBackfaceVisibility: "hidden",
@@ -392,12 +425,10 @@ export function DualMarqueeSection() {
       className="w-full py-10 sm:py-12 overflow-hidden border-y border-slate-200 dark:border-white/5 relative"
     >
       {/*
-        Single keyframe block. Only marquee-left is defined here.
-        marquee-right does not exist — its absence is a structural
-        guarantee that Row 3 can never revert to the offset-initialised
-        behaviour that caused the mid-viewport start artefact.
+        Both keyframe blocks are injected. The active animation name is
+        selected per-row via the `rtl` prop on MarqueeRow.
       */}
-      <style>{KEYFRAMES}</style>
+      <style>{KEYFRAMES_LTR}{KEYFRAMES_RTL}</style>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-8 sm:mb-10 relative z-10">
         <h3 className="text-lg sm:text-xl md:text-2xl font-display font-bold text-center px-2 bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
@@ -405,10 +436,10 @@ export function DualMarqueeSection() {
         </h3>
       </div>
 
-      {/* Row 1 — Reviews (left, 25 s) */}
+      {/* Row 1 — Reviews (direction: language-aware) */}
       {dupReviews.length > 0 ? (
         <div className="mb-6 sm:mb-8">
-          <MarqueeRow duration={25} running={running}>
+          <MarqueeRow duration={25} running={running} rtl={isRTL}>
             {dupReviews.map((r, i) => (
               <ReviewCard key={`rev-${r.id}-${i}`} review={r} />
             ))}
@@ -420,9 +451,9 @@ export function DualMarqueeSection() {
         </div>
       )}
 
-      {/* Row 2 — Stats (left, 25 s) */}
+      {/* Row 2 — Stats (direction: language-aware) */}
       <div className="mb-6 sm:mb-8">
-        <MarqueeRow duration={25} running={running}>
+        <MarqueeRow duration={25} running={running} rtl={isRTL}>
           {dupStats.map((s, i) => (
             <StatCard
               key={`stat-${s.id}-${i}`}
@@ -433,13 +464,8 @@ export function DualMarqueeSection() {
         </MarqueeRow>
       </div>
 
-      {/*
-        Row 3 — Tools (left, 25 s)
-        All three rows are now structurally identical at the keyframe level.
-        dir="ltr" is applied inside MarqueeRow's track wrapper — the RTL
-        layout guard that keeps the CSS animation axis stable.
-      */}
-      <MarqueeRow duration={25} running={running}>
+      {/* Row 3 — Tools (direction: language-aware) */}
+      <MarqueeRow duration={25} running={running} rtl={isRTL}>
         {dupTools.map((tool, i) => (
           <ToolCard key={`tool-${tool.id}-${i}`} tool={tool} />
         ))}
