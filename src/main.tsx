@@ -99,8 +99,17 @@ window.onunhandledrejection = function (event: PromiseRejectionEvent) {
 // ─── Network error monitor (fetch Proxy) ─────────────────────────────────────
 // Uses a Proxy instead of a direct override so Service Workers and other
 // instrumentation libraries see an unmodified fetch reference.
-// Explicitly passes through all /api/roblox and roblox.com requests without
-// error tracking — those are expected to fail in certain contexts.
+//
+// EXEMPT LIST — requests to these URL patterns are expected to fail in certain
+// contexts (rate limits, CORS, cold-start latency) and must NOT be logged as
+// application errors. Add new entries here when a known-benign endpoint
+// generates false-positive 5xx noise in the Admin error log.
+//
+//   /api/roblox      — Roblox proxy: Vercel serverless function; fails in
+//                      local dev if ROBLOX_TOKEN is unset.
+//   roblox.com       — Direct Roblox API calls from useRobloxData.
+//   user_sessions    — Supabase realtime heartbeat / row upserts; high-volume
+//                      writes that occasionally return 409/5xx under load.
 
 window.fetch = new Proxy(window.fetch, {
   apply(
@@ -118,8 +127,13 @@ window.fetch = new Proxy(window.fetch, {
         ? rawInput.toString()
         : "";
 
+    // ── Exempt list ──────────────────────────────────────────────────────────
+    // Any URL matching one of these substrings is silently passed through
+    // without error tracking, even on 5xx or network failure.
     const isExempt =
-      url.includes("/api/roblox") || url.includes("roblox.com");
+      url.includes("/api/roblox") ||
+      url.includes("roblox.com")  ||
+      url.includes("user_sessions");
 
     return (Reflect.apply(target, thisArg, argArray) as Promise<Response>)
       .then((res: Response) => {
@@ -179,7 +193,10 @@ console.error = new Proxy(console.error, {
       .join(" ")
       .slice(0, 300);
 
-    // Skip known React/Roblox noise that would pollute the error log
+    // Skip known React/Roblox noise that would pollute the error log.
+    // Also skip "NextRouter was not mounted" which is a stale warning from the
+    // next-themes peer dependency and does not reflect a real runtime failure
+    // in this Vite/Wouter project.
     const skipPatterns = [
       "Warning:",
       "ReactDOM.render",
@@ -188,6 +205,8 @@ console.error = new Proxy(console.error, {
       "key prop",
       "[roblox",
       "Roblox",
+      "NextRouter was not mounted",
+      "useRouter",
     ];
     if (!msg || skipPatterns.some((p) => msg.includes(p))) return;
 

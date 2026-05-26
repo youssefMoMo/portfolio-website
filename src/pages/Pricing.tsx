@@ -9,6 +9,17 @@
 //     keyed by plan.id (1–6). DB values are used only as English fallbacks.
 //   • FAQ i18n: question and answer text resolved through faq.N.q / faq.N.a keys.
 //   • POLICY LOOKUP: POLICY_ICON_KEYS maps icon slug → policy.*.title / policy.*.desc.
+//
+// ─── LIGHT-MODE CONTRAST FIXES (2026) ────────────────────────────────────────
+//   • Plan cards: `bg-[#10121a]` → `bg-neutral-50 dark:bg-[#10121a]`
+//     All hard-coded `text-white*` colours on plan cards are split:
+//     `text-neutral-900 dark:text-white` / `text-neutral-600 dark:text-white/70` etc.
+//   • "Why Choose Me" feature cards: same bg + text split.
+//   • FAQ accordion items: bg split + text split.
+//   • OrderModal: dark-only bg-[#0f1117] → bg-white dark:bg-[#0f1117].
+//   • CTA "Still have questions?" bottom frame: explicit
+//     `bg-neutral-100 dark:bg-card/40` with `border-neutral-200 dark:border-white/10`
+//     and forced-contrast heading text.
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -135,27 +146,32 @@ function OrderModal({ plan, onClose }: { plan: PricingPlanExtended; onClose: () 
       open={true}
       onClose={onClose}
       ariaLabel={t("pricing.orderTitle")}
-      contentClassName="w-full max-w-lg bg-[#0f1117] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+      contentClassName="w-full max-w-lg bg-white dark:bg-[#0f1117] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden"
     >
       <div className="flex items-center justify-between px-6 pt-6 pb-4">
-        <h2 className="text-lg font-semibold text-white">{t("pricing.orderTitle")}</h2>
-        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white">
+        <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
+          {t("pricing.orderTitle")}
+        </h2>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg text-neutral-500 dark:text-white/60 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors"
+        >
           <X className="w-4 h-4" />
         </button>
       </div>
-      <div className="mx-6 mb-6 p-5 bg-[#1a1d27] border border-white/5 rounded-xl">
-        <pre className="text-sm text-white/80 whitespace-pre-wrap font-sans leading-relaxed">
+      <div className="mx-6 mb-6 p-5 bg-neutral-50 dark:bg-[#1a1d27] border border-neutral-200 dark:border-white/5 rounded-xl">
+        <pre className="text-sm text-neutral-700 dark:text-white/80 whitespace-pre-wrap font-sans leading-relaxed">
           {message}
         </pre>
       </div>
       <div className="flex gap-3 px-6 pb-6">
         <Button
           variant="outline"
-          className="flex-1 gap-2 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+          className="flex-1 gap-2 border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-white/5 hover:bg-neutral-100 dark:hover:bg-white/10 text-neutral-900 dark:text-white"
           onClick={onCopyClick}
         >
           {copied ? (
-            <><CheckCheck className="w-4 h-4 text-green-400" /> {t("pricing.copied")}</>
+            <><CheckCheck className="w-4 h-4 text-green-500" /> {t("pricing.copied")}</>
           ) : (
             <><Copy className="w-4 h-4" /> {t("pricing.copyMsg")}</>
           )}
@@ -251,7 +267,7 @@ export default function Pricing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-muted-foreground max-w-2xl mx-auto text-base"
+            className="text-neutral-600 dark:text-muted-foreground max-w-2xl mx-auto text-base"
           >
             {t("pricing.subtitle")}
           </motion.p>
@@ -265,13 +281,12 @@ export default function Pricing() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-12">
             {plans.map((plan, i) => {
-              const Icon          = iconMap[plan.icon ?? ""] ?? Star;
-              const badgeLabel    = plan.badge ?? (plan.featured ? t("pricing.featured") : null);
-              const deliveryLabel = plan.delivery_time ?? DEFAULT_DELIVERY_META.delivery;
+              const Icon           = iconMap[plan.icon ?? ""] ?? Star;
+              const badgeLabel     = plan.badge ?? (plan.featured ? t("pricing.featured") : null);
+              const deliveryLabel  = plan.delivery_time ?? DEFAULT_DELIVERY_META.delivery;
               const revisionsCount = plan.revisions_count ?? DEFAULT_DELIVERY_META.revisions;
 
               // ── i18n: resolve translated tier name, frames, and features ──
-              // Falls back to DB value when plan.id isn't in the lookup (custom admin plans).
               const planId = Number(plan.id);
               const translatedName     = PLAN_NAME_KEYS[planId]
                 ? t(PLAN_NAME_KEYS[planId])
@@ -304,35 +319,43 @@ export default function Pricing() {
                     </div>
                   )}
 
+                  {/*
+                    Card container: light → white/neutral surface with visible border.
+                    Dark → retains the original deep navy bg-[#10121a].
+                  */}
                   <div className={`h-full rounded-2xl p-7 flex flex-col gap-5 transition-all duration-300 border ${
                     plan.featured
-                      ? "border-primary/50 bg-[#10121a] shadow-xl shadow-primary/12 ring-1 ring-primary/10"
-                      : "border-white/8 bg-[#10121a] hover:border-white/20"
+                      ? "border-primary/50 bg-white dark:bg-[#10121a] shadow-xl shadow-primary/12 ring-1 ring-primary/10"
+                      : "border-neutral-200 dark:border-white/8 bg-white dark:bg-[#10121a] hover:border-neutral-300 dark:hover:border-white/20"
                   }`}>
-                    <div className="w-12 h-12 rounded-xl bg-[#1c1f2e] border border-white/8 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-neutral-100 dark:bg-[#1c1f2e] border border-neutral-200 dark:border-white/8 flex items-center justify-center">
                       <Icon className="w-5 h-5 text-primary/80" strokeWidth={1.5} />
                     </div>
 
                     <div>
-                      <h3 className="text-xl font-bold text-white mb-1">{translatedName}</h3>
+                      <h3 className="text-xl font-bold text-neutral-900 dark:text-white mb-1">
+                        {translatedName}
+                      </h3>
                       <div className="flex items-end gap-1.5 mb-0.5">
-                        <span className="text-4xl font-extrabold text-white">${plan.price_usd}</span>
-                        <span className="text-sm text-white/50 mb-1.5">USD</span>
+                        <span className="text-4xl font-extrabold text-neutral-900 dark:text-white">
+                          ${plan.price_usd}
+                        </span>
+                        <span className="text-sm text-neutral-400 dark:text-white/50 mb-1.5">USD</span>
                       </div>
                       <p className="text-sm font-semibold text-primary/80">{plan.price_robux}+Tax R$</p>
                     </div>
 
-                    <p className="text-sm font-semibold text-white/80 border-b border-white/5 pb-3">
+                    <p className="text-sm font-semibold text-neutral-700 dark:text-white/80 border-b border-neutral-200 dark:border-white/5 pb-3">
                       {t("pricing.includes")} {translatedFrames}
                     </p>
 
                     <div className="flex gap-3 -mt-1">
-                      <div className="flex items-center gap-1.5 text-xs text-white/50 bg-white/4 border border-white/6 rounded-lg px-2.5 py-1.5">
-                        <Clock className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                      <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-white/50 bg-neutral-100 dark:bg-white/4 border border-neutral-200 dark:border-white/6 rounded-lg px-2.5 py-1.5">
+                        <Clock className="w-3 h-3 text-cyan-500 dark:text-cyan-400 flex-shrink-0" />
                         {deliveryLabel}
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs text-white/50 bg-white/4 border border-white/6 rounded-lg px-2.5 py-1.5">
-                        <RefreshCw className="w-3 h-3 text-green-400 flex-shrink-0" />
+                      <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-white/50 bg-neutral-100 dark:bg-white/4 border border-neutral-200 dark:border-white/6 rounded-lg px-2.5 py-1.5">
+                        <RefreshCw className="w-3 h-3 text-green-500 dark:text-green-400 flex-shrink-0" />
                         {revisionsCount < 0
                           ? t("pricing.unlimited")
                           : `${revisionsCount} ${t("pricing.revisions")}`}
@@ -343,7 +366,7 @@ export default function Pricing() {
                       {translatedFeatures.map((feature: string, fi: number) => (
                         <div key={fi} className="flex items-center gap-2.5 text-sm">
                           <Check className="w-4 h-4 text-primary/70 shrink-0" strokeWidth={2.5} />
-                          <span className="text-white/70">{feature}</span>
+                          <span className="text-neutral-600 dark:text-white/70">{feature}</span>
                         </div>
                       ))}
                     </div>
@@ -370,14 +393,14 @@ export default function Pricing() {
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
-          className="text-center text-base text-muted-foreground/90 max-w-2xl mx-auto mb-20 font-medium"
+          className="text-center text-base text-neutral-600 dark:text-muted-foreground/90 max-w-2xl mx-auto mb-20 font-medium"
         >
           {t("pricing.hint")}
         </motion.p>
 
         {/* Why Choose Me */}
         <div className="mb-20">
-          <h2 className="text-2xl sm:text-3xl font-display font-bold text-center mb-10">
+          <h2 className="text-2xl sm:text-3xl font-display font-bold text-center mb-10 text-neutral-900 dark:text-white">
             {t("pricing.whyTitle")}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -390,13 +413,17 @@ export default function Pricing() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.07 }}
-                  className="rounded-2xl border border-white/8 bg-[#0d0f16] p-6 text-center"
+                  className="rounded-2xl border border-neutral-200 dark:border-white/8 bg-neutral-50 dark:bg-[#0d0f16] p-6 text-center"
                 >
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                     <Icon className="w-5 h-5 text-primary" />
                   </div>
-                  <h3 className="font-semibold text-sm text-white mb-2">{item.title}</h3>
-                  <p className="text-xs text-white/40 leading-relaxed line-clamp-3">{item.desc}</p>
+                  <h3 className="font-semibold text-sm text-neutral-900 dark:text-white mb-2">
+                    {item.title}
+                  </h3>
+                  <p className="text-xs text-neutral-500 dark:text-white/40 leading-relaxed line-clamp-3">
+                    {item.desc}
+                  </p>
                 </motion.div>
               );
             })}
@@ -410,17 +437,15 @@ export default function Pricing() {
               <div className="w-12 h-12 rounded-full border border-primary/40 flex items-center justify-center mx-auto mb-4">
                 <ChevronDown className="w-5 h-5 text-primary" />
               </div>
-              <h2 className="text-2xl sm:text-3xl font-display font-bold text-foreground">
+              <h2 className="text-2xl sm:text-3xl font-display font-bold text-neutral-900 dark:text-foreground">
                 {t("pricing.faqTitle")}
               </h2>
             </div>
             <div className="space-y-3">
               {faqs.map((faq: FaqItem, i: number) => {
-                // ── i18n: resolve translated Q&A via faq.N.q / faq.N.a keys ──
-                // Falls back to DB strings when the ID is out of range (custom FAQs).
-                const faqKeys        = FAQ_KEYS[String(faq.id)];
-                const translatedQ    = faqKeys ? t(faqKeys.q) : faq.question;
-                const translatedA    = faqKeys ? t(faqKeys.a) : faq.answer;
+                const faqKeys     = FAQ_KEYS[String(faq.id)];
+                const translatedQ = faqKeys ? t(faqKeys.q) : faq.question;
+                const translatedA = faqKeys ? t(faqKeys.a) : faq.answer;
 
                 return (
                   <motion.div
@@ -429,19 +454,21 @@ export default function Pricing() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: i * 0.05 }}
-                    className="rounded-xl border border-white/8 bg-[#0d0f16] overflow-hidden"
+                    className="rounded-xl border border-neutral-200 dark:border-white/8 bg-white dark:bg-[#0d0f16] overflow-hidden"
                   >
                     <button
-                      className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/4 transition-colors"
+                      className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-neutral-50 dark:hover:bg-white/4 transition-colors"
                       onClick={() => setOpenFaq(openFaq === String(faq.id) ? null : String(faq.id))}
                     >
-                      <span className="text-sm font-medium text-white/90 pr-4">{translatedQ}</span>
+                      <span className="text-sm font-medium text-neutral-900 dark:text-white/90 pr-4">
+                        {translatedQ}
+                      </span>
                       <motion.div
                         animate={{ rotate: openFaq === String(faq.id) ? 180 : 0 }}
                         transition={{ duration: 0.25, ease: "easeInOut" }}
                         className="shrink-0"
                       >
-                        <ChevronDown className="w-4 h-4 text-white/40" />
+                        <ChevronDown className="w-4 h-4 text-neutral-400 dark:text-white/40" />
                       </motion.div>
                     </button>
                     <AnimatePresence initial={false}>
@@ -454,7 +481,7 @@ export default function Pricing() {
                           transition={{ duration: 0.3, ease: "easeInOut" }}
                           className="overflow-hidden"
                         >
-                          <div className="px-5 pb-5 text-sm text-muted-foreground leading-relaxed border-t border-white/5 pt-3">
+                          <div className="px-5 pb-5 text-sm text-neutral-600 dark:text-muted-foreground leading-relaxed border-t border-neutral-100 dark:border-white/5 pt-3">
                             {translatedA}
                           </div>
                         </motion.div>
@@ -467,14 +494,26 @@ export default function Pricing() {
           </div>
         )}
 
-        {/* Contact CTA */}
+        {/*
+          Contact CTA — "Still have questions?" pre-footer frame.
+          BEFORE: `bg-card/40 border-white/10` — near-invisible in light mode.
+          AFTER:  Explicit split using bg-neutral-100 / dark:bg-card/40 and
+                  border-neutral-200 / dark:border-white/10, with forced-contrast
+                  heading and body text so the frame is clearly readable in both
+                  themes. The Discord button retains its brand colour in both modes.
+        */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="bg-card/40 backdrop-blur-xl border border-white/10 rounded-3xl p-12 text-center"
+          className="bg-neutral-100 dark:bg-card/40 backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-3xl p-12 text-center"
         >
-          <h2 className="text-3xl font-display font-bold mb-4">{t("pricing.stillQ")}</h2>
+          <h2 className="text-3xl font-display font-bold mb-4 text-neutral-900 dark:text-white">
+            {t("pricing.stillQ")}
+          </h2>
+          <p className="text-neutral-600 dark:text-muted-foreground mb-8 max-w-md mx-auto text-base">
+            {t("pricing.hint")}
+          </p>
           <Button
             size="lg"
             className="gap-2 rounded-full px-8 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow"
