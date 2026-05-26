@@ -3,6 +3,9 @@
 //   • OBSERVER RESCUE: cleanup closure is the sole authority for disconnecting.
 //   • SLUG COLLISION PREVENTION: slugify incorporates a zero-padded index suffix.
 //   • FULL i18n: every hardcoded English string resolved through t().
+//   • POLICY i18n: policy titles and descriptions resolved through policy.*.title
+//     / policy.*.desc keys, keyed by icon slug. Falls back to DB strings for
+//     custom admin-created policies whose icon slug has no key mapping.
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
@@ -16,11 +19,27 @@ import { useLanguage } from "@/hooks/use-language";
 import { getContent, PoliciesContent } from "@/lib/contentManager";
 import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { openDiscord } from "@/lib/discord";
+import type { TranslationKey } from "@/lib/data";
 
 const POLICY_ICONS: Record<string, React.ElementType> = {
   shield: Shield, refresh: RefreshCcw, clock: Clock,
   "dollar-sign": DollarSign, "message-square": MessageSquare,
   lock: Lock, code: Code, alert: AlertTriangle, sparkles: Sparkles, scale: Scale,
+};
+
+// ── Policy i18n lookup ────────────────────────────────────────────────────────
+//
+// Maps icon slug → { title, desc } TranslationKey pair.
+// The five canonical policies from data.ts are covered. Any custom policy added
+// via the admin dashboard whose icon slug is not in this map will fall through
+// to the DB-stored English strings as a safe fallback.
+//
+const POLICY_TRANSLATION_KEYS: Record<string, { title: TranslationKey; desc: TranslationKey }> = {
+  shield:          { title: "policy.payment.title",       desc: "policy.payment.desc" },
+  refresh:         { title: "policy.revision.title",      desc: "policy.revision.desc" },
+  clock:           { title: "policy.delivery.title",      desc: "policy.delivery.desc" },
+  "dollar-sign":   { title: "policy.refund.title",        desc: "policy.refund.desc" },
+  "message-square":{ title: "policy.communication.title", desc: "policy.communication.desc" },
 };
 
 // ── slugify ──────────────────────────────────────────────────────────────────
@@ -138,7 +157,16 @@ function PolicySection({
   index:  number;
   slug:   string;
 }) {
+  const { t } = useLanguage();
   const Icon = POLICY_ICONS[policy.icon] ?? Shield;
+
+  // ── i18n: look up translated title & description by icon slug ──────────
+  // If the icon slug is in our map, use translated strings.
+  // If not (custom admin policy), fall back to DB-stored strings.
+  const keys = POLICY_TRANSLATION_KEYS[policy.icon];
+  const displayTitle       = keys ? t(keys.title) : policy.title;
+  const displayDescription = keys ? t(keys.desc)  : policy.description;
+
   return (
     <motion.article
       id={slug}
@@ -153,8 +181,8 @@ function PolicySection({
           <Icon className="w-5 h-5 text-red-400" />
         </div>
         <div className="min-w-0">
-          <h2 className="text-lg font-bold text-foreground mb-2">{policy.title}</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">{policy.description}</p>
+          <h2 className="text-lg font-bold text-foreground mb-2">{displayTitle}</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">{displayDescription}</p>
         </div>
       </div>
     </motion.article>
@@ -224,6 +252,19 @@ export default function Policies() {
     return () => { observer.disconnect(); };
   }, [policies]);
 
+  // ── Build translated nav titles for AnchorNav ─────────────────────────
+  // The sidebar shows translated titles while slugs remain English-based
+  // (anchor IDs are generated from original DB titles, preserving links).
+  const navPolicies = policies.map((p) => {
+    const keys = POLICY_TRANSLATION_KEYS[p.icon];
+    return {
+      id:    p.id,
+      title: keys ? t(keys.title) : p.title,
+      icon:  p.icon,
+      slug:  p.slug,
+    };
+  });
+
   return (
     <div
       dir={isRTL ? "rtl" : "ltr"}
@@ -283,12 +324,7 @@ export default function Policies() {
         ) : (
           <div className="flex gap-8 items-start">
             <AnchorNav
-              policies={policies.map((p) => ({
-                id:    p.id,
-                title: p.title,
-                icon:  p.icon,
-                slug:  p.slug,
-              }))}
+              policies={navPolicies}
               activeSlug={activeSlug}
               sectionsLabel={t("policies.sections")}
             />

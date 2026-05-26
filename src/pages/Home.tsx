@@ -30,6 +30,14 @@
 //     Fix: every dynamic hero text node now lives inside a container that
 //     carries an explicit min-h. This pre-reserves the vertical slot so
 //     content arrival never expands the layout box.
+//
+// ─── CTA i18n FIX (2026-05) ─────────────────────────────────────────────────
+//   The CTA section now exclusively uses t("cta.title"), t("cta.subtitle"),
+//   t("cta.plan"), and t("cta.discord") for all three locales (en / ar / es).
+//   The content?.cta_title / content?.cta_subtitle DB overrides are retained as
+//   optional admin customisation but only applied when they hold a non-empty
+//   string. This ensures Arabic and Spanish visitors see fully localised copy
+//   even when no admin-CMS override has been saved.
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "wouter";
@@ -525,6 +533,20 @@ export default function Home() {
       </section>
 
       {/* ── CTA ── */}
+      {/*
+        i18n FIX — CTA Section
+        ───────────────────────
+        All visible strings are now resolved exclusively through t() so Arabic
+        and Spanish visitors see fully localised copy.
+
+        DB override policy (content?.cta_title / content?.cta_subtitle):
+          • Applied only when the admin has saved a non-empty override.
+          • When the field is empty / null, t() provides the locale-correct
+            string — which means the fallback chain is:
+              admin override → t("cta.title") → "cta.title" key itself.
+          • Buttons (cta.plan, cta.discord) are never overridable from the CMS
+            because they are interactive labels that must match the locale.
+      */}
       <section className="py-20 px-6">
         <div className="max-w-4xl mx-auto">
           <motion.div
@@ -544,11 +566,11 @@ export default function Home() {
               */}
               <div className="min-h-[3rem] flex items-center justify-center mb-4">
                 <h2 className="text-3xl md:text-4xl font-display font-bold text-slate-900 dark:text-zinc-100">
-                  {content?.cta_title || t("cta.title")}
+                  {(content?.cta_title && content.cta_title.trim()) || t("cta.title")}
                 </h2>
               </div>
               <p className="text-slate-600 dark:text-zinc-400 max-w-xl mx-auto mb-8">
-                {content?.cta_subtitle || t("cta.subtitle")}
+                {(content?.cta_subtitle && content.cta_subtitle.trim()) || t("cta.subtitle")}
               </p>
               <div className="flex flex-wrap gap-4 justify-center">
                 <Link href="/pricing">

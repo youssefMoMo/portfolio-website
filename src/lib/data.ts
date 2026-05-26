@@ -197,7 +197,31 @@ export type TranslationKey =
   // Footer
   | "footer.tagline" | "footer.role" | "footer.transform" | "footer.follow" | "footer.rights"
   // Common
-  | "loading" | "error" | "success" | "cancel" | "save" | "delete" | "edit" | "add" | "close" | "submit";
+  | "loading" | "error" | "success" | "cancel" | "save" | "delete" | "edit" | "add" | "close" | "submit"
+  // ── Pricing tier names (one per plan ID 1–6) ──────────────────────────
+  | "pricing.tier.1" | "pricing.tier.2" | "pricing.tier.3"
+  | "pricing.tier.4" | "pricing.tier.5" | "pricing.tier.6"
+  // ── Pricing frames labels ──────────────────────────────────────────────
+  | "pricing.p1.frames" | "pricing.p2.frames" | "pricing.p3.frames"
+  | "pricing.p4.frames" | "pricing.p5.frames" | "pricing.p6.frames"
+  // ── Pricing plan features (4 features × 6 plans) ──────────────────────
+  | "pricing.p1.f1" | "pricing.p1.f2" | "pricing.p1.f3" | "pricing.p1.f4"
+  | "pricing.p2.f1" | "pricing.p2.f2" | "pricing.p2.f3" | "pricing.p2.f4"
+  | "pricing.p3.f1" | "pricing.p3.f2" | "pricing.p3.f3" | "pricing.p3.f4"
+  | "pricing.p4.f1" | "pricing.p4.f2" | "pricing.p4.f3" | "pricing.p4.f4"
+  | "pricing.p5.f1" | "pricing.p5.f2" | "pricing.p5.f3" | "pricing.p5.f4"
+  | "pricing.p6.f1" | "pricing.p6.f2" | "pricing.p6.f3" | "pricing.p6.f4"
+  // ── Policy titles & descriptions (keyed by icon slug) ─────────────────
+  | "policy.payment.title" | "policy.payment.desc"
+  | "policy.revision.title" | "policy.revision.desc"
+  | "policy.delivery.title" | "policy.delivery.desc"
+  | "policy.refund.title"   | "policy.refund.desc"
+  | "policy.communication.title" | "policy.communication.desc"
+  // ── FAQ questions & answers (8 items) ─────────────────────────────────
+  | "faq.1.q" | "faq.1.a" | "faq.2.q" | "faq.2.a"
+  | "faq.3.q" | "faq.3.a" | "faq.4.q" | "faq.4.a"
+  | "faq.5.q" | "faq.5.a" | "faq.6.q" | "faq.6.a"
+  | "faq.7.q" | "faq.7.a" | "faq.8.q" | "faq.8.a";
 
 export type Language = "en" | "ar" | "es";
 
@@ -507,6 +531,78 @@ export const translations: Translations = {
     "add": "Add",
     "close": "Close",
     "submit": "Submit",
+
+    // ── Pricing Tier Names ────────────────────────────────────────────────
+    "pricing.tier.1": "Starter",
+    "pricing.tier.2": "Basic",
+    "pricing.tier.3": "Intermediate",
+    "pricing.tier.4": "Advanced",
+    "pricing.tier.5": "Full Game",
+    "pricing.tier.6": "Import Per Frame",
+
+    // ── Pricing Frames Labels ─────────────────────────────────────────────
+    "pricing.p1.frames": "1–6 frames",
+    "pricing.p2.frames": "7–15 frames",
+    "pricing.p3.frames": "16–35 frames",
+    "pricing.p4.frames": "36–60 frames",
+    "pricing.p5.frames": "Unlimited",
+    "pricing.p6.frames": "Per Frame",
+
+    // ── Pricing Plan Features ─────────────────────────────────────────────
+    "pricing.p1.f1": "1–6 Frames",
+    "pricing.p1.f2": "Basic UI Elements",
+    "pricing.p1.f3": "Up to 2 Free Revisions",
+    "pricing.p1.f4": "Standard Delivery",
+    "pricing.p2.f1": "7–15 Frames",
+    "pricing.p2.f2": "Advanced UI Elements",
+    "pricing.p2.f3": "Up to 3 Free Revisions",
+    "pricing.p2.f4": "Standard Delivery",
+    "pricing.p3.f1": "16–35 Frames",
+    "pricing.p3.f2": "Custom Icons",
+    "pricing.p3.f3": "Up to 4 Free Revisions",
+    "pricing.p3.f4": "Priority Delivery",
+    "pricing.p4.f1": "36–60 Frames",
+    "pricing.p4.f2": "Complex Layouts",
+    "pricing.p4.f3": "Up to 5 Free Revisions",
+    "pricing.p4.f4": "High Priority",
+    "pricing.p5.f1": "Unlimited Frames",
+    "pricing.p5.f2": "Full Game Design System",
+    "pricing.p5.f3": "Unlimited Revisions",
+    "pricing.p5.f4": "VIP Support",
+    "pricing.p6.f1": "Import to Studio",
+    "pricing.p6.f2": "UI Scaling",
+    "pricing.p6.f3": "Organized Folders",
+    "pricing.p6.f4": "Ready to Script",
+
+    // ── Policy Titles & Descriptions ─────────────────────────────────────
+    "policy.payment.title": "Payment Policy",
+    "policy.payment.desc": "50% upfront, 50% upon completion. Payment must be made before work begins. We accept PayPal, Robux, and other payment methods.",
+    "policy.revision.title": "Revision Policy",
+    "policy.revision.desc": "Each plan includes a specific number of revisions. Additional revisions may incur extra charges. Please provide clear feedback to minimize revisions.",
+    "policy.delivery.title": "Delivery Time",
+    "policy.delivery.desc": "Delivery times vary based on the plan selected. Basic plans typically take 3–5 business days. Rush orders may be available for an additional fee.",
+    "policy.refund.title": "Refund Policy",
+    "policy.refund.desc": "Refunds are considered on a case-by-case basis. Please contact us within 48 hours of delivery if you're not satisfied with the work.",
+    "policy.communication.title": "Communication",
+    "policy.communication.desc": "Please communicate clearly and provide all necessary details before work begins. Response time is typically within 24 hours.",
+
+    // ── FAQ Questions & Answers ───────────────────────────────────────────
+    "faq.1.q": "What UI design services do you offer?",
+    "faq.1.a": "I specialize in Roblox UI/UX design — including HUDs, menus, inventory systems, shop UIs, leaderboards, loading screens, and complete game UI systems. I also provide Figma source files and can import directly into Roblox Studio.",
+    "faq.2.q": "Are revisions included?",
+    "faq.2.a": "Yes! Every plan includes free revisions. Starter gets 2, Basic gets 3, Intermediate gets 4, Advanced gets 5, and Full Game gets unlimited revisions. Additional revisions beyond your plan's limit are available for a small fee.",
+    "faq.3.q": "Do you import the UI into Roblox Studio?",
+    "faq.3.a": "Yes — the Import Per Frame service is available for $5 / 2.5K Robux per frame. This includes proper UI scaling, organized folder structure, and script-ready setup so developers can plug it in immediately.",
+    "faq.4.q": "What payment methods do you accept?",
+    "faq.4.a": "I accept USD via PayPal or similar platforms, and Robux via group funds or direct trade. Payment terms are 50% upfront and 50% upon delivery for larger projects.",
+    "faq.5.q": "How long does delivery take?",
+    "faq.5.a": "Delivery depends on the plan and complexity. Starter & Basic typically take 1–3 days, Intermediate & Advanced take 3–7 days, and Full Game packages take 7–14 days. Rush delivery is available on request.",
+    "faq.6.q": "Can I get a refund?",
+    "faq.6.a": "Refunds are evaluated case by case. If I haven't started work yet, a full refund is issued. After work has begun, a partial refund may be available. Once the final files are delivered and approved, refunds are not available.",
+    "faq.7.q": "Are you available for full-time roles?",
+    "faq.7.a": "I'm currently open to long-term collaborations and studio partnerships. If you need a dedicated UI designer for your team or ongoing project, feel free to reach out on Discord to discuss terms.",
+    "faq.8.q": "Do you do rush orders?",
+    "faq.8.a": "Yes! Rush orders are available for an additional fee depending on the urgency and scope. Contact me on Discord and I'll let you know my current availability and the fastest turnaround I can offer.",
   },
 
   ar: {
@@ -806,6 +902,78 @@ export const translations: Translations = {
     "add": "إضافة",
     "close": "إغلاق",
     "submit": "إرسال",
+
+    // ── Pricing Tier Names ────────────────────────────────────────────────
+    "pricing.tier.1": "المبتدئ",
+    "pricing.tier.2": "الأساسي",
+    "pricing.tier.3": "المتوسط",
+    "pricing.tier.4": "المتقدم",
+    "pricing.tier.5": "اللعبة الكاملة",
+    "pricing.tier.6": "استيراد لكل إطار",
+
+    // ── Pricing Frames Labels ─────────────────────────────────────────────
+    "pricing.p1.frames": "1–6 إطارات",
+    "pricing.p2.frames": "7–15 إطاراً",
+    "pricing.p3.frames": "16–35 إطاراً",
+    "pricing.p4.frames": "36–60 إطاراً",
+    "pricing.p5.frames": "غير محدود",
+    "pricing.p6.frames": "لكل إطار",
+
+    // ── Pricing Plan Features ─────────────────────────────────────────────
+    "pricing.p1.f1": "1–6 إطارات",
+    "pricing.p1.f2": "عناصر واجهة أساسية",
+    "pricing.p1.f3": "مراجعتان مجانيتان",
+    "pricing.p1.f4": "تسليم عادي",
+    "pricing.p2.f1": "7–15 إطاراً",
+    "pricing.p2.f2": "عناصر واجهة متقدمة",
+    "pricing.p2.f3": "3 مراجعات مجانية",
+    "pricing.p2.f4": "تسليم عادي",
+    "pricing.p3.f1": "16–35 إطاراً",
+    "pricing.p3.f2": "أيقونات مخصصة",
+    "pricing.p3.f3": "4 مراجعات مجانية",
+    "pricing.p3.f4": "تسليم ذو أولوية",
+    "pricing.p4.f1": "36–60 إطاراً",
+    "pricing.p4.f2": "تخطيطات معقدة",
+    "pricing.p4.f3": "5 مراجعات مجانية",
+    "pricing.p4.f4": "أولوية عالية",
+    "pricing.p5.f1": "إطارات غير محدودة",
+    "pricing.p5.f2": "نظام تصميم اللعبة الكامل",
+    "pricing.p5.f3": "مراجعات غير محدودة",
+    "pricing.p5.f4": "دعم VIP",
+    "pricing.p6.f1": "استيراد إلى Studio",
+    "pricing.p6.f2": "تحجيم الواجهة",
+    "pricing.p6.f3": "مجلدات منظمة",
+    "pricing.p6.f4": "جاهز للبرمجة",
+
+    // ── Policy Titles & Descriptions ─────────────────────────────────────
+    "policy.payment.title": "سياسة الدفع",
+    "policy.payment.desc": "50% مقدماً و50% عند الإتمام. يجب الدفع قبل بدء العمل. نقبل PayPal وRobux وطرق دفع أخرى.",
+    "policy.revision.title": "سياسة المراجعات",
+    "policy.revision.desc": "تشمل كل خطة عدداً محدداً من المراجعات. قد تستلزم المراجعات الإضافية رسوماً إضافية. يُرجى تقديم ملاحظات واضحة لتقليل عدد المراجعات.",
+    "policy.delivery.title": "وقت التسليم",
+    "policy.delivery.desc": "تتفاوت أوقات التسليم بحسب الخطة المختارة. تستغرق الخطط الأساسية عادةً 3–5 أيام عمل. قد تتوفر طلبات الاستعجال بتكلفة إضافية.",
+    "policy.refund.title": "سياسة الاسترداد",
+    "policy.refund.desc": "تُدرس المبالغ المستردة كل حالة على حدة. يُرجى التواصل معنا خلال 48 ساعة من التسليم إذا لم تكن راضياً عن العمل.",
+    "policy.communication.title": "التواصل",
+    "policy.communication.desc": "يُرجى التواصل بوضوح وتقديم جميع التفاصيل اللازمة قبل بدء العمل. وقت الاستجابة عادةً خلال 24 ساعة.",
+
+    // ── FAQ Questions & Answers ───────────────────────────────────────────
+    "faq.1.q": "ما هي خدمات تصميم الواجهة التي تقدمها؟",
+    "faq.1.a": "أتخصص في تصميم UI/UX لـ Roblox — بما في ذلك HUDs والقوائم وأنظمة المخزون وواجهات المتجر ولوحات المتصدرين وشاشات التحميل وأنظمة واجهة الألعاب الكاملة. أقدم أيضاً ملفات Figma المصدرية ويمكنني الاستيراد مباشرةً إلى Roblox Studio.",
+    "faq.2.q": "هل المراجعات مشمولة؟",
+    "faq.2.a": "نعم! كل خطة تتضمن مراجعات مجانية. الخطة المبتدئة تحصل على 2، الأساسية على 3، المتوسطة على 4، المتقدمة على 5، واللعبة الكاملة تحصل على مراجعات غير محدودة. المراجعات الإضافية خارج حد خطتك متاحة برسوم رمزية.",
+    "faq.3.q": "هل تستورد الواجهة إلى Roblox Studio؟",
+    "faq.3.a": "نعم — خدمة الاستيراد لكل إطار متاحة بـ5 دولار / 2.5K روبوكس للإطار. يشمل ذلك تحجيماً صحيحاً للواجهة وبنية مجلدات منظمة وإعداداً جاهزاً للبرمجة حتى يتمكن المطورون من تضمينه فوراً.",
+    "faq.4.q": "ما طرق الدفع المقبولة؟",
+    "faq.4.a": "أقبل الدولار الأمريكي عبر PayPal أو منصات مماثلة، والروبوكس عبر أموال المجموعة أو التبادل المباشر. شروط الدفع هي 50% مقدماً و50% عند التسليم للمشاريع الكبيرة.",
+    "faq.5.q": "كم يستغرق التسليم؟",
+    "faq.5.a": "يعتمد التسليم على الخطة والتعقيد. الخطتان المبتدئة والأساسية تستغرقان عادةً 1–3 أيام، المتوسطة والمتقدمة 3–7 أيام، وحزم اللعبة الكاملة 7–14 يوماً. التسليم السريع متاح عند الطلب.",
+    "faq.6.q": "هل يمكنني الحصول على استرداد؟",
+    "faq.6.a": "تُقيَّم عمليات الاسترداد كل حالة على حدة. إذا لم أبدأ العمل بعد، يُصدر استرداد كامل. بعد بدء العمل، قد يكون الاسترداد الجزئي متاحاً. بعد تسليم الملفات النهائية والموافقة عليها، لا تتوفر عمليات الاسترداد.",
+    "faq.7.q": "هل أنت متاح لأدوار دوام كامل؟",
+    "faq.7.a": "أنا منفتح حالياً على التعاونات طويلة الأمد وشراكات الاستوديوهات. إذا كنت بحاجة إلى مصمم واجهة مخصص لفريقك أو مشروعك المستمر، تواصل معي على ديسكورد لمناقشة الشروط.",
+    "faq.8.q": "هل تقبل طلبات الاستعجال؟",
+    "faq.8.a": "نعم! طلبات الاستعجال متاحة برسوم إضافية تعتمد على مدى الاستعجال والنطاق. تواصل معي على ديسكورد وسأطلعك على توفريتي الحالية وأسرع موعد تسليم يمكنني تقديمه.",
   },
 
   es: {
@@ -1105,6 +1273,78 @@ export const translations: Translations = {
     "add": "Agregar",
     "close": "Cerrar",
     "submit": "Enviar",
+
+    // ── Pricing Tier Names ────────────────────────────────────────────────
+    "pricing.tier.1": "Principiante",
+    "pricing.tier.2": "Básico",
+    "pricing.tier.3": "Intermedio",
+    "pricing.tier.4": "Avanzado",
+    "pricing.tier.5": "Juego Completo",
+    "pricing.tier.6": "Importar por Fotograma",
+
+    // ── Pricing Frames Labels ─────────────────────────────────────────────
+    "pricing.p1.frames": "1–6 fotogramas",
+    "pricing.p2.frames": "7–15 fotogramas",
+    "pricing.p3.frames": "16–35 fotogramas",
+    "pricing.p4.frames": "36–60 fotogramas",
+    "pricing.p5.frames": "Ilimitado",
+    "pricing.p6.frames": "Por Fotograma",
+
+    // ── Pricing Plan Features ─────────────────────────────────────────────
+    "pricing.p1.f1": "1–6 Fotogramas",
+    "pricing.p1.f2": "Elementos UI Básicos",
+    "pricing.p1.f3": "Hasta 2 Revisiones Gratis",
+    "pricing.p1.f4": "Entrega Estándar",
+    "pricing.p2.f1": "7–15 Fotogramas",
+    "pricing.p2.f2": "Elementos UI Avanzados",
+    "pricing.p2.f3": "Hasta 3 Revisiones Gratis",
+    "pricing.p2.f4": "Entrega Estándar",
+    "pricing.p3.f1": "16–35 Fotogramas",
+    "pricing.p3.f2": "Íconos Personalizados",
+    "pricing.p3.f3": "Hasta 4 Revisiones Gratis",
+    "pricing.p3.f4": "Entrega Prioritaria",
+    "pricing.p4.f1": "36–60 Fotogramas",
+    "pricing.p4.f2": "Diseños Complejos",
+    "pricing.p4.f3": "Hasta 5 Revisiones Gratis",
+    "pricing.p4.f4": "Alta Prioridad",
+    "pricing.p5.f1": "Fotogramas Ilimitados",
+    "pricing.p5.f2": "Sistema de Diseño Completo",
+    "pricing.p5.f3": "Revisiones Ilimitadas",
+    "pricing.p5.f4": "Soporte VIP",
+    "pricing.p6.f1": "Importar a Studio",
+    "pricing.p6.f2": "Escalado de UI",
+    "pricing.p6.f3": "Carpetas Organizadas",
+    "pricing.p6.f4": "Listo para Scripting",
+
+    // ── Policy Titles & Descriptions ─────────────────────────────────────
+    "policy.payment.title": "Política de Pago",
+    "policy.payment.desc": "50% por adelantado, 50% al completar. El pago debe realizarse antes de comenzar el trabajo. Aceptamos PayPal, Robux y otros métodos de pago.",
+    "policy.revision.title": "Política de Revisiones",
+    "policy.revision.desc": "Cada plan incluye un número específico de revisiones. Las revisiones adicionales pueden tener cargos extra. Por favor proporciona feedback claro para minimizar revisiones.",
+    "policy.delivery.title": "Tiempo de Entrega",
+    "policy.delivery.desc": "Los tiempos de entrega varían según el plan seleccionado. Los planes básicos generalmente tardan 3–5 días hábiles. Los pedidos urgentes pueden estar disponibles por un cargo adicional.",
+    "policy.refund.title": "Política de Reembolso",
+    "policy.refund.desc": "Los reembolsos se consideran caso por caso. Por favor contáctanos dentro de las 48 horas de la entrega si no estás satisfecho con el trabajo.",
+    "policy.communication.title": "Comunicación",
+    "policy.communication.desc": "Por favor comunícate claramente y proporciona todos los detalles necesarios antes de comenzar el trabajo. El tiempo de respuesta es típicamente dentro de las 24 horas.",
+
+    // ── FAQ Questions & Answers ───────────────────────────────────────────
+    "faq.1.q": "¿Qué servicios de diseño UI ofreces?",
+    "faq.1.a": "Me especializo en diseño UI/UX para Roblox, incluyendo HUDs, menús, sistemas de inventario, UIs de tienda, tablas de clasificación, pantallas de carga y sistemas de UI de juego completos. También proporciono archivos fuente de Figma y puedo importar directamente a Roblox Studio.",
+    "faq.2.q": "¿Las revisiones están incluidas?",
+    "faq.2.a": "¡Sí! Cada plan incluye revisiones gratuitas. Principiante obtiene 2, Básico obtiene 3, Intermedio obtiene 4, Avanzado obtiene 5, y Juego Completo obtiene revisiones ilimitadas. Las revisiones adicionales más allá del límite de tu plan están disponibles por una pequeña tarifa.",
+    "faq.3.q": "¿Importas la UI a Roblox Studio?",
+    "faq.3.a": "Sí — el servicio de Importar por Fotograma está disponible por $5 / 2.5K Robux por fotograma. Esto incluye escalado de UI adecuado, estructura de carpetas organizada y configuración lista para scripting para que los desarrolladores puedan integrarlo inmediatamente.",
+    "faq.4.q": "¿Qué métodos de pago aceptas?",
+    "faq.4.a": "Acepto USD mediante PayPal o plataformas similares, y Robux mediante fondos de grupo o intercambio directo. Los términos de pago son 50% por adelantado y 50% al momento de la entrega para proyectos más grandes.",
+    "faq.5.q": "¿Cuánto tiempo tarda la entrega?",
+    "faq.5.a": "La entrega depende del plan y la complejidad. Principiante y Básico típicamente toman 1–3 días, Intermedio y Avanzado toman 3–7 días, y los paquetes de Juego Completo toman 7–14 días. La entrega urgente está disponible bajo solicitud.",
+    "faq.6.q": "¿Puedo obtener un reembolso?",
+    "faq.6.a": "Los reembolsos se evalúan caso por caso. Si no he comenzado el trabajo aún, se emite un reembolso completo. Después de que el trabajo ha comenzado, puede estar disponible un reembolso parcial. Una vez que los archivos finales son entregados y aprobados, los reembolsos no están disponibles.",
+    "faq.7.q": "¿Estás disponible para roles a tiempo completo?",
+    "faq.7.a": "Actualmente estoy abierto a colaboraciones a largo plazo y asociaciones con estudios. Si necesitas un diseñador UI dedicado para tu equipo o proyecto continuo, no dudes en contactarme en Discord para discutir los términos.",
+    "faq.8.q": "¿Aceptas pedidos urgentes?",
+    "faq.8.a": "¡Sí! Los pedidos urgentes están disponibles por un cargo adicional dependiendo de la urgencia y el alcance. Contáctame en Discord y te haré saber mi disponibilidad actual y el tiempo de entrega más rápido que puedo ofrecer.",
   },
 };
 

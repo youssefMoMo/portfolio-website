@@ -5,6 +5,10 @@
 //   • CLIPBOARD SAFEGUARD: execCommand("copy") wrapped in try/catch.
 //   • BADGE / FEATURED CONFLICT: plan.featured is single source of truth.
 //   • FULL i18n: every visible string resolved through t().
+//   • PLAN i18n: tier names, frames, and features resolved through t() via lookup maps
+//     keyed by plan.id (1–6). DB values are used only as English fallbacks.
+//   • FAQ i18n: question and answer text resolved through faq.N.q / faq.N.a keys.
+//   • POLICY LOOKUP: POLICY_ICON_KEYS maps icon slug → policy.*.title / policy.*.desc.
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,13 +18,13 @@ import {
   Copy, CheckCheck, Bolt, RefreshCw, Clock, Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from "@/hooks/use-language";
 import { getContent, PricingContent, PricingPlan, FaqItem } from "@/lib/contentManager";
 import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { profile } from "@/lib/data";
 import { openDiscord } from "@/lib/discord";
 import { Modal } from "@/components/ui/Modal";
+import type { TranslationKey } from "@/lib/data";
 
 type PricingPlanExtended = PricingPlan & {
   delivery_time?:   string;
@@ -36,6 +40,48 @@ const DEFAULT_DELIVERY_META = {
 const iconMap: Record<string, React.ElementType> = {
   zap: Zap, layers: Layers, gem: Gem, crown: Crown,
   infinity: Infinity, "file-import": FileInput,
+};
+
+// ── Tier-name lookup: plan.id → TranslationKey ────────────────────────────────
+const PLAN_NAME_KEYS: Record<number, TranslationKey> = {
+  1: "pricing.tier.1",
+  2: "pricing.tier.2",
+  3: "pricing.tier.3",
+  4: "pricing.tier.4",
+  5: "pricing.tier.5",
+  6: "pricing.tier.6",
+};
+
+// ── Frames lookup: plan.id → TranslationKey ────────────────────────────────────
+const PLAN_FRAMES_KEYS: Record<number, TranslationKey> = {
+  1: "pricing.p1.frames",
+  2: "pricing.p2.frames",
+  3: "pricing.p3.frames",
+  4: "pricing.p4.frames",
+  5: "pricing.p5.frames",
+  6: "pricing.p6.frames",
+};
+
+// ── Feature lookup: plan.id → [TranslationKey, …] ─────────────────────────────
+const PLAN_FEATURES_KEYS: Record<number, [TranslationKey, TranslationKey, TranslationKey, TranslationKey]> = {
+  1: ["pricing.p1.f1", "pricing.p1.f2", "pricing.p1.f3", "pricing.p1.f4"],
+  2: ["pricing.p2.f1", "pricing.p2.f2", "pricing.p2.f3", "pricing.p2.f4"],
+  3: ["pricing.p3.f1", "pricing.p3.f2", "pricing.p3.f3", "pricing.p3.f4"],
+  4: ["pricing.p4.f1", "pricing.p4.f2", "pricing.p4.f3", "pricing.p4.f4"],
+  5: ["pricing.p5.f1", "pricing.p5.f2", "pricing.p5.f3", "pricing.p5.f4"],
+  6: ["pricing.p6.f1", "pricing.p6.f2", "pricing.p6.f3", "pricing.p6.f4"],
+};
+
+// ── FAQ lookup: String(faq.id) → { q, a } TranslationKeys ─────────────────────
+const FAQ_KEYS: Record<string, { q: TranslationKey; a: TranslationKey }> = {
+  "1": { q: "faq.1.q", a: "faq.1.a" },
+  "2": { q: "faq.2.q", a: "faq.2.a" },
+  "3": { q: "faq.3.q", a: "faq.3.a" },
+  "4": { q: "faq.4.q", a: "faq.4.a" },
+  "5": { q: "faq.5.q", a: "faq.5.a" },
+  "6": { q: "faq.6.q", a: "faq.6.a" },
+  "7": { q: "faq.7.q", a: "faq.7.a" },
+  "8": { q: "faq.8.q", a: "faq.8.a" },
 };
 
 // ── Why Choose Me items — localized inside the component ──────────────────────
@@ -199,7 +245,7 @@ export default function Pricing() {
             transition={{ delay: 0.1 }}
             className="text-4xl md:text-6xl font-bold font-display mb-5 bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent"
           >
-            {content?.title || t("pricing.title")}
+            {t("pricing.title")}
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -207,7 +253,7 @@ export default function Pricing() {
             transition={{ delay: 0.2 }}
             className="text-muted-foreground max-w-2xl mx-auto text-base"
           >
-            {content?.subtitle || t("pricing.subtitle")}
+            {t("pricing.subtitle")}
           </motion.p>
         </div>
 
@@ -223,6 +269,20 @@ export default function Pricing() {
               const badgeLabel    = plan.badge ?? (plan.featured ? t("pricing.featured") : null);
               const deliveryLabel = plan.delivery_time ?? DEFAULT_DELIVERY_META.delivery;
               const revisionsCount = plan.revisions_count ?? DEFAULT_DELIVERY_META.revisions;
+
+              // ── i18n: resolve translated tier name, frames, and features ──
+              // Falls back to DB value when plan.id isn't in the lookup (custom admin plans).
+              const planId = Number(plan.id);
+              const translatedName     = PLAN_NAME_KEYS[planId]
+                ? t(PLAN_NAME_KEYS[planId])
+                : plan.name;
+              const translatedFrames   = PLAN_FRAMES_KEYS[planId]
+                ? t(PLAN_FRAMES_KEYS[planId])
+                : plan.frames;
+              const featureKeys        = PLAN_FEATURES_KEYS[planId];
+              const translatedFeatures: string[] = featureKeys
+                ? featureKeys.map((k) => t(k))
+                : (plan.features ?? []);
 
               return (
                 <motion.div
@@ -254,7 +314,7 @@ export default function Pricing() {
                     </div>
 
                     <div>
-                      <h3 className="text-xl font-bold text-white mb-1">{plan.name}</h3>
+                      <h3 className="text-xl font-bold text-white mb-1">{translatedName}</h3>
                       <div className="flex items-end gap-1.5 mb-0.5">
                         <span className="text-4xl font-extrabold text-white">${plan.price_usd}</span>
                         <span className="text-sm text-white/50 mb-1.5">USD</span>
@@ -263,7 +323,7 @@ export default function Pricing() {
                     </div>
 
                     <p className="text-sm font-semibold text-white/80 border-b border-white/5 pb-3">
-                      {t("pricing.includes")} {plan.frames}
+                      {t("pricing.includes")} {translatedFrames}
                     </p>
 
                     <div className="flex gap-3 -mt-1">
@@ -280,7 +340,7 @@ export default function Pricing() {
                     </div>
 
                     <div className="flex flex-col gap-2.5 flex-1">
-                      {plan.features?.map((feature: string, fi: number) => (
+                      {translatedFeatures.map((feature: string, fi: number) => (
                         <div key={fi} className="flex items-center gap-2.5 text-sm">
                           <Check className="w-4 h-4 text-primary/70 shrink-0" strokeWidth={2.5} />
                           <span className="text-white/70">{feature}</span>
@@ -355,46 +415,54 @@ export default function Pricing() {
               </h2>
             </div>
             <div className="space-y-3">
-              {faqs.map((faq: FaqItem, i: number) => (
-                <motion.div
-                  key={faq.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.05 }}
-                  className="rounded-xl border border-white/8 bg-[#0d0f16] overflow-hidden"
-                >
-                  <button
-                    className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/4 transition-colors"
-                    onClick={() => setOpenFaq(openFaq === String(faq.id) ? null : String(faq.id))}
+              {faqs.map((faq: FaqItem, i: number) => {
+                // ── i18n: resolve translated Q&A via faq.N.q / faq.N.a keys ──
+                // Falls back to DB strings when the ID is out of range (custom FAQs).
+                const faqKeys        = FAQ_KEYS[String(faq.id)];
+                const translatedQ    = faqKeys ? t(faqKeys.q) : faq.question;
+                const translatedA    = faqKeys ? t(faqKeys.a) : faq.answer;
+
+                return (
+                  <motion.div
+                    key={faq.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.05 }}
+                    className="rounded-xl border border-white/8 bg-[#0d0f16] overflow-hidden"
                   >
-                    <span className="text-sm font-medium text-white/90 pr-4">{faq.question}</span>
-                    <motion.div
-                      animate={{ rotate: openFaq === String(faq.id) ? 180 : 0 }}
-                      transition={{ duration: 0.25, ease: "easeInOut" }}
-                      className="shrink-0"
+                    <button
+                      className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/4 transition-colors"
+                      onClick={() => setOpenFaq(openFaq === String(faq.id) ? null : String(faq.id))}
                     >
-                      <ChevronDown className="w-4 h-4 text-white/40" />
-                    </motion.div>
-                  </button>
-                  <AnimatePresence initial={false}>
-                    {openFaq === String(faq.id) && (
+                      <span className="text-sm font-medium text-white/90 pr-4">{translatedQ}</span>
                       <motion.div
-                        key="answer"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                        className="overflow-hidden"
+                        animate={{ rotate: openFaq === String(faq.id) ? 180 : 0 }}
+                        transition={{ duration: 0.25, ease: "easeInOut" }}
+                        className="shrink-0"
                       >
-                        <div className="px-5 pb-5 text-sm text-muted-foreground leading-relaxed border-t border-white/5 pt-3">
-                          {faq.answer}
-                        </div>
+                        <ChevronDown className="w-4 h-4 text-white/40" />
                       </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              ))}
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {openFaq === String(faq.id) && (
+                        <motion.div
+                          key="answer"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: "easeInOut" }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-5 pb-5 text-sm text-muted-foreground leading-relaxed border-t border-white/5 pt-3">
+                            {translatedA}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
         )}
