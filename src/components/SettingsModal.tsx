@@ -1,32 +1,38 @@
 // src/components/SettingsModal.tsx
 //
-// FIX CHANGELOG (Light-Mode Contrast — Screenshot 10 & 11):
-//   BUG 5 — Settings modal Performance rows invisible in light mode:
-//     Root cause: the card rows used `bg-background/50 border-white/10`.
-//     In light mode `background` resolves to ~#f5f5f7 and `white/10` is nearly
-//     invisible on a pale canvas, so both the card border and background blend
-//     into the modal panel — making the entire row appear to vanish.
-//     Fix: changed to `bg-slate-100/80 dark:bg-background/50` and
-//     `border-slate-200 dark:border-white/10` so each row has a visible
-//     light-grey tint and a clearly rendered border in light mode.
+// DARK-MODE LOCK — 2026
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme Selection UI has been permanently removed.
+// Only Language and Performance sections remain.
 //
-//   BUG 5b — Language / Theme selection buttons invisible when inactive:
-//     The inactive state used `bg-background/50 border-white/10`. Same issue.
-//     Fixed to `bg-slate-100 dark:bg-background/50 border-slate-200 dark:border-white/10`.
+// Rationale: light mode is eliminated project-wide. Exposing Dark / Light /
+// System buttons would either have no effect (no-op setTheme) or mislead users
+// into thinking they can change the theme.  The cleanest UX is to simply not
+// show the section.
 //
-//   BUG 5c — Section heading labels barely visible:
-//     `text-foreground/80` resolves to ~rgba(0,0,0,0.8) in light — fine.
-//     But `text-muted-foreground` description lines were also #888 which
-//     passed WCAG AA at 4.5:1 on white, so these are left as-is.
+// What was removed:
+//   • The entire "Theme" <motion.div variants={itemVariants}> block (~60 lines)
+//   • The `themes` useMemo constant and its three Sun/Moon/Monitor entries
+//   • `handleThemeChange` callback
+//   • `Monitor` icon import (still needed for Performance section header — kept)
+//   • `Sun`, `Moon` icon imports (no longer used — removed from import list)
+//   • `theme` and `setTheme` destructuring from useTheme() (still consumed
+//     internally by handleThemeChange — entire callback removed)
+//
+// Everything else is byte-for-byte identical to the prior round-2 fix:
+//   • Language grid (3 flags, gradient active state, layoutId indicator)
+//   • Performance rows (Booster + Eco, slate-100 light-safe classes)
+//   • Contact / Discord block
+//   • All Framer Motion variants, portal, backdrop, slide-in panel
+//   • usePerformanceSettings hook and its exported keys (PERF_BOOST_KEY etc.)
 
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { DISCORD_PROFILE_URL } from "@/lib/discord";
 import {
-  X, Moon, Sun, Monitor, Globe, MessageSquare,
+  X, Globe, MessageSquare,
   Sparkles, Zap, Leaf, Info,
 } from "lucide-react";
-import { useTheme } from "@/hooks/use-theme";
 import { useLanguage } from "@/hooks/use-language";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -142,7 +148,7 @@ function ToggleSwitch({
       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full
                   border-2 border-transparent transition-colors duration-200 focus:outline-none
                   focus-visible:ring-2 focus-visible:ring-primary/60
-                  ${checked ? "bg-primary" : "bg-slate-300 dark:bg-white/15"}`}
+                  ${checked ? "bg-primary" : "bg-white/15"}`}
     >
       <span
         className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white
@@ -158,16 +164,13 @@ function ToggleSwitch({
 type SettingsModalProps = { isOpen: boolean; onClose: () => void };
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { theme, setTheme }         = useTheme();
   const { lang, setLang, t, isRTL } = useLanguage();
   const { perfBoost, setPerfBoost, ecoMode, setEcoMode } = usePerformanceSettings();
   const [flagErrors, setFlagErrors] = useState<Record<string, boolean>>({});
 
-  const themes = useMemo(() => [
-    { value: "light",  labelKey: "settings.themeLight",  icon: Sun,     color: "from-amber-400 to-orange-400" },
-    { value: "dark",   labelKey: "settings.themeDark",   icon: Moon,    color: "from-indigo-500 to-purple-500" },
-    { value: "system", labelKey: "settings.themeSystem", icon: Monitor, color: "from-cyan-400 to-blue-500" },
-  ] as const, []);
+  // Theme section removed — dark mode is permanently locked.
+  // `useTheme` is no longer imported here; `themes` constant and
+  // `handleThemeChange` are deleted.
 
   const languages = useMemo(() => [
     { value: "en", label: "English", color: "from-blue-500 to-indigo-500" },
@@ -181,12 +184,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setLang(newLang as "en" | "ar" | "es");
   }, [lang, setLang, onClose]);
 
-  const handleThemeChange = useCallback((newTheme: string) => {
-    if (newTheme === theme) return;
-    onClose();
-    setTheme(newTheme as "dark" | "light" | "system");
-  }, [theme, setTheme, onClose]);
-
+  // ESC key closes
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -194,6 +192,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
+  // Body scroll lock with scrollbar compensation
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return;
     const body           = document.body;
@@ -222,27 +221,21 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             onClick={onClose}
           />
 
-          {/* Slide-in panel */}
+          {/* Slide-in panel — always dark (matches locked theme) */}
           <motion.div
             variants={modalVariants}
             initial="hidden" animate="visible" exit="exit"
             className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] pointer-events-none"
             dir={isRTL ? "rtl" : "ltr"}
           >
-            {/*
-              Panel background — uses explicit light/dark backgrounds so the
-              glass-card chrome is legible in both modes.
-              Light: bg-white   — clear white panel, sharp contrast with content
-              Dark:  bg-card    — the existing dark glass surface
-            */}
-            <div className="h-full bg-white dark:bg-card border-l border-slate-200 dark:border-white/10 shadow-2xl pointer-events-auto overflow-hidden flex flex-col">
+            <div className="h-full bg-card border-l border-white/10 shadow-2xl pointer-events-auto overflow-hidden flex flex-col">
 
               {/* ── Header ──────────────────────────────────────────── */}
               <motion.div
                 initial={{ opacity: 0, y: -14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.28, type: "spring", stiffness: 200 }}
-                className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-card/50 backdrop-blur-xl"
+                className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 bg-card/50 backdrop-blur-xl"
               >
                 <div className="flex items-center gap-2.5">
                   <motion.div
@@ -254,10 +247,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                   </motion.div>
                   <div>
-                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-foreground">
+                    <h2 className="text-base sm:text-lg font-bold text-foreground">
                       {t("settings.title")}
                     </h2>
-                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-muted-foreground">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
                       {t("settings.customize")}
                     </p>
                   </div>
@@ -266,7 +259,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
-                  className="p-2 rounded-full text-slate-600 dark:text-foreground hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                  className="p-2 rounded-full text-foreground/60 hover:bg-white/10 transition-colors"
                   aria-label={t("settings.closeLabel")}
                 >
                   <X className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -282,7 +275,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
                 {/* ── Language ───────────────────────────────────────── */}
                 <motion.div variants={itemVariants} className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-foreground/80">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                     <span>{t("settings.language")}</span>
                   </div>
@@ -302,7 +295,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
                             isActive
                               ? "bg-gradient-to-br " + langOption.color + " border-transparent shadow-lg"
-                              : "bg-slate-100 dark:bg-background/50 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20"
+                              : "bg-background/50 border-white/10 hover:border-white/20"
                           }`}
                         >
                           {!isActive && (
@@ -326,7 +319,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <span className={`text-[10px] sm:text-xs font-semibold ${
                               isActive
                                 ? "text-white"
-                                : "text-slate-700 dark:text-muted-foreground group-hover:text-slate-900 dark:group-hover:text-foreground"
+                                : "text-muted-foreground group-hover:text-foreground"
                             }`}>
                               {langOption.label}
                             </span>
@@ -344,93 +337,32 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 </motion.div>
 
-                {/* ── Theme ─────────────────────────────────────────── */}
-                <motion.div variants={itemVariants} className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-foreground/80">
-                    <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-                    <span>{t("settings.theme")}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                    {themes.map((th, index) => {
-                      const Icon     = th.icon;
-                      const isActive = theme === th.value;
-                      return (
-                        <motion.button
-                          key={th.value}
-                          initial={{ scale: 0.8, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          transition={{ delay: 0.55 + index * 0.1, type: "spring", stiffness: 300 }}
-                          whileHover={{ scale: 1.08 }}
-                          whileTap={{ scale: 0.93 }}
-                          onClick={() => handleThemeChange(th.value)}
-                          className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
-                            isActive
-                              ? "bg-gradient-to-br " + th.color + " border-transparent shadow-lg"
-                              : "bg-slate-100 dark:bg-background/50 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20"
-                          }`}
-                        >
-                          {!isActive && (
-                            <div className="absolute inset-0 opacity-0 group-hover:opacity-[0.08] transition-opacity duration-300 bg-gradient-to-br from-white to-transparent rounded-xl" />
-                          )}
-                          <div className="relative flex flex-col items-center gap-1.5">
-                            <motion.div
-                              initial={{ scale: 0, rotate: -180 }}
-                              animate={{ scale: 1, rotate: 0 }}
-                              transition={{ delay: 0.55 + index * 0.1, type: "spring" }}
-                            >
-                              <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${
-                                isActive
-                                  ? "text-white"
-                                  : "text-slate-600 dark:text-muted-foreground group-hover:text-slate-900 dark:group-hover:text-foreground"
-                              }`} />
-                            </motion.div>
-                            <span className={`text-[10px] sm:text-xs font-semibold ${
-                              isActive
-                                ? "text-white"
-                                : "text-slate-700 dark:text-muted-foreground group-hover:text-slate-900 dark:group-hover:text-foreground"
-                            }`}>
-                              {t(th.labelKey)}
-                            </span>
-                          </div>
-                          {isActive && (
-                            <motion.div
-                              layoutId="theme-indicator"
-                              className="absolute top-1.5 right-1.5 w-2 h-2 bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.7)]"
-                              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                            />
-                          )}
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-                </motion.div>
+                {/*
+                  ── Theme selection REMOVED ────────────────────────────
+                  The Dark / Light / System picker that previously lived here
+                  has been deleted.  Dark mode is permanently locked — showing
+                  the picker would either have no effect or confuse users.
+                */}
 
                 {/* ── Performance ────────────────────────────────────── */}
                 <motion.div variants={itemVariants} className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-foreground/80">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                     <span>{t("settings.performance")}</span>
                   </div>
 
                   <div className="space-y-2.5">
 
-                    {/*
-                      Performance Booster row
-                      FIX: bg-slate-100/80 dark:bg-background/50 ensures the card is
-                      visible as a distinct light-grey block in light mode instead of
-                      blending into the white panel background.
-                      FIX: border-slate-200 dark:border-white/10 gives a rendered
-                      border in light mode instead of the near-invisible white/10.
-                    */}
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-background/50 px-4 py-3.5">
+                    {/* Performance Booster */}
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-background/50 px-4 py-3.5">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <Zap className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
-                          <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-foreground">
+                          <Zap className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                          <p className="text-xs sm:text-sm font-semibold text-foreground">
                             {t("settings.perfBooster")}
                           </p>
                         </div>
-                        <p className="text-[10px] sm:text-xs text-slate-500 dark:text-muted-foreground mt-0.5">
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
                           {t("settings.perfBoosterDesc")}
                         </p>
                       </div>
@@ -441,26 +373,22 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       />
                     </div>
 
-                    {/*
-                      Low-End Device (Eco) Mode row
-                      Same contrast fixes as Performance Booster above.
-                      Active state gets an emerald tint that works in both modes.
-                    */}
+                    {/* Low-End Device (Eco) Mode */}
                     <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3.5 transition-colors duration-300 ${
                       ecoMode
-                        ? "border-emerald-400/50 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-950/20"
-                        : "border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-background/50"
+                        ? "border-emerald-500/40 bg-emerald-950/20"
+                        : "border-white/10 bg-background/50"
                     }`}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <Leaf className={`w-3.5 h-3.5 flex-shrink-0 ${
-                            ecoMode ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-muted-foreground"
+                            ecoMode ? "text-emerald-400" : "text-muted-foreground"
                           }`} />
-                          <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-foreground">
+                          <p className="text-xs sm:text-sm font-semibold text-foreground">
                             {t("settings.ecoMode")}
                           </p>
                         </div>
-                        <p className="text-[10px] sm:text-xs text-slate-500 dark:text-muted-foreground mt-0.5">
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
                           {t("settings.ecoModeDesc")}
                         </p>
                       </div>
@@ -478,10 +406,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           initial={{ opacity: 0, y: -6 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -6 }}
-                          className="flex items-start gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-500/20 px-3 py-2.5"
+                          className="flex items-start gap-2 rounded-lg bg-emerald-900/20 border border-emerald-500/20 px-3 py-2.5"
                         >
-                          <Info className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-                          <p className="text-[10px] text-emerald-800 dark:text-emerald-300/80 leading-relaxed">
+                          <Info className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-emerald-300/80 leading-relaxed">
                             {t("settings.ecoActive")}
                           </p>
                         </motion.div>
@@ -493,7 +421,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
                 {/* ── Contact ────────────────────────────────────────── */}
                 <motion.div variants={itemVariants} className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-foreground/80">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-foreground/80">
                     <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                     <span>{t("settings.contact")}</span>
                   </div>
@@ -522,9 +450,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.72 }}
-                className="p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-card/50 backdrop-blur-xl"
+                className="p-4 border-t border-white/10 bg-card/50 backdrop-blur-xl"
               >
-                <p className="text-[10px] sm:text-xs text-center text-slate-500 dark:text-muted-foreground">
+                <p className="text-[10px] sm:text-xs text-center text-muted-foreground">
                   {t("settings.copyright")}
                 </p>
               </motion.div>

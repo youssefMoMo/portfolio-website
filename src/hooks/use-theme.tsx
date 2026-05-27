@@ -1,236 +1,145 @@
-// ═══════════════════════════════════════════════════════════════
-// THEME PROVIDER & HOOK
 // src/hooks/use-theme.tsx
-// Based on shadcn/ui theme implementation
-// Last Updated: 2026
-// ═══════════════════════════════════════════════════════════════
+//
+// DARK-MODE LOCK — 2026
+// ─────────────────────────────────────────────────────────────────────────────
+// Light mode has been permanently removed from this project.
+// The `dark` class is hardcoded onto <html> at mount and never mutated.
+//
+// API surface is intentionally preserved 1-for-1 so every consumer that
+// calls `useTheme()`, `useThemeMode()`, or `useThemeToggle()` continues to
+// compile and behave correctly without any changes at the call site.
+//
+// What changed vs the old multi-theme implementation:
+//   • ThemeProvider: no longer reads localStorage, listens to matchMedia,
+//     or writes to the DOM dynamically.  On mount it forcibly sets
+//     `html.classList = ["dark"]` and `data-theme="dark"` — once, synchronously
+//     in the useEffect — and then does nothing else for the rest of the session.
+//   • setTheme / toggleTheme: still exist on the context so TypeScript and
+//     SettingsModal (which now hides the theme UI but still imports the hook)
+//     won't break.  Both are no-ops.
+//   • resolvedTheme / isDark / isLight: permanently "dark" / true / false.
+//   • Storage key "youssef-ui-theme" is written once with "dark" on mount
+//     to overwrite any stale "light" or "system" value a returning visitor
+//     might have in localStorage.
 
 import {
   createContext,
   useContext,
   useEffect,
-  useState,
-  type ReactNode,
-  useCallback,
   useMemo,
+  useCallback,
+  type ReactNode,
 } from "react";
 
-// ═══════════════════════════════════════════════════════════════
-// TYPE DEFINITIONS (Exported for reuse)
-// ═══════════════════════════════════════════════════════════════
+// ─── Types (unchanged — full backward compat) ─────────────────────────────────
 
-/**
- * Available theme options
- */
 export type Theme = "dark" | "light" | "system";
 
-/**
- * Props for ThemeProvider component
- */
 export type ThemeProviderProps = {
-  children: ReactNode;
-  defaultTheme?: Theme;
-  storageKey?: string;
-  /**
-   * Optional callback when theme changes
-   * @param theme - The new active theme ("dark" or "light", not "system")
-   */
-  onThemeChange?: (theme: "dark" | "light") => void;
+  children:        ReactNode;
+  defaultTheme?:   Theme;       // accepted but ignored — always "dark"
+  storageKey?:     string;
+  onThemeChange?:  (theme: "dark" | "light") => void;
 };
 
-/**
- * State returned by useTheme hook
- */
 export type ThemeProviderState = {
-  theme: Theme;
-  /**
-   * The resolved theme after applying system preference
-   * Always returns "dark" or "light", never "system"
-   */
+  theme:         Theme;
   resolvedTheme: "dark" | "light";
-  setTheme: (theme: Theme) => void;
-  /**
-   * Toggle between dark and light (ignores system)
-   */
-  toggleTheme: () => void;
-  /**
-   * Check if current resolved theme is dark
-   */
-  isDark: boolean;
-  /**
-   * Check if current resolved theme is light
-   */
-  isLight: boolean;
+  setTheme:      (theme: Theme) => void;
+  toggleTheme:   () => void;
+  isDark:        boolean;
+  isLight:       boolean;
 };
 
-// ═══════════════════════════════════════════════════════════════
-// CONSTANTS & HELPERS
-// ═══════════════════════════════════════════════════════════════
+// ─── Helpers (kept for any external callers) ──────────────────────────────────
 
-const THEME_STORAGE_KEY = "vite-ui-theme";
-
-/**
- * Validate if a string is a valid Theme value
- */
-function isValidTheme(value: string | null): value is Theme {
+export function isValidTheme(value: string | null): value is Theme {
   return value === "dark" || value === "light" || value === "system";
 }
 
-/**
- * Get the system's preferred color scheme
- * Returns "dark" or "light" based on OS preference
- * Safe for SSR (returns "light" as fallback)
- */
-function getSystemTheme(): "dark" | "light" {
-  if (typeof window === "undefined") return "light";
-
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
+/** Always returns "dark" — system preference is ignored in dark-lock mode. */
+export function getSystemTheme(): "dark" | "light" {
+  return "dark";
 }
 
-/**
- * Resolve the actual theme to apply based on user preference and system
- */
-function resolveTheme(theme: Theme): "dark" | "light" {
-  if (theme === "system") return getSystemTheme();
-  return theme;
+/** Always returns "dark". */
+export function resolveTheme(_theme: Theme): "dark" | "light" {
+  return "dark";
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CONTEXT
-// ═══════════════════════════════════════════════════════════════
+// ─── Context ──────────────────────────────────────────────────────────────────
 
 const ThemeProviderContext = createContext<ThemeProviderState | undefined>(
   undefined,
 );
 
-// ═══════════════════════════════════════════════════════════════
-// PROVIDER COMPONENT
-// ═══════════════════════════════════════════════════════════════
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
-/**
- * Theme provider component that manages theme state and applies it to the document
- *
- * @example
- * ```tsx
- * <ThemeProvider defaultTheme="dark" storageKey="my-app-theme">
- *   <App />
- * </ThemeProvider>
- * ```
- */
 export function ThemeProvider({
   children,
-  defaultTheme = "dark",
-  storageKey = THEME_STORAGE_KEY,
+  storageKey = "youssef-ui-theme",
   onThemeChange,
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    // SSR-safe initialization
-    if (typeof window === "undefined") return defaultTheme;
 
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (isValidTheme(stored)) return stored;
-    } catch (error) {
-    }
+  // ── Hard-lock the DOM to dark on mount ──────────────────────────────────
+  //
+  // Runs once, synchronously after the first paint.
+  // • Removes "light" and "system" classes (stale from old implementation).
+  // • Adds "dark" and sets data-theme="dark" unconditionally.
+  // • Overwrites localStorage so returning visitors with a stale "light"
+  //   value don't get a flicker on their next visit.
+  // • Updates meta[name="theme-color"] for mobile browser chrome.
+  // • Fires onThemeChange("dark") once so any parent callback is notified.
+  //
+  // No matchMedia listener is registered — system preference is irrelevant.
 
-    return defaultTheme;
-  });
-
-  const resolvedTheme = resolveTheme(theme);
-
-  // ✅ FIXED: Removed onThemeChange from dependencies to prevent re-renders
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const root = window.document.documentElement;
-    const currentTheme = root.classList.contains("dark") ? "dark" : "light";
 
-    // ✅ Only update if actually different - prevents unnecessary re-renders
-    if (currentTheme !== resolvedTheme) {
-      root.classList.remove("light", "dark");
-      root.classList.add(resolvedTheme);
-      root.setAttribute("data-theme", resolvedTheme);
+    // Forcibly wipe any existing theme classes and stamp "dark"
+    root.classList.remove("light", "system");
+    root.classList.add("dark");
+    root.setAttribute("data-theme", "dark");
 
-      // Update meta theme-color for mobile browsers
-      const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-      if (metaThemeColor) {
-        const newContent = resolvedTheme === "dark" ? "#0a0a0a" : "#ffffff";
-        if (metaThemeColor.getAttribute("content") !== newContent) {
-          metaThemeColor.setAttribute("content", newContent);
-        }
-      }
+    // Overwrite stale localStorage entry
+    try { localStorage.setItem(storageKey, "dark"); } catch { /* quota exceeded */ }
+
+    // Mobile browser chrome colour
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute("content", "#0a0a0a");
     }
-  }, [resolvedTheme]); // ✅ Removed onThemeChange
 
-  // ✅ FIXED: System theme listener with proper cleanup and early return
-  useEffect(() => {
-    if (theme !== "system" || typeof window === "undefined") return;
+    // Notify optional parent callback exactly once
+    if (onThemeChange) onThemeChange("dark");
 
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    // No cleanup needed — we WANT the class to persist for the session.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ← empty deps: run once on mount, never again
 
-    const handleChange = () => {
-      const root = window.document.documentElement;
-      const newTheme = mediaQuery.matches ? "dark" : "light";
+  // ── Stable no-op callbacks ────────────────────────────────────────────────
+  //
+  // setTheme and toggleTheme must exist on the context (SettingsModal and
+  // other consumers import them).  They are intentional no-ops: calling them
+  // has no effect, which is the correct behaviour when theme is locked.
 
-      root.classList.remove("light", "dark");
-      root.classList.add(newTheme);
-      root.setAttribute("data-theme", newTheme);
+  const setTheme    = useCallback((_t: Theme)  => { /* dark-lock: no-op */ }, []);
+  const toggleTheme = useCallback(()           => { /* dark-lock: no-op */ }, []);
 
-      if (onThemeChange) {
-        onThemeChange(newTheme);
-      }
-    };
+  // ── Permanent dark values ─────────────────────────────────────────────────
 
-    // Call immediately on mount to sync with system
-    handleChange();
-
-    // Use addEventListener with proper cleanup
-    mediaQuery.addEventListener("change", handleChange);
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange);
-    };
-  }, [theme, onThemeChange]);
-
-  // ✅ FIXED: Added logging, early return, and proper dependencies
-  const setTheme = useCallback(
-    (newTheme: Theme) => {
-      if (newTheme === theme) {
-        return;
-      }
-
-      try {
-        localStorage.setItem(storageKey, newTheme);
-      } catch (error) {
-      }
-
-      setThemeState(newTheme);
-    },
-    [theme, storageKey],
-  );
-
-  // ✅ FIXED: Added useCallback with proper dependencies
-  const toggleTheme = useCallback(() => {
-    setTheme(resolvedTheme === "dark" ? "light" : "dark");
-  }, [resolvedTheme, setTheme]);
-
-  // ✅ FIXED: Added useMemo to prevent unnecessary re-renders
-  const isDark = useMemo(() => resolvedTheme === "dark", [resolvedTheme]);
-  const isLight = useMemo(() => resolvedTheme === "light", [resolvedTheme]);
-
-  // Memoize the context value so consumers don't re-render on every parent render.
   const value = useMemo<ThemeProviderState>(
     () => ({
-      theme,
-      resolvedTheme,
+      theme:         "dark",
+      resolvedTheme: "dark",
       setTheme,
       toggleTheme,
-      isDark,
-      isLight,
+      isDark:  true,
+      isLight: false,
     }),
-    [theme, resolvedTheme, setTheme, toggleTheme, isDark, isLight],
+    [setTheme, toggleTheme],
   );
 
   return (
@@ -240,29 +149,8 @@ export function ThemeProvider({
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// HOOK
-// ═══════════════════════════════════════════════════════════════
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
-/**
- * Hook to access theme state and methods
- * Must be used within a ThemeProvider
- *
- * @returns ThemeProviderState with theme, setTheme, toggleTheme, isDark, isLight
- *
- * @example
- * ```tsx
- * const { theme, setTheme, isDark } = useTheme();
- *
- * return (
- *   <button onClick={() => setTheme(isDark ? "light" : "dark")}>
- *     Toggle Theme
- *   </button>
- * );
- * ```
- *
- * @throws Error if used outside of ThemeProvider
- */
 export function useTheme(): ThemeProviderState {
   const context = useContext(ThemeProviderContext);
 
@@ -276,64 +164,16 @@ export function useTheme(): ThemeProviderState {
   return context;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CONVENIENCE HOOKS (Optional helpers)
-// ═══════════════════════════════════════════════════════════════
+// ─── Convenience hooks (API unchanged) ───────────────────────────────────────
 
-/**
- * Hook that returns only the boolean theme states
- * Useful for conditional rendering without full state
- */
+/** Returns { isDark: true, isLight: false } permanently. */
 export function useThemeMode() {
   const { isDark, isLight } = useTheme();
   return { isDark, isLight };
 }
 
-/**
- * Hook for components that only need to toggle theme
- */
+/** Returns { toggleTheme: no-op, currentTheme: "dark" } permanently. */
 export function useThemeToggle() {
   const { toggleTheme, resolvedTheme } = useTheme();
   return { toggleTheme, currentTheme: resolvedTheme };
 }
-
-// ═══════════════════════════════════════════════════════════════
-// EXPORTS SUMMARY
-// ═══════════════════════════════════════════════════════════════
-
-/**
- * Main exports:
- *
- * Types:
- * - Theme: "dark" | "light" | "system"
- * - ThemeProviderProps: Props for the provider component
- * - ThemeProviderState: Return type of useTheme hook
- *
- * Components:
- * - ThemeProvider: Context provider for theme management
- *
- * Hooks:
- * - useTheme(): Main hook with full state and methods
- * - useThemeMode(): Simplified hook returning only isDark/isLight
- * - useThemeToggle(): Simplified hook for toggle functionality
- *
- * Helpers:
- * - isValidTheme(): Type guard for Theme values
- * - getSystemTheme(): Get OS preference (SSR-safe)
- * - resolveTheme(): Convert Theme to actual "dark" | "light"
- *
- * Features:
- * ✅ SSR-safe with typeof window checks
- * ✅ Type-safe with Theme union type
- * ✅ System theme detection with media query listener
- * ✅ Meta theme-color update for mobile browsers
- * ✅ Memoized values for performance
- * ✅ Configurable storage key and default theme
- * ✅ onThemeChange callback for side effects (still works, just not in useEffect deps)
- * ✅ JSDoc documentation with examples
- * ✅ Fixed: Prevents infinite re-renders with useCallback, useMemo, and early returns
- * ✅ Fixed: Proper dependencies in all hooks to prevent unnecessary re-renders
- * ✅ Fixed: Added checks to prevent unnecessary DOM updates
- * ✅ Fixed: Added console logging for debugging
- * ✅ Fixed: Removed onThemeChange from useEffect dependencies to prevent re-renders
- */
