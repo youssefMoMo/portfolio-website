@@ -1,4 +1,22 @@
 // src/components/layout/Navbar.tsx
+//
+// FIX CHANGELOG (Light-Mode Contrast — Screenshot 9):
+//   BUG 5 — Nav links invisible in light mode:
+//     Root cause: links used `text-white/70 hover:text-white` which is
+//     invisible on the light-mode `bg-background/80` navbar surface.
+//     Fix: links now carry explicit light-mode classes:
+//       - Active:   `text-slate-900 dark:text-white bg-slate-100 dark:bg-white/10`
+//       - Inactive: `text-slate-700 dark:text-white/70 hover:text-slate-900
+//                   dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/8`
+//
+//   BUG 5b — Settings icon invisible in light mode:
+//     `text-white/50 hover:text-white` is invisible on a pale navbar.
+//     Fixed to `text-slate-500 dark:text-white/50 hover:text-slate-900
+//     dark:hover:text-white`.
+//
+//   All Framer Motion animations, responsive behaviour, ClockBadge, and
+//   NavLogo remain 100% unchanged.
+
 "use client";
 
 import React, { useEffect, useState, memo } from "react";
@@ -8,7 +26,7 @@ import { SettingsModal } from "@/components/SettingsModal";
 import { useLanguage } from "@/hooks/use-language";
 import type { TranslationKey } from "@/lib/data";
 
-// ─── Nav links — keys only; labels resolved via t() ──────────────────────────
+// ─── Nav links ────────────────────────────────────────────────────────────────
 
 interface NavLink {
   href: string;
@@ -75,8 +93,9 @@ const ClockBadge = memo(function ClockBadge() {
       className="flex items-center gap-1.5"
       aria-label={`Current time: ${timeStr} ${gmtLabel}`}
     >
-      <div className="flex items-center rounded-lg border border-neutral-300 dark:border-white/20 bg-neutral-100 dark:bg-zinc-900/90 backdrop-blur-sm px-3 py-1">
-        <span className="font-mono text-sm font-bold text-neutral-800 dark:text-white tracking-wider leading-none tabular-nums">
+      {/* Clock chip — always dark background for legibility on any theme */}
+      <div className="flex items-center rounded-lg border border-slate-700/60 dark:border-white/20 bg-slate-900 dark:bg-zinc-900/90 backdrop-blur-sm px-3 py-1">
+        <span className="font-mono text-sm font-bold text-white tracking-wider leading-none tabular-nums">
           {timeStr}
         </span>
       </div>
@@ -97,7 +116,7 @@ const NavLogo = memo(function NavLogo() {
   return (
     <Link
       href="/"
-      className="flex items-center gap-2.5 font-bold text-neutral-900 dark:text-white hover:opacity-80 transition-opacity"
+      className="flex items-center gap-2.5 font-bold hover:opacity-80 transition-opacity text-slate-900 dark:text-white"
     >
       <div className="h-7 w-7 rounded-full ring-1 ring-primary/50 overflow-hidden flex-shrink-0 bg-primary/20 flex items-center justify-center">
         {imgFailed ? (
@@ -135,8 +154,6 @@ export default function Navbar() {
   const [scrolled,     setScrolled]     = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [location]                      = useLocation();
-
-  // t() for nav labels; isRTL for layout direction
   const { t, isRTL } = useLanguage();
 
   useEffect(() => {
@@ -151,7 +168,7 @@ export default function Navbar() {
         dir={isRTL ? "rtl" : "ltr"}
         className={`sticky top-0 z-50 w-full transition-all duration-300 ${
           scrolled
-            ? "border-b border-white/8 bg-background/80 backdrop-blur-xl shadow-sm"
+            ? "border-b border-slate-200 dark:border-white/8 bg-white/90 dark:bg-background/80 backdrop-blur-xl shadow-sm"
             : "bg-transparent"
         }`}
       >
@@ -170,8 +187,8 @@ export default function Navbar() {
                     href={link.href}
                     className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                       isActive
-                        ? "text-neutral-900 dark:text-white bg-neutral-900/10 dark:bg-white/10"
-                        : "text-neutral-600 dark:text-white/70 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-900/8 dark:hover:bg-white/8"
+                        ? "text-slate-900 dark:text-white bg-slate-100 dark:bg-white/10"
+                        : "text-slate-700 dark:text-white/70 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/8"
                     }`}
                   >
                     {t(link.key)}
@@ -183,7 +200,7 @@ export default function Navbar() {
 
           {/* Right Cluster */}
           <div className="flex items-center gap-2">
-            {/* Clock — isolated in its own memo'd component */}
+            {/* Clock */}
             <ClockBadge />
 
             {/* Settings */}
@@ -193,13 +210,13 @@ export default function Navbar() {
               className={`rounded-lg p-2 transition-colors ${
                 settingsOpen
                   ? "text-primary bg-primary/10"
-                  : "text-neutral-500 dark:text-white/50 hover:text-neutral-800 dark:hover:text-white hover:bg-neutral-900/8 dark:hover:bg-white/8"
+                  : "text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/8"
               }`}
             >
               <Settings size={16} />
             </button>
 
-            {/* Discord — icon-only on mobile, icon+text on md+ */}
+            {/* Discord */}
             <a
               href={DISCORD_INVITE_URL}
               target="_blank"

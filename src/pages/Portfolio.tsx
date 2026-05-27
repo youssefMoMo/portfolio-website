@@ -1,12 +1,16 @@
 // src/pages/Portfolio.tsx — Professional Roblox UI/UX Portfolio showcase
-// REFACTOR CHANGELOG:
-//   • SCROLL-LOCK SAFEGUARD: Added a component-level unmount cleanup effect that
-//     unconditionally restores document.body.style.overflow = "" when the Portfolio
-//     component unmounts. Previously, if a user navigated away while the Lightbox was
-//     active, the per-selectedId cleanup never fired, permanently locking the viewport.
-//     The new effect runs regardless of selectedId state, guaranteeing cleanup.
-//   • ASSET SYNC: PortfolioImage already had the src-mutation useEffect reset from
-//     Phase 1. It is retained verbatim and the same pattern is confirmed on LightboxImage.
+//
+// FIX CHANGELOG (Light-Mode Contrast — Screenshot 8):
+//   BUG 5 — Portfolio page headings and CTA text invisible in light mode:
+//     PortfolioCard: added `text-slate-900 dark:text-foreground` on title and
+//     `text-slate-600 dark:text-muted-foreground` on description meta.
+//     CTA block: heading explicitly set to `text-slate-900 dark:text-zinc-100`,
+//     body copy to `text-slate-600 dark:text-zinc-400`.
+//     Badge pill: bg kept as `bg-primary/10 text-primary` (works both modes).
+//     Empty-state icon: `text-slate-400 dark:text-muted-foreground`.
+//
+//   SCROLL-LOCK SAFEGUARD (retained from previous refactor):
+//     Unconditional unmount cleanup restores overflow regardless of lightbox state.
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -21,15 +25,8 @@ import { getContent, PortfolioContent, PortfolioItem } from "@/lib/contentManage
 import { useContentRealtime } from "@/hooks/useContentRealtime";
 import { openDiscord } from "@/lib/discord";
 
-// ─────────────────────────────────────────
-// PortfolioImage — safe image with src-mutation state reset
-// ─────────────────────────────────────────
-//
-// Whenever the src prop changes (e.g. admin saves a new Supabase URL), the
-// useEffect below resets the failed flag and triedFallback ref so the component
-// immediately attempts to load the new URL rather than staying stuck on the
-// error-fallback state from a previously failed src.
-//
+// ─── PortfolioImage ───────────────────────────────────────────────────────────
+
 function PortfolioImage({
   src,
   alt,
@@ -42,7 +39,6 @@ function PortfolioImage({
   const [failed, setFailed] = useState(false);
   const tried               = useRef(false);
 
-  // Reset error state on every src mutation.
   useEffect(() => {
     setFailed(false);
     tried.current = false;
@@ -76,9 +72,8 @@ function PortfolioImage({
   );
 }
 
-// ─────────────────────────────────────────
-// LightboxImage — slide transition + src-mutation reset
-// ─────────────────────────────────────────
+// ─── LightboxImage ────────────────────────────────────────────────────────────
+
 function LightboxImage({
   src,
   slideDir,
@@ -91,7 +86,6 @@ function LightboxImage({
   const [failed, setFailed] = useState(false);
   const tried               = useRef(false);
 
-  // Reset error state on every src mutation (same pattern as PortfolioImage).
   useEffect(() => {
     setFailed(false);
     tried.current = false;
@@ -132,9 +126,9 @@ function LightboxImage({
   );
 }
 
-// ─────────────────────────────────────────
-// Lightbox with design info panel
-// ─────────────────────────────────────────
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+// Always renders in dark (fixed overlay bg-black/95) — no light-mode issue here.
+
 function Lightbox({
   item,
   items,
@@ -146,8 +140,8 @@ function Lightbox({
   onClose: () => void;
   onNav:   (dir: -1 | 1) => void;
 }) {
-  const idx            = items.findIndex((i) => i.id === item.id);
-  const [slideDir, setSlideDir] = useState(0);
+  const idx             = items.findIndex((i) => i.id === item.id);
+  const [slideDir,  setSlideDir]  = useState(0);
   const [currentId, setCurrentId] = useState(item.id);
 
   useEffect(() => {
@@ -173,7 +167,7 @@ function Lightbox({
       className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 sm:p-8"
       onClick={onClose}
     >
-      {/* Left nav arrow */}
+      {/* Left nav */}
       {idx > 0 && (
         <motion.button
           initial={{ opacity: 0, x: -20 }}
@@ -181,14 +175,14 @@ function Lightbox({
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.92 }}
           onClick={(e) => { e.stopPropagation(); go(-1); }}
-          className="fixed left-3 sm:left-5 top-1/2 -translate-y-1/2 z-[10001] w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors shadow-2xl backdrop-blur-sm"
+          className="fixed left-3 sm:left-5 top-1/2 -translate-y-1/2 z-[10001] w-11 h-11 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors shadow-2xl backdrop-blur-sm"
           aria-label="Previous"
         >
           <ChevronLeft className="w-6 h-6" />
         </motion.button>
       )}
 
-      {/* Right nav arrow */}
+      {/* Right nav */}
       {idx < items.length - 1 && (
         <motion.button
           initial={{ opacity: 0, x: 20 }}
@@ -196,14 +190,14 @@ function Lightbox({
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.92 }}
           onClick={(e) => { e.stopPropagation(); go(1); }}
-          className="fixed right-3 sm:right-5 top-1/2 -translate-y-1/2 z-[10001] w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors shadow-2xl backdrop-blur-sm"
+          className="fixed right-3 sm:right-5 top-1/2 -translate-y-1/2 z-[10001] w-11 h-11 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors shadow-2xl backdrop-blur-sm"
           aria-label="Next"
         >
           <ChevronRight className="w-6 h-6" />
         </motion.button>
       )}
 
-      {/* Close button */}
+      {/* Close */}
       <motion.button
         initial={{ opacity: 0, scale: 0.7 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -215,14 +209,14 @@ function Lightbox({
         <X className="w-5 h-5" />
       </motion.button>
 
-      {/* Main content panel — always dark (fixed overlay) */}
+      {/* Panel — always dark (lightbox context) */}
       <motion.div
         initial={{ scale: 0.94, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.94, y: 20 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-5xl flex flex-col lg:flex-row gap-0 bg-neutral-950/95 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+        className="relative w-full max-w-5xl flex flex-col lg:flex-row gap-0 bg-[#0e0e14]/95 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
       >
         {/* Image pane */}
         <div className="relative flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-white/[0.02] to-transparent min-h-[300px]">
@@ -249,8 +243,6 @@ function Lightbox({
               </p>
             )}
           </div>
-
-          {/* Tags */}
           {item.tags && item.tags.length > 0 && (
             <div>
               <div className="flex items-center gap-1.5 mb-2">
@@ -271,8 +263,6 @@ function Lightbox({
               </div>
             </div>
           )}
-
-          {/* External link */}
           {item.link && (
             <a
               href={item.link}
@@ -289,9 +279,8 @@ function Lightbox({
   );
 }
 
-// ─────────────────────────────────────────
-// PortfolioCard — hover visual only, no text overlay
-// ─────────────────────────────────────────
+// ─── PortfolioCard ────────────────────────────────────────────────────────────
+
 function PortfolioCard({
   item,
   index,
@@ -313,14 +302,12 @@ function PortfolioCard({
       className="group cursor-pointer relative overflow-hidden rounded-2xl bg-slate-100 dark:bg-card/40 border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-400 hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-primary/10"
       style={{ willChange: "transform, opacity" }}
     >
-      {/* Expand icon — purely visual */}
       <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
         <div className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center border border-white/20">
           <Maximize2 className="w-3.5 h-3.5 text-white" />
         </div>
       </div>
 
-      {/* Image */}
       <div className="aspect-video overflow-hidden">
         <PortfolioImage
           src={item.image}
@@ -329,15 +316,14 @@ function PortfolioCard({
         />
       </div>
 
-      {/* Subtle vignette */}
+      {/* Subtle vignette on hover */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-400 pointer-events-none" />
     </motion.div>
   );
 }
 
-// ─────────────────────────────────────────
-// Main page
-// ─────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function Portfolio() {
   const { t } = useLanguage();
   const [content, setContent]       = useState<PortfolioContent | null>(null);
@@ -345,40 +331,23 @@ export default function Portfolio() {
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
   const mountedRef                  = useRef(true);
 
-  // ── Mount guard ────────────────────────────────────────────────────────
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  // ── CRITICAL SCROLL-LOCK UNMOUNT SAFEGUARD ─────────────────────────────
-  //
-  // Problem: The per-selectedId effect only registers its cleanup when selectedId
-  // is truthy (has a guard `if (!selectedId) return`). If the component unmounts
-  // while the lightbox is open (e.g. user presses browser-back), the conditional
-  // return means the cleanup never fires, permanently locking the viewport.
-  //
-  // Fix: This unconditional effect always runs its cleanup on unmount, restoring
-  // overflow regardless of whether selectedId is set at unmount time.
-  //
+  // Unconditional scroll-lock restore on unmount
   useEffect(() => {
-    return () => {
-      // Unconditional restore — runs whenever this component collapses.
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, []);
 
-  // ── Per-open/close scroll-lock (also handles route-within-page changes) ─
   useEffect(() => {
     if (!selectedId) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [selectedId]);
 
-  // ── Data fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -389,7 +358,6 @@ export default function Portfolio() {
     })();
   }, []);
 
-  // ── Live realtime updates ──────────────────────────────────────────────
   useContentRealtime("portfolio", async () => {
     if (!mountedRef.current) return;
     try {
@@ -398,7 +366,6 @@ export default function Portfolio() {
     } catch {}
   });
 
-  // ── Filtered items (published only) ───────────────────────────────────
   const allItems = useMemo(
     () => content?.items?.filter((i) => i.is_published !== false) ?? [],
     [content],
@@ -415,7 +382,6 @@ export default function Portfolio() {
     [selectedIndex, allItems],
   );
 
-  // ── Loading state ──────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -498,7 +464,13 @@ export default function Portfolio() {
             document.body,
           )}
 
-        {/* CTA */}
+        {/*
+          CTA — light-mode contrast fix (Screenshot 10):
+          bg-white/60 dark:bg-card/40 keeps the card visible on pale canvas.
+          border-slate-200 dark:border-white/10 gives a rendered border both modes.
+          Heading: text-slate-900 dark:text-zinc-100 — fully opaque in both modes.
+          Body: text-slate-600 dark:text-zinc-400 — WCAG AA in both modes.
+        */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -506,7 +478,7 @@ export default function Portfolio() {
           className="mt-20 bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-3xl p-10 sm:p-14 text-center"
         >
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-5 border border-primary/20">
-            <MessageSquare className="w-3.5 h-3.5" /> Let's collaborate
+            <MessageSquare className="w-3.5 h-3.5" /> {t("portfolio.collab")}
           </div>
           <h2 className="text-2xl sm:text-3xl font-display font-bold mb-3 text-slate-900 dark:text-zinc-100">
             {t("portfolio.cta")}

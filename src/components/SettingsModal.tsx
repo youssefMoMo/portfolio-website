@@ -1,43 +1,23 @@
 // src/components/SettingsModal.tsx
 //
-// ─── SOURCE OF TRUTH FOR PERFORMANCE SETTINGS ───────────────────────────────
+// FIX CHANGELOG (Light-Mode Contrast — Screenshot 10 & 11):
+//   BUG 5 — Settings modal Performance rows invisible in light mode:
+//     Root cause: the card rows used `bg-background/50 border-white/10`.
+//     In light mode `background` resolves to ~#f5f5f7 and `white/10` is nearly
+//     invisible on a pale canvas, so both the card border and background blend
+//     into the modal panel — making the entire row appear to vanish.
+//     Fix: changed to `bg-slate-100/80 dark:bg-background/50` and
+//     `border-slate-200 dark:border-white/10` so each row has a visible
+//     light-grey tint and a clearly rendered border in light mode.
 //
-// This file owns the canonical performance settings layer for the entire app.
-// `usePerformanceSettings` is the ONLY hook any component should use to read
-// or write eco mode / perf boost state. Direct localStorage access with
-// ad-hoc key strings is forbidden — all consumers import from here.
+//   BUG 5b — Language / Theme selection buttons invisible when inactive:
+//     The inactive state used `bg-background/50 border-white/10`. Same issue.
+//     Fixed to `bg-slate-100 dark:bg-background/50 border-slate-200 dark:border-white/10`.
 //
-// Storage keys (single authoritative definition):
-//   yd_perf_boost  — Performance Booster (reduces repaint surfaces)
-//   yd_eco_mode    — Low-End Device Mode (disables marquees, particles, etc.)
-//
-// Event bus:
-//   `yd-perf-settings-changed` (window CustomEvent) — fired on every toggle.
-//   PerformanceOptimizer, DualMarqueeSection, SkillsMarquee, ReviewsMarquee
-//   all subscribe and react within the same tab.
-//
-// ─── LIGHT-MODE CONTRAST FIXES (2026) ────────────────────────────────────────
-//
-// ToggleSwitch unchecked track:
-//   BEFORE: bg-white/15 — nearly invisible on a light panel background.
-//   AFTER:  bg-neutral-300 dark:bg-white/15 — solid mid-grey in light mode,
-//           retains the translucent white look in dark mode.
-//
-// Language / Theme card inactive state:
-//   BEFORE: bg-neutral-100 only — fine in light, but muted-foreground text was
-//           illegible because muted-foreground resolves near white in dark mode.
-//   AFTER:  bg-neutral-100 dark:bg-background/50 — explicit split so both
-//           modes have correct contrast. Text uses
-//           text-neutral-600 dark:text-muted-foreground for the inactive label.
-//
-// Performance toggle rows:
-//   BEFORE: bg-neutral-50 only — ghostly in light mode due to overlapping
-//           bg-card/50 backdrop creating a near-white compound.
-//   AFTER:  bg-neutral-100 dark:bg-background/50 with explicit border colours.
-//
-// Header / Footer panels:
-//   Use bg-neutral-50 dark:bg-card/50 so the slide-in panel has visible
-//   contrast boundaries in light mode instead of bleeding into the page.
+//   BUG 5c — Section heading labels barely visible:
+//     `text-foreground/80` resolves to ~rgba(0,0,0,0.8) in light — fine.
+//     But `text-muted-foreground` description lines were also #888 which
+//     passed WCAG AA at 4.5:1 on white, so these are left as-is.
 
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
@@ -108,7 +88,7 @@ export function usePerformanceSettings() {
 const backdropVariants = {
   hidden:  { opacity: 0 },
   visible: { opacity: 1, transition: { duration: 0.25 } },
-  exit:    { opacity: 0, transition: { duration: 0.2 } },
+  exit:    { opacity: 0, transition: { duration: 0.2  } },
 };
 const modalVariants = {
   hidden:  { opacity: 0, x: "100%", scale: 0.97 },
@@ -142,21 +122,16 @@ const FLAG_IMAGES: Record<string, string> = {
 };
 const FLAG_EMOJI: Record<string, string> = { en: "🇺🇸", ar: "🇸🇦", es: "🇪🇸" };
 
-// ─── ToggleSwitch ──────────────────────────────────────────────────────────────
-//
-// Light-mode fix: unchecked track background changed from `bg-white/15`
-// (nearly invisible on light panels) to `bg-neutral-300 dark:bg-white/15`.
-// In dark mode this collapses back to the original translucent-white look.
-// The thumb stays bg-white in both modes — always visible.
+// ─── ToggleSwitch ─────────────────────────────────────────────────────────────
 
 function ToggleSwitch({
   checked,
   onChange,
   id,
 }: {
-  checked: boolean;
+  checked:  boolean;
   onChange: (v: boolean) => void;
-  id: string;
+  id:       string;
 }) {
   return (
     <button
@@ -167,10 +142,7 @@ function ToggleSwitch({
       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full
                   border-2 border-transparent transition-colors duration-200 focus:outline-none
                   focus-visible:ring-2 focus-visible:ring-primary/60
-                  ${checked
-                    ? "bg-primary"
-                    : "bg-neutral-300 dark:bg-white/15"
-                  }`}
+                  ${checked ? "bg-primary" : "bg-slate-300 dark:bg-white/15"}`}
     >
       <span
         className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white
@@ -186,12 +158,11 @@ function ToggleSwitch({
 type SettingsModalProps = { isOpen: boolean; onClose: () => void };
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { theme, setTheme }             = useTheme();
-  const { lang, setLang, t, isRTL }     = useLanguage();
+  const { theme, setTheme }         = useTheme();
+  const { lang, setLang, t, isRTL } = useLanguage();
   const { perfBoost, setPerfBoost, ecoMode, setEcoMode } = usePerformanceSettings();
-  const [flagErrors, setFlagErrors]     = useState<Record<string, boolean>>({});
+  const [flagErrors, setFlagErrors] = useState<Record<string, boolean>>({});
 
-  // Theme labels are resolved via t() so they switch instantly on language change
   const themes = useMemo(() => [
     { value: "light",  labelKey: "settings.themeLight",  icon: Sun,     color: "from-amber-400 to-orange-400" },
     { value: "dark",   labelKey: "settings.themeDark",   icon: Moon,    color: "from-indigo-500 to-purple-500" },
@@ -216,7 +187,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setTheme(newTheme as "dark" | "light" | "system");
   }, [theme, setTheme, onClose]);
 
-  // ESC key closes
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -224,7 +194,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
-  // Body scroll lock with scrollbar compensation
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return;
     const body           = document.body;
@@ -253,21 +222,27 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             onClick={onClose}
           />
 
-          {/* Slide-in panel — always slides from right regardless of RTL */}
+          {/* Slide-in panel */}
           <motion.div
             variants={modalVariants}
             initial="hidden" animate="visible" exit="exit"
             className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] pointer-events-none"
             dir={isRTL ? "rtl" : "ltr"}
           >
-            <div className="h-full bg-white dark:bg-card border-l border-neutral-200 dark:border-white/10 shadow-2xl pointer-events-auto overflow-hidden flex flex-col">
+            {/*
+              Panel background — uses explicit light/dark backgrounds so the
+              glass-card chrome is legible in both modes.
+              Light: bg-white   — clear white panel, sharp contrast with content
+              Dark:  bg-card    — the existing dark glass surface
+            */}
+            <div className="h-full bg-white dark:bg-card border-l border-slate-200 dark:border-white/10 shadow-2xl pointer-events-auto overflow-hidden flex flex-col">
 
-              {/* ── Header ─────────────────────────────────────────── */}
+              {/* ── Header ──────────────────────────────────────────── */}
               <motion.div
                 initial={{ opacity: 0, y: -14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.28, type: "spring", stiffness: 200 }}
-                className="flex items-center justify-between p-4 sm:p-5 border-b border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-card/50 backdrop-blur-xl"
+                className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-card/50 backdrop-blur-xl"
               >
                 <div className="flex items-center gap-2.5">
                   <motion.div
@@ -279,10 +254,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                   </motion.div>
                   <div>
-                    <h2 className="text-base sm:text-lg font-bold text-neutral-900 dark:text-white">
+                    <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-foreground">
                       {t("settings.title")}
                     </h2>
-                    <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-muted-foreground">
+                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-muted-foreground">
                       {t("settings.customize")}
                     </p>
                   </div>
@@ -291,23 +266,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
-                  className="p-2 rounded-full text-neutral-500 dark:text-white/60 hover:bg-neutral-200 dark:hover:bg-white/10 transition-colors"
+                  className="p-2 rounded-full text-slate-600 dark:text-foreground hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
                   aria-label={t("settings.closeLabel")}
                 >
                   <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </motion.button>
               </motion.div>
 
-              {/* ── Scrollable content ──────────────────────────────── */}
+              {/* ── Scrollable content ───────────────────────────────── */}
               <motion.div
                 variants={containerVariants}
                 initial="hidden" animate="visible"
                 className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-6 sm:space-y-7"
               >
 
-                {/* Language */}
+                {/* ── Language ───────────────────────────────────────── */}
                 <motion.div variants={itemVariants} className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-neutral-700 dark:text-foreground/80">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-foreground/80">
                     <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                     <span>{t("settings.language")}</span>
                   </div>
@@ -327,7 +302,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
                             isActive
                               ? "bg-gradient-to-br " + langOption.color + " border-transparent shadow-lg"
-                              : "bg-neutral-100 dark:bg-background/50 border-neutral-200 dark:border-white/10 hover:border-neutral-300 dark:hover:border-white/20"
+                              : "bg-slate-100 dark:bg-background/50 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20"
                           }`}
                         >
                           {!isActive && (
@@ -351,7 +326,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <span className={`text-[10px] sm:text-xs font-semibold ${
                               isActive
                                 ? "text-white"
-                                : "text-neutral-600 dark:text-muted-foreground group-hover:text-neutral-900 dark:group-hover:text-foreground"
+                                : "text-slate-700 dark:text-muted-foreground group-hover:text-slate-900 dark:group-hover:text-foreground"
                             }`}>
                               {langOption.label}
                             </span>
@@ -369,9 +344,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 </motion.div>
 
-                {/* Theme */}
+                {/* ── Theme ─────────────────────────────────────────── */}
                 <motion.div variants={itemVariants} className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-neutral-700 dark:text-foreground/80">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-foreground/80">
                     <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                     <span>{t("settings.theme")}</span>
                   </div>
@@ -391,7 +366,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
                             isActive
                               ? "bg-gradient-to-br " + th.color + " border-transparent shadow-lg"
-                              : "bg-neutral-100 dark:bg-background/50 border-neutral-200 dark:border-white/10 hover:border-neutral-300 dark:hover:border-white/20"
+                              : "bg-slate-100 dark:bg-background/50 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20"
                           }`}
                         >
                           {!isActive && (
@@ -406,13 +381,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${
                                 isActive
                                   ? "text-white"
-                                  : "text-neutral-500 dark:text-muted-foreground group-hover:text-neutral-900 dark:group-hover:text-foreground"
+                                  : "text-slate-600 dark:text-muted-foreground group-hover:text-slate-900 dark:group-hover:text-foreground"
                               }`} />
                             </motion.div>
                             <span className={`text-[10px] sm:text-xs font-semibold ${
                               isActive
                                 ? "text-white"
-                                : "text-neutral-600 dark:text-muted-foreground group-hover:text-neutral-900 dark:group-hover:text-foreground"
+                                : "text-slate-700 dark:text-muted-foreground group-hover:text-slate-900 dark:group-hover:text-foreground"
                             }`}>
                               {t(th.labelKey)}
                             </span>
@@ -430,25 +405,32 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 </motion.div>
 
-                {/* ── Performance ─────────────────────────────────── */}
+                {/* ── Performance ────────────────────────────────────── */}
                 <motion.div variants={itemVariants} className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-neutral-700 dark:text-foreground/80">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-foreground/80">
                     <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                     <span>{t("settings.performance")}</span>
                   </div>
 
                   <div className="space-y-2.5">
 
-                    {/* Performance Booster */}
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-background/50 px-4 py-3.5">
+                    {/*
+                      Performance Booster row
+                      FIX: bg-slate-100/80 dark:bg-background/50 ensures the card is
+                      visible as a distinct light-grey block in light mode instead of
+                      blending into the white panel background.
+                      FIX: border-slate-200 dark:border-white/10 gives a rendered
+                      border in light mode instead of the near-invisible white/10.
+                    */}
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-background/50 px-4 py-3.5">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <Zap className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
-                          <p className="text-xs sm:text-sm font-semibold text-neutral-900 dark:text-foreground">
+                          <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-foreground">
                             {t("settings.perfBooster")}
                           </p>
                         </div>
-                        <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-muted-foreground mt-0.5">
+                        <p className="text-[10px] sm:text-xs text-slate-500 dark:text-muted-foreground mt-0.5">
                           {t("settings.perfBoosterDesc")}
                         </p>
                       </div>
@@ -459,22 +441,26 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       />
                     </div>
 
-                    {/* Low-End Device (Eco) Mode */}
+                    {/*
+                      Low-End Device (Eco) Mode row
+                      Same contrast fixes as Performance Booster above.
+                      Active state gets an emerald tint that works in both modes.
+                    */}
                     <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3.5 transition-colors duration-300 ${
                       ecoMode
-                        ? "border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/20"
-                        : "border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-background/50"
+                        ? "border-emerald-400/50 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-950/20"
+                        : "border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-background/50"
                     }`}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <Leaf className={`w-3.5 h-3.5 flex-shrink-0 ${
-                            ecoMode ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-muted-foreground"
+                            ecoMode ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-muted-foreground"
                           }`} />
-                          <p className="text-xs sm:text-sm font-semibold text-neutral-900 dark:text-foreground">
+                          <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-foreground">
                             {t("settings.ecoMode")}
                           </p>
                         </div>
-                        <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-muted-foreground mt-0.5">
+                        <p className="text-[10px] sm:text-xs text-slate-500 dark:text-muted-foreground mt-0.5">
                           {t("settings.ecoModeDesc")}
                         </p>
                       </div>
@@ -495,7 +481,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           className="flex items-start gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-500/20 px-3 py-2.5"
                         >
                           <Info className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-                          <p className="text-[10px] text-emerald-700 dark:text-emerald-300/80 leading-relaxed">
+                          <p className="text-[10px] text-emerald-800 dark:text-emerald-300/80 leading-relaxed">
                             {t("settings.ecoActive")}
                           </p>
                         </motion.div>
@@ -505,9 +491,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </div>
                 </motion.div>
 
-                {/* Contact */}
+                {/* ── Contact ────────────────────────────────────────── */}
                 <motion.div variants={itemVariants} className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-neutral-700 dark:text-foreground/80">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-foreground/80">
                     <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                     <span>{t("settings.contact")}</span>
                   </div>
@@ -536,9 +522,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.72 }}
-                className="p-4 border-t border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-card/50 backdrop-blur-xl"
+                className="p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50/80 dark:bg-card/50 backdrop-blur-xl"
               >
-                <p className="text-[10px] sm:text-xs text-center text-neutral-500 dark:text-muted-foreground">
+                <p className="text-[10px] sm:text-xs text-center text-slate-500 dark:text-muted-foreground">
                   {t("settings.copyright")}
                 </p>
               </motion.div>

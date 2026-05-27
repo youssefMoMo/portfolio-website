@@ -1,33 +1,25 @@
 // src/components/DualMarqueeSection.tsx
 //
-// ─── ARCHITECTURE NOTES ─────────────────────────────────────────────────────
+// ─── FIX CHANGELOG ───────────────────────────────────────────────────────────
 //
-//  ROOT-CAUSE FIX (Row 3 offset on cold load)
-//    marquee-right removed. All three rows use marquee-left:
-//      from { transform: translate3d(0, 0, 0); }
-//      to   { transform: translate3d(-50%, 0, 0); }
-//    Every row starts flush at 0-offset with no cold-paint shift.
+// BUG 1 — Marquee RTL inversion:
+//   For LTR locales (en, es): track initialises at translate3d(0,0,0) and
+//   scrolls left to translate3d(-50%,0,0). For Arabic (ar): track initialises
+//   at translate3d(-50%,0,0) and scrolls right to translate3d(0,0,0).
+//   Keyframe name is dynamically computed from the current language so the
+//   browser always picks up the correct @keyframes block.
 //
-//  RTL LAYOUT GUARD
-//    The outer <section> inherits the document RTL direction for text nodes
-//    (so Arabic stat titles and tool names read correctly). However the
-//    inner scrolling track wrappers carry an explicit dir="ltr" override.
-//    This is mandatory: CSS marquee-left keyframes operate on a left-anchored
-//    Cartesian axis; flipping to RTL would reverse the perceived scroll
-//    direction and misalign the edge-fade mask gradients.
-//    Text elements *inside* each card read from the inherited document
-//    direction, so Arabic text renders correctly without tearing the flow.
+// BUG 2 — Mid-screen cold-load offset:
+//   Initial inline transform on the track wrapper always matches the keyframe
+//   `from` value, so the first painted frame is identical to the animation
+//   start — zero layout jump on cold load.
 //
-//  STAT CARD TITLES
-//    Stat titles are no longer read from the hardcoded English `statsData`
-//    array. Instead they are resolved via t("stat.<icon>") so they switch
-//    instantly on language change without re-fetching any data.
-//
-//  i18n
-//    useLanguage() injected. Section header and eco-mode label are fully
-//    localised via the centralized t() function.
+// BUG 3 — Static track (tools not scrolling):
+//   All three rows share the same keyframe name (computed from lang), so RTL
+//   inversion applies uniformly. The animation-name is injected as a <style>
+//   block that re-renders when lang changes.
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   Star, CheckCircle, Briefcase, Users, Clock,
   Zap, Gamepad, RefreshCw, Repeat,
@@ -36,40 +28,6 @@ import { statsData, type Stat } from "@/lib/data";
 import { getAllReviews, type Review } from "@/lib/contentManager.ts";
 import { ECO_MODE_KEY, PERF_SETTINGS_EVENT } from "@/components/SettingsModal";
 import { useLanguage } from "@/hooks/use-language";
-
-// ─── Embedded keyframes ───────────────────────────────────────────────────────
-//
-// Two keyframes are defined: marquee-ltr (LTR languages: en, es) and
-// marquee-rtl (RTL languages: ar).
-//
-// LTR (en, es):
-//   Track initialises at translate3d(0, 0, 0) — flush at the LEFT edge of
-//   its own containing block — and scrolls towards translate3d(-50%, 0, 0),
-//   disappearing off the LEFT edge of the viewport.
-//
-// RTL (ar):
-//   Track initialises at translate3d(-50%, 0, 0) — pre-shifted to the LEFT
-//   edge — and scrolls towards translate3d(0, 0, 0), effectively moving to
-//   the RIGHT and disappearing off the RIGHT edge. This is the mirror-image
-//   of the LTR animation, matching natural Arabic reading direction.
-//
-// Both keyframe start positions match the initial inline transform so the
-// browser paints the same state whether the animation is paused or running
-// (eliminates the cold-load mid-screen flash).
-
-const KEYFRAMES_LTR = `
-@keyframes marquee-ltr {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-50%, 0, 0); }
-}
-`;
-
-const KEYFRAMES_RTL = `
-@keyframes marquee-rtl {
-  from { transform: translate3d(-50%, 0, 0); }
-  to   { transform: translate3d(0, 0, 0); }
-}
-`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,32 +67,43 @@ const TOOLS: ToolDef[] = [
 const EDGE_MASK =
   "linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%)";
 
-// ─── MarqueeRow ───────────────────────────────────────────────────────────────
+// ─── Dynamic keyframe builder ─────────────────────────────────────────────────
 //
-// NOTE: direction prop intentionally removed. All rows are marquee-left.
-// The dir="ltr" on the track wrapper is a layout guard — it must NOT be
-// removed or the keyframe scroll direction will reverse in RTL documents.
+// RTL (Arabic): track starts at -50% (left edge) and crawls right to 0%.
+//   This is the visual inverse of the LTR flow and feels natural for RTL readers.
+// LTR (English, Spanish): track starts at 0% and crawls left to -50%.
+//
+// The keyframe name encodes the direction so switching language causes a
+// fresh @keyframes injection — browsers re-apply the animation immediately.
 
-interface MarqueeRowProps {
-  duration: number;
-  running: boolean;
-  rtl?: boolean;
-  children: React.ReactNode;
+function buildKeyframes(isRTL: boolean): { css: string; name: string } {
+  const name = isRTL ? "marquee-rtl-scroll" : "marquee-ltr-scroll";
+  const css = isRTL
+    ? `@keyframes ${name} {
+        from { transform: translate3d(-50%, 0, 0); }
+        to   { transform: translate3d(0,    0, 0); }
+      }`
+    : `@keyframes ${name} {
+        from { transform: translate3d(0,    0, 0); }
+        to   { transform: translate3d(-50%, 0, 0); }
+      }`;
+  return { css, name };
 }
 
-function MarqueeRow({ duration, running, rtl = false, children }: MarqueeRowProps) {
-  // The animation name selects the pre-injected keyframe block:
-  //   marquee-rtl → Arabic: starts at -50% (left edge), moves right toward 0%
-  //   marquee-ltr → LTR: starts at 0% (right edge), moves left toward -50%
-  //
-  // dir="ltr" on the wrapper is a mandatory layout guard — it must NOT be
-  // removed. CSS keyframe transforms operate on a left-anchored Cartesian
-  // axis; flipping to RTL would reverse the perceived scroll direction and
-  // misalign the edge-fade mask gradients.
-  const animName      = rtl ? "marquee-rtl" : "marquee-ltr";
-  const initialOffset = rtl ? "translate3d(-50%, 0, 0)" : "translate3d(0, 0, 0)";
+// ─── MarqueeRow ───────────────────────────────────────────────────────────────
 
+interface MarqueeRowProps {
+  duration:    number;
+  running:     boolean;
+  animName:    string;   // computed from buildKeyframes()
+  initialX:    string;   // matches keyframe `from` → zero cold-load jump
+  children:    React.ReactNode;
+}
+
+function MarqueeRow({ duration, running, animName, initialX, children }: MarqueeRowProps) {
   return (
+    // dir="ltr" keeps the CSS axis left-anchored. RTL inversion is done
+    // entirely in the keyframe (translate direction), not the layout axis.
     <div
       className="relative w-full overflow-hidden"
       dir="ltr"
@@ -143,10 +112,14 @@ function MarqueeRow({ duration, running, rtl = false, children }: MarqueeRowProp
       <div
         className="flex gap-4 sm:gap-6 w-max"
         style={{
-          animation: `${animName} ${duration}s linear infinite`,
+          // Initial transform MUST match the keyframe `from` value.
+          // This eliminates the cold-paint jump where the browser would
+          // render the element at its CSS default (0,0) before the
+          // animation's first frame fires.
+          transform:          initialX === "0%" ? "translate3d(0,0,0)" : "translate3d(-50%,0,0)",
+          animation:          `${animName} ${duration}s linear infinite`,
           animationPlayState: running ? "running" : "paused",
-          transform: initialOffset,
-          willChange: "transform",
+          willChange:         "transform",
           backfaceVisibility: "hidden",
           WebkitBackfaceVisibility: "hidden",
         }}
@@ -198,10 +171,10 @@ function ReviewCard({ review }: { review: Review }) {
       <div className="flex items-center gap-2.5 mb-3">
         <Avatar src={review.avatar} name={review.name} />
         <div className="min-w-0">
-          <h4 className="font-semibold text-foreground text-xs sm:text-sm truncate">
+          <h4 className="font-semibold text-slate-900 dark:text-foreground text-xs sm:text-sm truncate">
             {review.name}
           </h4>
-          <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
+          <p className="text-[10px] sm:text-xs text-slate-500 dark:text-muted-foreground truncate">
             {review.project_type} • {review.date}
           </p>
         </div>
@@ -238,8 +211,7 @@ function StatCard({ stat, title }: { stat: Stat; title: string }) {
       <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-indigo-400 bg-clip-text text-transparent mb-1">
         {stat.value}
       </div>
-      {/* Title resolved via t() so it switches on language change */}
-      <p className="text-[11px] sm:text-xs text-muted-foreground">{title}</p>
+      <p className="text-[11px] sm:text-xs text-slate-600 dark:text-muted-foreground">{title}</p>
     </div>
   );
 }
@@ -266,7 +238,7 @@ function ToolCard({ tool }: { tool: ToolDef }) {
           </span>
         )}
       </div>
-      <p className="text-[11px] sm:text-xs font-medium text-foreground text-center">
+      <p className="text-[11px] sm:text-xs font-medium text-slate-800 dark:text-foreground text-center">
         {tool.name}
       </p>
     </div>
@@ -307,12 +279,10 @@ function EcoToolsGrid() {
 
 export function DualMarqueeSection() {
   const sectionRef = useRef<HTMLElement>(null);
+  const { t, isRTL, lang } = useLanguage();
 
-  const { t, isRTL } = useLanguage();
-
-  // Build a lookup table: icon slug → localized title
-  // Recalculated on every render so it always reflects the current language.
-  const statTitles: Record<string, string> = {
+  // Build localized stat title lookup — updates instantly on language change
+  const statTitles: Record<string, string> = useMemo(() => ({
     briefcase: t("stat.briefcase"),
     users:     t("stat.users"),
     clock:     t("stat.clock"),
@@ -321,7 +291,18 @@ export function DualMarqueeSection() {
     zap:       t("stat.zap"),
     refresh:   t("stat.refresh"),
     repeat:    t("stat.repeat"),
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [lang]);
+
+  // Compute keyframe CSS + name based on current locale
+  const { css: kfCSS, name: kfName } = useMemo(
+    () => buildKeyframes(isRTL),
+    [isRTL],
+  );
+
+  // initialX = keyframe `from` value — keeps cold-paint position identical
+  // to frame 0 of the animation so there's zero layout jump.
+  const initialX = isRTL ? "-50%" : "0%";
 
   const [ecoMode, setEcoMode] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -425,10 +406,13 @@ export function DualMarqueeSection() {
       className="w-full py-10 sm:py-12 overflow-hidden border-y border-slate-200 dark:border-white/5 relative"
     >
       {/*
-        Both keyframe blocks are injected. The active animation name is
-        selected per-row via the `rtl` prop on MarqueeRow.
+        Dynamic keyframe injection.
+        - LTR (en/es): marquee-ltr-scroll → from 0% to -50%  (scrolls left)
+        - RTL (ar):    marquee-rtl-scroll → from -50% to 0%  (scrolls right)
+        Re-injects whenever lang changes so the browser picks up the
+        correct direction without a page reload.
       */}
-      <style>{KEYFRAMES_LTR}{KEYFRAMES_RTL}</style>
+      <style>{kfCSS}</style>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-8 sm:mb-10 relative z-10">
         <h3 className="text-lg sm:text-xl md:text-2xl font-display font-bold text-center px-2 bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
@@ -436,10 +420,10 @@ export function DualMarqueeSection() {
         </h3>
       </div>
 
-      {/* Row 1 — Reviews (direction: language-aware) */}
+      {/* Row 1 — Reviews */}
       {dupReviews.length > 0 ? (
         <div className="mb-6 sm:mb-8">
-          <MarqueeRow duration={25} running={running} rtl={isRTL}>
+          <MarqueeRow duration={25} running={running} animName={kfName} initialX={initialX}>
             {dupReviews.map((r, i) => (
               <ReviewCard key={`rev-${r.id}-${i}`} review={r} />
             ))}
@@ -451,9 +435,9 @@ export function DualMarqueeSection() {
         </div>
       )}
 
-      {/* Row 2 — Stats (direction: language-aware) */}
+      {/* Row 2 — Stats */}
       <div className="mb-6 sm:mb-8">
-        <MarqueeRow duration={25} running={running} rtl={isRTL}>
+        <MarqueeRow duration={28} running={running} animName={kfName} initialX={initialX}>
           {dupStats.map((s, i) => (
             <StatCard
               key={`stat-${s.id}-${i}`}
@@ -464,8 +448,8 @@ export function DualMarqueeSection() {
         </MarqueeRow>
       </div>
 
-      {/* Row 3 — Tools (direction: language-aware) */}
-      <MarqueeRow duration={25} running={running} rtl={isRTL}>
+      {/* Row 3 — Tools */}
+      <MarqueeRow duration={22} running={running} animName={kfName} initialX={initialX}>
         {dupTools.map((tool, i) => (
           <ToolCard key={`tool-${tool.id}-${i}`} tool={tool} />
         ))}
