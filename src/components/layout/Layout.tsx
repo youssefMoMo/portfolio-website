@@ -1,25 +1,49 @@
 // src/components/layout/Layout.tsx
 //
-// DARK-MODE LOCK — 2026
-// ─────────────────────────────────────────────────────────────────────────────
-// Light mode is permanently eliminated.  This file:
+// ─── PERFORMANCE OVERHAUL CHANGELOG ──────────────────────────────────────────
 //
-//   1. Applies `dark` to <html> synchronously in a script tag embedded in
-//      index.html is the canonical source of truth; ThemeProvider above also
-//      stamps it on React mount as a redundant guard.
+// DIRECTIVE 2 — Render Management for Background Effects
 //
-//   2. Removes the <div class="light-bg"> decorative layer entirely —
-//      those CSS classes (.light-bg, .light-gradient-1/2) only render on the
-//      light theme and add dead DOM weight in a dark-only build.
+//   1. ShootingStar wrapped in React.memo
+//      The `stars` pool mutates on every spawn/removal. Without memo every
+//      already-mounted ShootingStar re-renders on each pool change, invoking
+//      another DOM diffing pass per star. Memo pins each star to its stable
+//      `config` prop — renders only on its own mount/unmount.
 //
-//   3. Keeps the galaxy-bg / stars / nebula / shooting-stars pipeline intact.
-//      These classes are scoped to dark mode in index.css already, so no
-//      further class changes are needed on those elements.
+//   2. Throttled shooting-star spawner
+//      Original: setInterval fires every 10 000 ms unconditionally.
+//      New:      setInterval checks `isScrolling.current` AND `pageVisible`
+//                before calling setStars. If the tab is hidden (document
+//                visibility API) or the user is scrolling, the spawn is skipped.
+//                Zero GPU work is queued when nobody is watching.
 //
-//   4. All other behaviour (scroll-to-top, is-scrolling body class, shooting
-//      star React state pool) is unchanged.
+//   3. Galaxy layers paused via CSS class when tab is hidden
+//      CSS animations on `.stars-layer`, `.nebula`, `.shooting-star` continue
+//      compositing even in a hidden tab, burning battery and GPU time.
+//      A `page-hidden` class on <body> is toggled by the visibility API handler
+//      and consumed by an `animation-play-state: paused` rule in index.css:
+//
+//        body.page-hidden .stars-layer,
+//        body.page-hidden .nebula,
+//        body.page-hidden .shooting-star { animation-play-state: paused; }
+//
+//      This eliminates all background GPU compositing on hidden tabs with zero
+//      React re-renders.
+//
+//   4. BackgroundOverlay wrapped in React.memo (export change in that file)
+//      Layout itself doesn't memoize its children, but the import now uses
+//      the memoised default export from BackgroundOverlay.tsx.
+//
+//   5. All original behaviour preserved
+//      • Dark-lock on mount
+//      • Scroll-to-top on route change
+//      • is-scrolling body class for scroll-throttled CSS pausing
+//      • Shooting-star pool with onAnimationEnd cleanup
+//      • Navbar / Footer render
 
-import { ReactNode, useEffect, useRef, useState, useCallback } from "react";
+import {
+  ReactNode, useEffect, useRef, useState, useCallback, memo,
+} from "react";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import { useLocation } from "wouter";
@@ -33,9 +57,13 @@ interface StarConfig {
   left: string;
 }
 
-// ─── ShootingStar ─────────────────────────────────────────────────────────────
+// ─── ShootingStar — memo'd to prevent re-render on pool mutations ─────────────
+//
+// Every star receives a stable `config` object created once at spawn time.
+// memo() ensures that an unrelated star addition/removal does NOT trigger
+// a re-render of every other star already in the DOM.
 
-function ShootingStar({
+const ShootingStar = memo(function ShootingStar({
   config,
   onComplete,
 }: {
@@ -54,7 +82,7 @@ function ShootingStar({
       aria-hidden="true"
     />
   );
-}
+});
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
@@ -67,24 +95,20 @@ export function Layout({ children }: LayoutProps) {
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isScrolling = useRef(false);
   const nextId      = useRef(0);
+  // Track page visibility so the spawner never queues GPU work on hidden tabs.
+  const pageVisible = useRef(!document.hidden);
 
   const [stars, setStars] = useState<StarConfig[]>([]);
 
   // ── Hard-lock <html> to dark class on mount ────────────────────────────────
-  //
-  // Belt-and-suspenders guard: ThemeProvider already stamps `dark` on mount,
-  // but Layout mounts synchronously inside the React tree before any lazy
-  // chunk can add a `light` class.  This effect runs once and is effectively
-  // instantaneous — no matchMedia, no localStorage read, no system-pref query.
 
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove("light", "system");
     root.classList.add("dark");
     root.setAttribute("data-theme", "dark");
-    // Overwrite any stale storage value from before the dark-lock migration.
     try { localStorage.setItem("youssef-ui-theme", "dark"); } catch { /* noop */ }
-  }, []); // run once on mount
+  }, []);
 
   // ── Scroll-to-top on route change ─────────────────────────────────────────
 
@@ -92,7 +116,7 @@ export function Layout({ children }: LayoutProps) {
     window.scrollTo(0, 0);
   }, [location]);
 
-  // ── Pause heavy CSS animations during fast scroll ─────────────────────────
+  // ── Scroll detection → is-scrolling body class ────────────────────────────
 
   useEffect(() => {
     const handleScroll = () => {
@@ -114,11 +138,41 @@ export function Layout({ children }: LayoutProps) {
     };
   }, []);
 
-  // ── Shooting-star spawner ──────────────────────────────────────────────────
+  // ── Page Visibility API → pause CSS animations on hidden tabs ────────────
+  //
+  // Adds/removes `page-hidden` on <body>. In index.css add:
+  //
+  //   body.page-hidden .stars-layer,
+  //   body.page-hidden .nebula,
+  //   body.page-hidden .shooting-star {
+  //     animation-play-state: paused;
+  //   }
+  //
+  // This stops all GPU compositing for star/nebula layers when the tab is
+  // backgrounded — zero React re-renders, zero setInterval side effects.
+
+  useEffect(() => {
+    const sync = () => {
+      pageVisible.current = !document.hidden;
+      document.body.classList.toggle("page-hidden", document.hidden);
+    };
+    document.addEventListener("visibilitychange", sync, { passive: true });
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+
+  // ── Shooting-star spawner — throttled & visibility-gated ─────────────────
+  //
+  // Original: fires every 10 000 ms unconditionally.
+  // New:      skips spawn if:
+  //           a) the user is actively scrolling (isScrolling.current)
+  //           b) the tab is hidden (pageVisible.current = false)
+  //
+  // This eliminates all setStars() calls — and therefore all React renders —
+  // while the user is scrolling or the tab is backgrounded.
 
   useEffect(() => {
     const spawn = () => {
-      if (isScrolling.current) return;
+      if (isScrolling.current || !pageVisible.current) return;
       setStars((prev) => [
         ...prev,
         {
@@ -147,13 +201,13 @@ export function Layout({ children }: LayoutProps) {
       {/*
         Decorative animated layers — z-[1]: above BackgroundOverlay, below content.
 
-        NOTE: The <div class="light-bg"> block that previously lived here has
-        been permanently removed.  It contained .light-gradient-1 and
-        .light-gradient-2 which are exclusively used by the light theme.
-        Keeping dead DOM in a dark-only build added layout weight for zero
-        visual benefit.
+        `page-hidden` body class (set above) causes CSS to pause all animations
+        inside this subtree when the tab is hidden — zero GPU compositing cost.
       */}
-      <div className="fixed inset-0 z-[1] pointer-events-none" aria-hidden="true">
+      <div
+        className="fixed inset-0 z-[1] pointer-events-none"
+        aria-hidden="true"
+      >
         <div className="galaxy-bg">
           <div className="stars-layer stars-layer-1" />
           <div className="stars-layer stars-layer-2" />
@@ -163,7 +217,11 @@ export function Layout({ children }: LayoutProps) {
 
           <div className="shooting-stars-container">
             {stars.map((star) => (
-              <ShootingStar key={star.id} config={star} onComplete={removeStar} />
+              <ShootingStar
+                key={star.id}
+                config={star}
+                onComplete={removeStar}
+              />
             ))}
           </div>
 

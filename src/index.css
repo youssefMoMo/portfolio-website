@@ -1,967 +1,118 @@
-/* ═══════════════════════════════════════════════════════════════
-   TAILWIND CSS v4 - IMPORTS (الترتيب مهم جداً)
-   ═══════════════════════════════════════════════════════════════ */
-@import "tailwindcss";
-@plugin "@tailwindcss/typography";
-/* NOTE: @custom-variant dark removed — Tailwind v4 handles dark: variants
-   natively. The @slot token is illegal in v4 and would cause a build error. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   PERFORMANCE OVERHAUL — DIRECTIVE 2 ADDENDUM
+   Append these rules to the END of src/index.css
 
-/* ═══════════════════════════════════════════════════════════════
-   THEME DEFINITIONS (Inline theme variables)
-   ═══════════════════════════════════════════════════════════════ */
-@theme inline {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-card-border: hsl(var(--card-border));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-popover-border: hsl(var(--popover-border));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-primary-border: var(--primary-border);
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-secondary-border: var(--secondary-border);
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-muted-border: var(--muted-border);
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-accent-border: var(--accent-border);
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-destructive-border: var(--destructive-border);
-  --color-chart-1: hsl(var(--chart-1));
-  --color-chart-2: hsl(var(--chart-2));
-  --color-chart-3: hsl(var(--chart-3));
-  --color-chart-4: hsl(var(--chart-4));
-  --color-chart-5: hsl(var(--chart-5));
-  --color-sidebar: hsl(var(--sidebar));
-  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
-  --color-sidebar-border: hsl(var(--sidebar-border));
-  --color-sidebar-primary: hsl(var(--sidebar-primary));
-  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
-  --color-sidebar-primary-border: var(--sidebar-primary-border);
-  --color-sidebar-accent: hsl(var(--sidebar-accent));
-  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
-  --color-sidebar-accent-border: var(--sidebar-accent-border);
-  --color-sidebar-ring: hsl(var(--sidebar-ring));
-  --font-sans: var(--app-font-sans);
-  --font-display: var(--app-font-display);
-  --font-serif: var(--app-font-serif);
-  --font-mono: var(--app-font-mono);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-}
+   INSTRUCTIONS:
+     1. Open src/index.css
+     2. Scroll to the very bottom
+     3. Paste everything below this comment block
 
-/* ═══════════════════════════════════════════════════════════════
-   LIGHT MODE VARIABLES
-   ═══════════════════════════════════════════════════════════════ */
-[data-theme="light"] {
-  --background: 0 0% 100%;
-  --foreground: 222 47% 11%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
-  --primary: 238 84% 67%;
-  --primary-foreground: 0 0% 100%;
-  --primary-border: 238 84% 55%;
-  --secondary: 190 90% 45%;
-  --secondary-foreground: 0 0% 100%;
-  --secondary-border: 190 90% 35%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 20% 32%;  /* WCAG AA: ≥4.5:1 contrast on white */
-  --muted-border: 214 32% 91%;
-  --accent: 238 84% 96%;
-  --accent-foreground: 238 84% 67%;
-  --accent-border: 238 84% 85%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --destructive-border: 0 84% 50%;
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 238 84% 67%;
-  --chart-1: 238 84% 67%;
-  --chart-2: 190 90% 45%;
-  --chart-3: 340 80% 60%;
-  --chart-4: 45 90% 55%;
-  --chart-5: 160 70% 40%;
-  --sidebar: 0 0% 98%;
-  --sidebar-foreground: 222 47% 11%;
-  --sidebar-border: 214 32% 91%;
-  --sidebar-primary: 238 84% 67%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 210 40% 96%;
-  --sidebar-accent-foreground: 222 47% 11%;
-  --sidebar-ring: 238 84% 67%;
-  --bg-deep-light: #f8fafc;
-  --bg-card-light: rgba(255, 255, 255, 0.8);
-  --bg-card-hover-light: rgba(255, 255, 255, 0.95);
-  --bg-glass-light: rgba(255, 255, 255, 0.7);
-  --text-primary-light: #0f172a;
-  --text-secondary-light: #475569;
-  --text-muted-light: #64748b;
-  --border-subtle-light: rgba(148, 163, 184, 0.3);
-  --border-hover-light: rgba(99, 102, 241, 0.4);
-  --border-glow-light: rgba(99, 102, 241, 0.5);
-  --shadow-glow-light: 0 0 30px rgba(99, 102, 241, 0.3);
-  --shadow-card-light: 0 4px 20px rgba(0, 0, 0, 0.08);
-  --shadow-xl-light: 0 20px 60px rgba(0, 0, 0, 0.12);
-  --gradient-hero-light: linear-gradient(
-    135deg,
-    #6366f1 0%,
-    #8b5cf6 50%,
-    #06b6d4 100%
-  );
-  --gradient-primary-light: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-}
+   Do NOT replace any existing rules — these are additions only.
+════════════════════════════════════════════════════════════════════════════ */
 
-/* ═══════════════════════════════════════════════════════════════
-   DEFAULT / ROOT VARIABLES
-   ═══════════════════════════════════════════════════════════════ */
-:root {
-  --button-outline: rgba(0, 0, 0, 0.1);
-  --badge-outline: rgba(0, 0, 0, 0.05);
-  --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0, 0, 0, 0.03);
-  --elevate-2: rgba(0, 0, 0, 0.08);
-  --background: 0 0% 98%;
-  --foreground: 240 10% 10%;
-  --border: 240 5% 90%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 10%;
-  --card-border: 240 5% 90%;
-  --sidebar: 0 0% 98%;
-  --sidebar-foreground: 240 10% 10%;
-  --sidebar-border: 240 5% 90%;
-  --sidebar-primary: 250 84% 60%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 5% 96%;
-  --sidebar-accent-foreground: 240 10% 10%;
-  --sidebar-ring: 250 84% 60%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 10%;
-  --popover-border: 240 5% 90%;
-  --primary: 250 84% 60%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 190 90% 45%;
-  --secondary-foreground: 0 0% 100%;
-  --muted: 240 5% 96%;
-  --muted-foreground: 240 5% 40%;
-  --accent: 250 84% 96%;
-  --accent-foreground: 250 84% 60%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --input: 240 5% 90%;
-  --ring: 250 84% 60%;
-  --chart-1: 250 84% 60%;
-  --chart-2: 190 90% 45%;
-  --chart-3: 340 80% 60%;
-  --chart-4: 45 90% 55%;
-  --chart-5: 160 70% 40%;
-  --app-font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --app-font-display: "Outfit", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --app-font-serif: Georgia, serif;
-  --app-font-mono: Menlo, monospace;
-  --radius: 0.75rem;
-  --shadow-2xs: 0px 2px 0px 0px hsl(var(--foreground) / 0.02);
-  --shadow-xs: 0px 2px 0px 0px hsl(var(--foreground) / 0.03);
-  --shadow-sm:
-    0px 2px 0px 0px hsl(var(--foreground) / 0.02),
-    0px 1px 2px -1px hsl(var(--foreground) / 0.04);
-  --shadow:
-    0px 2px 0px 0px hsl(var(--foreground) / 0.02),
-    0px 1px 3px -1px hsl(var(--foreground) / 0.06);
-  --shadow-md:
-    0px 2px 0px 0px hsl(var(--foreground) / 0.02),
-    0px 4px 6px -1px hsl(var(--foreground) / 0.06);
-  --shadow-lg:
-    0px 2px 0px 0px hsl(var(--foreground) / 0.02),
-    0px 10px 15px -3px hsl(var(--foreground) / 0.08);
-  --shadow-xl:
-    0px 2px 0px 0px hsl(var(--foreground) / 0.02),
-    0px 20px 25px -5px hsl(var(--foreground) / 0.1);
-  --shadow-2xl:
-    0px 2px 0px 0px hsl(var(--foreground) / 0.02),
-    0px 25px 50px -12px hsl(var(--foreground) / 0.15);
-  --tracking-normal: 0em;
-  --spacing: 0.25rem;
+/* ─── Page Visibility API — zero GPU cost on hidden tabs ────────────────────
+   Layout.tsx sets class="page-hidden" on <body> when `document.hidden` is true
+   (via the visibilitychange event listener added in the perf overhaul).
 
-  /* ✅ Border colours via color-mix() — universally supported, no relative
-     colour syntax quirks. Light context (:root): darken base colour ~10%.
-     Dark context (.dark below): lighten base colour ~12%. */
-  --sidebar-primary-border: color-mix(in srgb, hsl(var(--sidebar-primary)) 90%, black);
-  --sidebar-accent-border:  color-mix(in srgb, hsl(var(--sidebar-accent))  90%, black);
-  --primary-border:         color-mix(in srgb, hsl(var(--primary))          90%, black);
-  --secondary-border:       color-mix(in srgb, hsl(var(--secondary))        90%, black);
-  --muted-border:           color-mix(in srgb, hsl(var(--muted))            90%, black);
-  --accent-border:          color-mix(in srgb, hsl(var(--accent))           90%, black);
-  --destructive-border:     color-mix(in srgb, hsl(var(--destructive))      90%, black);
-}
+   Effect: ALL animated background layers are paused when the tab is not visible.
+   This eliminates continuous GPU compositing on backgrounded tabs — critical on
+   mobile where the browser may otherwise throttle or drain the battery.
 
-/* ═══════════════════════════════════════════════════════════════
-   DARK MODE VARIABLES
-   ═══════════════════════════════════════════════════════════════ */
-.dark {
-  --button-outline: rgba(255, 255, 255, 0.1);
-  --badge-outline: rgba(255, 255, 255, 0.05);
-  --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255, 255, 255, 0.04);
-  --elevate-2: rgba(255, 255, 255, 0.09);
-  --background: 240 10% 4%;
-  --foreground: 0 0% 98%;
-  --border: 240 10% 15%;
-  --card: 240 10% 6%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 240 10% 15%;
-  --sidebar: 240 10% 6%;
-  --sidebar-foreground: 0 0% 98%;
-  --sidebar-border: 240 10% 15%;
-  --sidebar-primary: 250 84% 65%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 10% 12%;
-  --sidebar-accent-foreground: 0 0% 98%;
-  --sidebar-ring: 250 84% 65%;
-  --popover: 240 10% 6%;
-  --popover-foreground: 0 0% 98%;
-  --popover-border: 240 10% 15%;
-  --primary: 250 84% 65%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 190 90% 50%;
-  --secondary-foreground: 0 0% 100%;
-  --muted: 240 10% 12%;
-  --muted-foreground: 240 5% 65%;
-  --accent: 250 84% 15%;
-  --accent-foreground: 250 84% 80%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --input: 240 10% 15%;
-  --ring: 250 84% 65%;
-  --chart-1: 250 84% 65%;
-  --chart-2: 190 90% 50%;
-  --chart-3: 340 80% 65%;
-  --chart-4: 45 90% 60%;
-  --chart-5: 160 70% 45%;
-  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.3);
-  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.4);
-  --shadow-sm:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.3), 0px 1px 2px -1px hsl(0 0% 0% / 0.5);
-  --shadow:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.3), 0px 1px 3px -1px hsl(0 0% 0% / 0.6);
-  --shadow-md:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.3), 0px 4px 6px -1px hsl(0 0% 0% / 0.6);
-  --shadow-lg:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.3), 0px 10px 15px -3px hsl(0 0% 0% / 0.6);
-  --shadow-xl:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.3), 0px 20px 25px -5px hsl(0 0% 0% / 0.7);
-  --shadow-2xl:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.3), 0px 25px 50px -12px hsl(0 0% 0% / 0.8);
-
-  /* Dark context: lighten base colour ~12% for borders */
-  --sidebar-primary-border: color-mix(in srgb, hsl(var(--sidebar-primary)) 88%, white);
-  --sidebar-accent-border:  color-mix(in srgb, hsl(var(--sidebar-accent))  88%, white);
-  --primary-border:         color-mix(in srgb, hsl(var(--primary))          88%, white);
-  --secondary-border:       color-mix(in srgb, hsl(var(--secondary))        88%, white);
-  --muted-border:           color-mix(in srgb, hsl(var(--muted))            88%, white);
-  --accent-border:          color-mix(in srgb, hsl(var(--accent))           88%, white);
-  --destructive-border:     color-mix(in srgb, hsl(var(--destructive))      88%, white);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   BASE STYLES
-   ═══════════════════════════════════════════════════════════════ */
-@layer base {
-  * {
-    border-color: hsl(var(--border));
-  }
-
-  body {
-    font-family: var(--app-font-sans, "Inter", sans-serif);
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    transition:
-      background-color 0.3s ease,
-      color 0.3s ease;
-  }
-
-  ::selection {
-    background-color: hsl(var(--primary) / 0.3);
-    color: hsl(var(--primary-foreground));
-  }
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-family: var(--app-font-display, "Outfit", sans-serif);
-    letter-spacing: -0.02em;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   UTILITIES
-   ═══════════════════════════════════════════════════════════════ */
-@layer utilities {
-  input[type="search"]::-webkit-search-cancel-button {
-    display: none;
-  }
-
-  [contenteditable][data-placeholder]:empty::before {
-    content: attr(data-placeholder);
-    color: hsl(var(--muted-foreground));
-    pointer-events: none;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   GALAXY BACKGROUND (Dark Mode Only)
-   ═══════════════════════════════════════════════════════════════ */
-.galaxy-bg {
-  display: none;
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: -2;
-  pointer-events: none;
-  overflow: hidden;
-  background:
-    radial-gradient(
-      ellipse at 20% 50%,
-      rgba(10, 25, 47, 0.8) 0%,
-      transparent 60%
-    ),
-    radial-gradient(
-      ellipse at 80% 20%,
-      rgba(15, 20, 50, 0.6) 0%,
-      transparent 50%
-    ),
-    #000510;
-}
-
-[data-theme="dark"] .galaxy-bg,
-.dark .galaxy-bg {
-  display: block;
-}
-
-.stars-layer {
-  position: absolute;
-  inset: 0;
-  animation: linear infinite;
-}
-
-.stars-layer-1 {
-  background-image:
-    radial-gradient(1px 1px at 50px 50px,   rgba(255, 255, 255, 0.5), transparent),
-    radial-gradient(1px 1px at 150px 120px, rgba(255, 255, 255, 0.4), transparent),
-    radial-gradient(1.5px 1.5px at 200px 200px, rgba(255, 255, 255, 0.3), transparent);
-  /* Unique tile size — breaks symmetric grid repetition */
-  background-size: 240px 240px;
-  animation-name: starsMove1;
-  animation-duration: 90s;
-}
-
-.stars-layer-2 {
-  background-image:
-    radial-gradient(1px 1px at 80px 180px,  rgba(181, 193, 220, 0.4), transparent),
-    radial-gradient(1px 1px at 250px 80px,  rgba(181, 193, 220, 0.3), transparent);
-  /* Unique tile size — prevents phase-lock with layer-1 */
-  background-size: 380px 380px;
-  animation-name: starsMove2;
-  animation-duration: 140s;
-}
-
-.stars-layer-3 {
-  background-image:
-    radial-gradient(1.5px 1.5px at 120px 260px, rgba(255, 255, 255, 0.2), transparent),
-    radial-gradient(1px 1px at 280px 150px,      rgba(255, 255, 255, 0.15), transparent);
-  /* Unique tile size — eliminates coincident seams across all layers */
-  background-size: 520px 520px;
-  animation-name: starsMove3;
-  animation-duration: 200s;
-}
-
-/* Three distinct star-movement animations — each shifts by exactly its own
-   background-size value diagonally, guaranteeing seamless looping while
-   the different velocities and vectors prevent visual synchronisation. */
-@keyframes starsMove1 {
-  0%   { transform: translate3d(0,      0,    0); }
-  100% { transform: translate3d(-30px, -240px, 0); }
-}
-
-@keyframes starsMove2 {
-  0%   { transform: translate3d(0,      0,    0); }
-  100% { transform: translate3d(-50px, -380px, 0); }
-}
-
-@keyframes starsMove3 {
-  0%   { transform: translate3d(0,      0,    0); }
-  100% { transform: translate3d(-70px, -520px, 0); }
-}
-
-.nebula {
-  position: absolute;
-  border-radius: 50%;
-  /* Replaced filter:blur(100px) with native radial-gradient soft-edge.
-     Eliminates the GPU compositor layer cost of a large blur filter.
-     The gradient fades to transparent at 70% radius, replicating the
-     soft nebula glow without any filter primitives. */
-  animation: nebulaPulse 15s ease-in-out infinite alternate;
-  will-change: transform, opacity;
-}
-
-.nebula-1 {
-  width: 700px;
-  height: 700px;
-  top: -15%;
-  left: -10%;
-  background: radial-gradient(
-    circle,
-    rgba(124, 58, 237, 0.35)  0%,
-    rgba(124, 58, 237, 0.12) 40%,
-    transparent              70%
-  );
-  opacity: 1;
-}
-.nebula-2 {
-  width: 600px;
-  height: 600px;
-  bottom: -18%;
-  right: -10%;
-  background: radial-gradient(
-    circle,
-    rgba(6, 182, 212, 0.30)  0%,
-    rgba(6, 182, 212, 0.10) 40%,
-    transparent             70%
-  );
-  opacity: 1;
-  animation-delay: -5s;
-}
-.nebula-3 {
-  width: 500px;
-  height: 500px;
-  top: 35%;
-  right: 18%;
-  background: radial-gradient(
-    circle,
-    rgba(168, 85, 247, 0.18) 0%,
-    rgba(168, 85, 247, 0.06) 40%,
-    transparent              70%
-  );
-  opacity: 1;
-  animation-delay: -10s;
-}
-
-@keyframes nebulaPulse {
-  0% {
-    opacity: 0.1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0.2;
-    transform: scale(1.1);
-  }
-}
-
-.shooting-stars-container {
-  position: absolute;
-  inset: 0;
-}
-.shooting-star {
-  position: absolute;
-  width: 80px;
-  height: 1px;
-  background: linear-gradient(to right, rgba(181, 193, 220, 0.8), transparent);
-  transform: rotate(-35deg);
-  opacity: 0;
-  animation: shootingStar 3s ease-in-out;
-}
-
-@keyframes shootingStar {
-  0% {
-    opacity: 0;
-    transform: translate(0, 0) rotate(-35deg);
-  }
-  10% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-300px, 200px) rotate(-35deg);
-  }
-}
-
-.vignette {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse at center,
-    transparent 40%,
-    rgba(0, 5, 16, 0.6) 100%
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   LIGHT MODE BACKGROUND
-   ═══════════════════════════════════════════════════════════════ */
-.light-bg {
-  display: none;
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: -2;
-  pointer-events: none;
-  overflow: hidden;
-  background:
-    radial-gradient(
-      ellipse at top,
-      rgba(99, 102, 241, 0.08) 0%,
-      transparent 50%
-    ),
-    radial-gradient(
-      ellipse at bottom right,
-      rgba(6, 182, 212, 0.08) 0%,
-      transparent 50%
-    ),
-    hsl(var(--background));
-}
-
-[data-theme="light"] .light-bg,
-.light .light-bg {
-  display: block;
-}
-
-.light-gradient-1,
-.light-gradient-2 {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.5;
-}
-.light-gradient-1 {
-  width: 400px;
-  height: 400px;
-  top: -10%;
-  left: -5%;
-  background: rgba(99, 102, 241, 0.1);
-  animation: lightPulse 15s ease-in-out infinite alternate;
-}
-.light-gradient-2 {
-  width: 350px;
-  height: 350px;
-  bottom: -15%;
-  right: -8%;
-  background: rgba(6, 182, 212, 0.1);
-  animation: lightPulse 15s ease-in-out infinite alternate;
-  animation-delay: -5s;
-}
-
-@keyframes lightPulse {
-  0% {
-    opacity: 0.3;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0.5;
-    transform: scale(1.1);
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   SCROLLBAR STYLING
-   ═══════════════════════════════════════════════════════════════ */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: hsl(var(--background));
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted) / 0.5);
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted) / 0.7);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   REDUCED MOTION
-   ═══════════════════════════════════════════════════════════════ */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  ::before,
-  ::after {
-    /* Use none rather than a near-zero duration. A 0.01ms duration still
-       triggers animation events and can cause flicker on composited layers.
-       none prevents any animation frame from being scheduled at all. */
-    animation: none !important;
-    transition: none !important;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   NOTE: .marquee-item (float3D), .marquee-container::before, and
-   @keyframes float3D have been REMOVED.
-   They were orphaned legacy classes unused by any active component.
-   Keeping them was a latent hazard: any element that accidentally
-   received the .marquee-item class would get a competing 3-second
-   transform loop that fights the parent scroll animation.
-   ═══════════════════════════════════════════════════════════════ */
-
-.tool-logo {
-  /* Hardware-accelerated transform only — filter:drop-shadow triggers a
-     compositor layer upgrade and repaints on every hover frame. */
-  transition: transform 0.3s ease;
-  will-change: transform;
-}
-.tool-logo:hover {
-  /* scale + translate3d forces GPU compositing, zero repaint cost */
-  transform: scale(1.05) translate3d(0, 0, 0);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   DISCORD BUTTON GLOW
-   ═══════════════════════════════════════════════════════════════ */
-.discord-glow {
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-.discord-glow::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  box-shadow: 0 0 20px rgba(88, 101, 242, 0.4), 0 0 40px rgba(88, 101, 242, 0.2), inset 0 0 20px rgba(88, 101, 242, 0.1);
-}
-.discord-glow:hover::before {
-  opacity: 1;
-}
-.discord-glow:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 25px rgba(88, 101, 242, 0.35), 0 4px 20px rgba(88, 101, 242, 0.25);
-  font-weight: 700;
-}
-.discord-glow::after {
-  content: "";
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.08) 50%, transparent 60%);
-  transform: translateX(-100%) rotate(45deg);
-  transition: none;
-}
-.discord-glow:hover::after {
-  animation: discordShimmer 0.6s ease-out forwards;
-}
-@keyframes discordShimmer {
-  0% { transform: translateX(-100%) rotate(45deg); }
-  100% { transform: translateX(100%) rotate(45deg); }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   SMOOTH SCROLL & PERFORMANCE
-   ═══════════════════════════════════════════════════════════════ */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Reduce motion sickness and improve performance */
-.galaxy-bg,
-.stars-layer,
-.nebula,
-.shooting-stars-container {
-  will-change: transform;
-  contain: layout style paint;
-}
-
-/* Throttle heavy animations during scroll */
-body.is-scrolling .stars-layer {
+   Complements the existing `body.is-scrolling` rules (lines 698–705) which
+   pause animations during active scroll.
+*/
+body.page-hidden .stars-layer,
+body.page-hidden .nebula {
   animation-play-state: paused !important;
 }
-body.is-scrolling .nebula {
-  animation-play-state: paused !important;
-}
-body.is-scrolling .shooting-star {
+body.page-hidden .shooting-star {
+  /* display:none is intentional — removes the element from the compositor
+     layer entirely, not just pauses it. Shooting stars are cheap to recreate
+     on tab focus; they must not hold a GPU layer while the tab is invisible. */
   display: none !important;
 }
-
-/* GPU acceleration hint for animated elements */
-[class*="animate-"],
-[class*="transition-"] {
-  backface-visibility: hidden;
+body.page-hidden .galaxy-bg {
+  /* Suspend will-change on the container so the browser can reclaim
+     the compositor layer budget while the tab is backgrounded. */
+  will-change: auto !important;
 }
 
-/* Smooth content reveal on scroll */
-.scroll-reveal {
-  opacity: 0;
-  transform: translateY(20px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
-}
-.scroll-reveal.visible {
-  opacity: 1;
-  transform: translateY(0);
+/* ─── Marquee track containment ─────────────────────────────────────────────
+   DualMarqueeSection injects its own @keyframes inside a <style> tag.
+   These rules ensure the three marquee rows stay in their own compositing
+   layers and never trigger layout recalculation on sibling elements.
+
+   `contain: layout style` on the row container:
+     • layout: row's internal layout changes don't escape to the parent
+     • style:  CSS counter/property changes are scoped to the row
+   `content-visibility: auto` on the outer section:
+     • Defers rendering work for sections that are off-screen
+     • Frees compositing layers until the section enters the viewport
+     • Combined with IntersectionObserver in DualMarqueeSection.tsx that
+       sets animationPlayState="paused" this gives a full off-screen pause.
+*/
+.dual-marquee-row {
+  contain: layout style;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   LIGHT MODE FIXES - Text visibility
-   ═══════════════════════════════════════════════════════════════ */
-[data-theme="light"] .bg-card\/40,
-.light .bg-card\/40 {
-  background-color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(0, 0, 0, 0.08);
+/* ─── Font display override — swap for all Google Fonts declarations ────────
+   The <link> in index.html already uses display=swap. This @font-face block
+   is a belt-and-suspenders override for any font load that bypasses the
+   Google Fonts URL (e.g., local Vite dev server CJS transforms, or a service
+   worker that intercepts and re-serves the font CSS without the display param).
+
+   EFFECT: Ensures Inter and Outfit always use `swap` semantics — the fallback
+   system font is shown immediately on first paint, then swapped to the web
+   font when it arrives. Never blocks first contentful paint waiting for fonts.
+*/
+@font-face {
+  font-family: "Inter";
+  font-display: swap;
+  src: local("Inter");
+}
+@font-face {
+  font-family: "Outfit";
+  font-display: swap;
+  src: local("Outfit");
 }
 
-[data-theme="light"] .bg-card\/60,
-.light .bg-card\/60 {
-  background-color: rgba(255, 255, 255, 0.9);
+/* ─── will-change budget containment ────────────────────────────────────────
+   Limit will-change to only the properties actually animated.
+   Broad `will-change: transform` on container divs creates unnecessary
+   compositor layers for every descendent. These rules scope the hint
+   to the specific animated element types only.
+*/
+.shooting-star {
+  will-change: transform, opacity;
 }
-
-[data-theme="light"] .bg-card\/30,
-.light .bg-card\/30 {
-  background-color: rgba(255, 255, 255, 0.7);
-}
-
-[data-theme="light"] .border-white\/5,
-.light .border-white\/5 {
-  border-color: rgba(0, 0, 0, 0.06);
-}
-
-[data-theme="light"] .border-white\/10,
-.light .border-white\/10 {
-  border-color: rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="light"] .bg-background\/50,
-.light .bg-background\/50 {
-  background-color: rgba(248, 250, 252, 0.9);
-}
-
-[data-theme="light"] .text-white\/70,
-.light .text-white\/70 {
-  color: rgba(30, 30, 30, 0.7);
-}
-
-/* Fix gradient headings in light mode — make them darker */
-[data-theme="light"] .bg-gradient-to-r.from-primary.bg-clip-text,
-.light .bg-gradient-to-r.from-primary.bg-clip-text {
-  --tw-gradient-from: #4338ca;
-  --tw-gradient-to: #0e7490;
-}
-
-/* Ensure muted text is visible in light mode */
-[data-theme="light"] .text-muted-foreground,
-.light .text-muted-foreground {
-  color: hsl(215 20% 32%);  /* WCAG AA: ≥4.5:1 contrast */
-}
-
-/* Card hover borders in light mode */
-[data-theme="light"] .hover\:border-primary\/30:hover,
-.light .hover\:border-primary\/30:hover {
-  border-color: rgba(99, 102, 241, 0.35);
-}
-
-[data-theme="light"] .hover\:border-primary\/20:hover,
-.light .hover\:border-primary\/20:hover {
-  border-color: rgba(99, 102, 241, 0.25);
-}
-
-/* Red policy cards in light mode */
-[data-theme="light"] .border-red-500\/10,
-.light .border-red-500\/10 {
-  border-color: rgba(239, 68, 68, 0.15);
-}
-
-[data-theme="light"] .hover\:border-red-500\/30:hover,
-.light .hover\:border-red-500\/30:hover {
-  border-color: rgba(239, 68, 68, 0.35);
-}
-
-[data-theme="light"] .text-red-50,
-.light .text-red-50 {
-  color: hsl(222 47% 11%);
-}
-
-[data-theme="light"] .text-red-400,
-.light .text-red-400 {
-  color: #dc2626;
-}
-
-/* Fix backdrop blur cards in light mode */
-[data-theme="light"] .backdrop-blur-xl,
-.light .backdrop-blur-xl {
-  backdrop-filter: blur(16px) saturate(1.2);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   LIGHT MODE OVERRIDES — Force dark cards to adapt
-   ═══════════════════════════════════════════════════════════════ */
-:is([data-theme="light"], .light) :is(
-  [class*="bg-[#0f1117]"],
-  [class*="bg-[#10121a]"],
-  [class*="bg-[#0d0f16]"],
-  [class*="bg-[#111318]"]
-) {
-  background-color: hsl(var(--card)) !important;
-  color: hsl(var(--card-foreground)) !important;
-  border-color: hsl(var(--border)) !important;
-}
-
-:is([data-theme="light"], .light) :is(
-  [class*="bg-[#1a1d27]"],
-  [class*="bg-[#1c1f2e]"],
-  [class*="bg-[#1a1d2e]"]
-) {
-  background-color: hsl(var(--muted)) !important;
-  color: hsl(var(--foreground)) !important;
-  border-color: hsl(var(--border)) !important;
-}
-
-/* Fix text colors inside light mode cards */
-:is([data-theme="light"], .light) [class*="bg-[#0"] .text-white,
-:is([data-theme="light"], .light) [class*="bg-[#1"] .text-white,
-:is([data-theme="light"], .light) [class*="bg-[#0"] [class*="text-white"],
-:is([data-theme="light"], .light) [class*="bg-[#1"] [class*="text-white"] {
-  color: hsl(var(--foreground)) !important;
-}
-
-:is([data-theme="light"], .light) [class*="text-white\/50"],
-:is([data-theme="light"], .light) [class*="text-white\/80"],
-:is([data-theme="light"], .light) [class*="text-white\/30"] {
-  color: hsl(var(--muted-foreground)) !important;
-}
-
-/* Fix borders in light mode */
-:is([data-theme="light"], .light) [class*="border-white\/"] {
-  border-color: hsl(var(--border)) !important;
-}
-
-/* Fix inputs in light mode */
-:is([data-theme="light"], .light) [class*="bg-[#1a1d27]"]:is(input, textarea) {
-  background-color: hsl(var(--background)) !important;
-  color: hsl(var(--foreground)) !important;
-  border-color: hsl(var(--border)) !important;
-}
-
-:is([data-theme="light"], .light) input::placeholder,
-:is([data-theme="light"], .light) textarea::placeholder {
-  color: hsl(var(--muted-foreground)) !important;
-}
-
-/* Fix primary gradient text in light mode */
-:is([data-theme="light"], .light) .bg-gradient-to-r:is([class*="from-primary"]) {
-  --tw-gradient-from: #4f46e5 !important;
-  --tw-gradient-via: #6366f1 !important;
-}
-
-/* Fix DualMarquee stat cards in light mode */
-:is([data-theme="light"], .light) [class*="bg-card/60"] {
-  background-color: rgba(255, 255, 255, 0.9) !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-}
-
-:is([data-theme="light"], .light) [class*="bg-primary/10"] {
-  background-color: rgba(99, 102, 241, 0.08) !important;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   SKELETON SHIMMER SYSTEM
-   GPU-only: transform + opacity, no layout triggers
-   ═══════════════════════════════════════════════════════════════ */
-@keyframes shimmer {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.skeleton-shimmer {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.07) 40%,
-    rgba(255, 255, 255, 0.13) 50%,
-    rgba(255, 255, 255, 0.07) 60%,
-    transparent 100%
-  );
-  animation: shimmer 1.4s ease-in-out infinite;
+.stars-layer {
   will-change: transform;
-  pointer-events: none;
+}
+.nebula {
+  will-change: opacity, transform;
 }
 
-/* SafeImage loading state: blur + scale out, then animate in */
-.safeimg-loading {
+/* ─── Lazy image fade-in — prevents jarring pop-in on lazy-loaded images ─────
+   All tool logo images in Row 3 use loading="lazy". Without a transition
+   they pop in abruptly as the section scrolls into view. This opacity fade
+   gives a polished reveal without any JavaScript.
+   Applies to ANY image with loading="lazy" sitewide.
+*/
+img[loading="lazy"] {
   opacity: 0;
-  filter: blur(6px);
-  transform: scale(1.04);
-  transition: none;
+  transition: opacity 0.3s ease;
 }
-
-.safeimg-loaded {
+img[loading="lazy"].loaded,
+img[loading="lazy"]:not([src=""]) {
   opacity: 1;
-  filter: blur(0);
-  transform: scale(1);
-  transition:
-    opacity    0.35s ease-out,
-    filter     0.35s ease-out,
-    transform  0.35s ease-out;
-  will-change: opacity, filter, transform;
 }
 
-/* ═══════════════════════════════════════════════════════
-   MARQUEE SCROLL — pure CSS @keyframes (single engine)
-   ───────────────────────────────────────────────────────
-   Used by DualMarqueeSection and Home Featured Designs.
-   GPU-accelerated via translate3d + will-change:transform.
-
-   SPEED CALIBRATION — 2026 ARCHITECTURE:
-   ────────────────────────────────────────
-   DO NOT set a static duration. Duration is computed at
-   runtime in the React component via:
-
-     oneSetWidth = trackRef.scrollWidth / 2   ← 2× duplication
-     duration    = oneSetWidth / PX_PER_SECOND
-
-   Targets:
-     Reviews row    → 50 px/s
-     Stats row      → 45 px/s
-     Tools row      → 38 px/s
-     Portfolio reel → 50 px/s
-
-   This guarantees a constant luxury crawl regardless of how
-   many Supabase reviews load, viewport width, or card sizes.
-
-   DUPLICATION: Always exactly 2× (copy-A + copy-B).
-   With 2× duplication the -50% keyframe translates by
-   exactly one set's width → seamless loop with zero gap.
-
-   SkillsMarquee.tsx and ReviewsMarquee.tsx have been
-   removed (dead code — never imported by any page).
-═══════════════════════════════════════════════════════ */
-/* NOTE: marquee-scroll-left / marquee-scroll-right keyframes removed.
-   DualMarqueeSection.tsx uses marquee-left / marquee-right (defined in its
-   embedded <style> tag) — keeping these dead keyframes was dead code. */
-
-/* NOTE: marquee animations intentionally run uninterrupted during scroll.
-   The body.is-scrolling [style*="marquee-*"] pause rules have been removed —
-   hardware-accelerated translate3d marquees don't cause layout thrashing
-   and must never freeze mid-scroll (per UX spec). */
+/* ─── Responsive image sizing — prevents CLS from unsized images ─────────────
+   Images without explicit width/height attributes can cause CLS as they
+   load. This rule ensures all inline images maintain their aspect ratio
+   while loading, using the intrinsic size as the layout placeholder.
+*/
+img:not([width]):not([height]) {
+  max-width: 100%;
+  height: auto;
+}

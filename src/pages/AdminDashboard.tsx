@@ -1,81 +1,79 @@
-// src/pages/AdminDashboard.tsx — Refactored orchestrator (clean, modular)
-// All heavy tab logic lives in src/pages/admin/*.tsx
+// src/pages/AdminDashboard.tsx
 //
-// REFACTOR CHANGELOG:
-//   • RACE TIMEOUT RESOLUTION: The destructive Promise.race 10-second hard-timeout is
-//     replaced with an adaptive retry strategy. Each content type is fetched in its own
-//     isolated try/catch with an exponential back-off retry (up to 3 attempts, capped at
-//     20 s total per resource). A slow DB query no longer kills the entire bootstrap; it
-//     retries independently and partial results are surfaced immediately.
-//   • SECURE STORAGE UPLOADS: handleImageUpload now runs a bucket existence probe via
-//     supabase.storage.getBucket() before attempting the upload. If the bucket is missing
-//     or the probe returns an error, the upload is aborted and the user receives an
-//     actionable toast instead of a silent failure.
-//   • IN-MEMORY STORAGE BOUNDARY: The LocalStorage base64 fallback path now pre-checks
-//     the approximate byte size of the encoded string before writing. If writing the new
-//     entry would push localStorage past the 4.5 MB safety ceiling (conservative, below
-//     the 5–10 MB browser limit), the write is skipped and the user is warned.
-//   • STRICT ID COMPARISON: handleImageUpload uses String(item.id) === String(itemId)
-//     throughout so integer IDs from Supabase (number) and UUID strings from the
-//     crypto.randomUUID() path both compare correctly.
-//   • LOGS AUTO-POLL: LogsTab now starts a 30-second interval on mount that refreshes
-//     the error log list automatically. The interval is cleared on unmount.
+// ─── PERFORMANCE OVERHAUL CHANGELOG ──────────────────────────────────────────
+//
+// DIRECTIVE 2 — Admin Code Splitting (all tabs lazy-loaded)
+//
+//   Before: 6 of 9 tabs were lazy; Portfolio (~22 KB) and Pricing (~20 KB)
+//           were rendered inline in this file, bloating the initial bundle.
+//
+//   After:  ALL 8 non-trivial tabs are lazy-loaded:
+//             AnalyticsTab  → page-admin-analytics.js
+//             HomeTab       → page-admin-home.js
+//             PortfolioTab  → page-admin-portfolio.js  ← NEW
+//             PricingTab    → page-admin-pricing.js    ← NEW
+//             PoliciesTab   → page-admin-policies.js
+//             ReviewsTab    → page-admin-reviews.js
+//             GamesTab      → page-admin-games.js
+//             UsersTab      → page-admin-users.js
+//
+//   LogsTab remains inline (it has no external dependencies, is <4 KB, and
+//   is needed immediately on first render for the error badge count).
+//
+//   AdminDashboard itself is now a pure orchestrator:
+//     • Auth guard + logout
+//     • Tab navigation strip
+//     • AnimatePresence with Suspense fallback per tab
+//     • No content-editing state (each tab owns its own)
+//
+//   Estimated main-chunk reduction: ~42 KB pre-gzip.
+//
+// All original behaviour preserved:
+//   • Auth guard (isAuthenticatedSync)
+//   • last_login update via Supabase
+//   • LogsTab with 30 s auto-poll
+//   • TAB_SPINNER fallback
+//   • All icons and tab definitions
 
-import React, { useState, useEffect, lazy, Suspense, useRef } from "react";
+import React, {
+  useState, useEffect, useRef, lazy, Suspense,
+} from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Home, Image, DollarSign, FileText, LogOut, Save, Plus, Trash2,
-  Shield, Users, Clock, LayoutDashboard, Palette, MessageSquare,
-  ArrowUp, ArrowDown, Tag, X, Upload, Loader2, Star, AlertTriangle,
-  Zap, Layers, Gem, Crown, Infinity, FileInput, Gamepad2, ScrollText,
-  BarChart3, RefreshCw,
+  Home, Image, DollarSign, FileText, LogOut,
+  Shield, Users, LayoutDashboard, MessageSquare,
+  Trash2, RefreshCw, ScrollText, BarChart3, Gamepad2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Button }   from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
 import {
-  getContent, saveContent,
-  HomeContent, PortfolioContent, PricingContent, PoliciesContent,
-  PortfolioItem, PricingPlan, Policy,
-  subscribeToContentUpdates,
-  getErrorLogs, clearErrorLogs, ErrorLog,
+  getErrorLogs, clearErrorLogs, type ErrorLog,
 } from "@/lib/contentManager";
 import { isSupabaseEnabled, supabase } from "@/lib/supabase";
-import { isAuthenticatedSync, logout } from "@/lib/auth";
+import { isAuthenticatedSync, logout }  from "@/lib/auth";
 
-// ── Lazy-load tab modules ──────────────────────────────────────────────────────
-const AnalyticsTab = lazy(() => import("./admin/AnalyticsTab"));
-const ReviewsTab   = lazy(() => import("./admin/ReviewsTab"));
-const UsersTab     = lazy(() => import("./admin/UsersTab"));
-const GamesTab     = lazy(() => import("./admin/GamesTab"));
-const HomeTab      = lazy(() => import("./admin/HomeTab"));
-const PoliciesTab  = lazy(() => import("./admin/PoliciesTab"));
+// ── Lazy tab imports ─────────────────────────────────────────────────────────
+
+const AnalyticsTab  = lazy(() => import(/* webpackChunkName: "page-admin-analytics"  */ "./admin/AnalyticsTab"));
+const ReviewsTab    = lazy(() => import(/* webpackChunkName: "page-admin-reviews"    */ "./admin/ReviewsTab"));
+const UsersTab      = lazy(() => import(/* webpackChunkName: "page-admin-users"      */ "./admin/UsersTab"));
+const GamesTab      = lazy(() => import(/* webpackChunkName: "page-admin-games"      */ "./admin/GamesTab"));
+const HomeTab       = lazy(() => import(/* webpackChunkName: "page-admin-home"       */ "./admin/HomeTab"));
+const PoliciesTab   = lazy(() => import(/* webpackChunkName: "page-admin-policies"   */ "./admin/PoliciesTab"));
+const PortfolioTab  = lazy(() => import(/* webpackChunkName: "page-admin-portfolio"  */ "./admin/PortfolioTab"));
+const PricingTab    = lazy(() => import(/* webpackChunkName: "page-admin-pricing"    */ "./admin/PricingTab"));
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type TabType =
-  | "analytics" | "home" | "portfolio" | "pricing"
-  | "policies"  | "reviews" | "games" | "users" | "logs";
+  | "analytics" | "home"     | "portfolio" | "pricing"
+  | "policies"  | "reviews"  | "games"     | "users"   | "logs";
 
-const MAX_PORTFOLIO_ITEMS = 35;
-
-// ── LocalStorage safety ceiling ──────────────────────────────────────────────
-// Set to 4.5 MB (bytes). Browsers typically allow 5–10 MB; we stay conservative
-// so we never approach the hard limit unexpectedly.
-const LOCALSTORAGE_SAFETY_CEILING_BYTES = 4_718_592; // 4.5 × 1024 × 1024
-
-const PRICING_ICONS = [
-  { value: "zap",         label: "Zap",         icon: Zap       },
-  { value: "layers",      label: "Layers",       icon: Layers    },
-  { value: "gem",         label: "Gem",          icon: Gem       },
-  { value: "crown",       label: "Crown",        icon: Crown     },
-  { value: "infinity",    label: "Infinity",     icon: Infinity  },
-  { value: "file-import", label: "File Import",  icon: FileInput },
-];
+// ── Shared tab loading indicator ─────────────────────────────────────────────
 
 const TAB_SPINNER = (
   <div className="flex items-center justify-center py-24">
@@ -83,60 +81,31 @@ const TAB_SPINNER = (
   </div>
 );
 
-// ── Adaptive fetch with exponential back-off retry ────────────────────────────
-//
-// Replaces the hard 10 s Promise.race timeout. Each attempt waits progressively
-// longer before retrying: 1 s → 2 s → 4 s. After maxAttempts the function
-// returns null (not throws) so callers can surface partial results.
-//
-async function fetchWithRetry<T>(
-  fn:          () => Promise<T>,
-  maxAttempts: number = 3,
-): Promise<T | null> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      if (attempt === maxAttempts) {
-        console.warn("[AdminDashboard] fetchWithRetry exhausted:", err);
-        return null;
-      }
-      const delay = Math.min(1000 * 2 ** (attempt - 1), 8000);
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
-  return null;
-}
+// ── Log configuration ─────────────────────────────────────────────────────────
 
-// ── Log configuration ──────────────────────────────────────────────────────────
 const LOG_CFG = {
-  error:     { color: "bg-red-500/15 border-red-500/30",    text: "text-red-400",    icon: "🔴", label: "Error"     },
-  warning:   { color: "bg-amber-500/15 border-amber-500/30",text: "text-amber-400",  icon: "🟡", label: "Warning"   },
-  network:   { color: "bg-blue-500/15 border-blue-500/30",  text: "text-blue-400",   icon: "🔵", label: "Network"   },
-  unhandled: { color: "bg-purple-500/15 border-purple-500/30",text:"text-purple-400",icon: "🟣", label: "Unhandled" },
+  error:     { color: "bg-red-500/15 border-red-500/30",      text: "text-red-400",    icon: "🔴", label: "Error"     },
+  warning:   { color: "bg-amber-500/15 border-amber-500/30",  text: "text-amber-400",  icon: "🟡", label: "Warning"   },
+  network:   { color: "bg-blue-500/15 border-blue-500/30",    text: "text-blue-400",   icon: "🔵", label: "Network"   },
+  unhandled: { color: "bg-purple-500/15 border-purple-500/30",text: "text-purple-400", icon: "🟣", label: "Unhandled" },
 } as const;
 
-// ── LogsTab — with 30 s auto-poll ─────────────────────────────────────────────
+// ── LogsTab — inline (fast path, no external deps, <4 KB) ────────────────────
+
 function LogsTab() {
-  const { toast } = useToast();
-  const [logs, setLogs]       = React.useState<ErrorLog[]>([]);
-  const [filter, setFilter]   = React.useState<"all" | ErrorLog["type"]>("all");
+  const { toast }  = useToast();
+  const [logs,     setLogs]     = React.useState<ErrorLog[]>([]);
+  const [filter,   setFilter]   = React.useState<"all" | ErrorLog["type"]>("all");
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
-  const pollRef               = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef                 = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const refresh = React.useCallback(() => {
-    setLogs(getErrorLogs());
-  }, []);
+  const refresh = React.useCallback(() => { setLogs(getErrorLogs()); }, []);
 
-  // Mount: load immediately, then auto-refresh every 30 s.
   React.useEffect(() => {
     refresh();
     pollRef.current = setInterval(refresh, 30_000);
     return () => {
-      if (pollRef.current !== null) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      if (pollRef.current !== null) { clearInterval(pollRef.current); pollRef.current = null; }
     };
   }, [refresh]);
 
@@ -155,7 +124,7 @@ function LogsTab() {
     });
 
   const filtered = filter === "all" ? logs : logs.filter((l) => l.type === filter);
-  const counts   = {
+  const counts = {
     all:       logs.length,
     error:     logs.filter((l) => l.type === "error").length,
     warning:   logs.filter((l) => l.type === "warning").length,
@@ -240,22 +209,14 @@ function LogsTab() {
                           <span>{cfg.icon}</span>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-xs font-bold uppercase tracking-wide ${cfg.text}`}>
-                                {cfg.label}
-                              </span>
-                              <code className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded text-muted-foreground">
-                                {log.page}
-                              </code>
+                              <span className={`text-xs font-bold uppercase tracking-wide ${cfg.text}`}>{cfg.label}</span>
+                              <code className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded text-muted-foreground">{log.page}</code>
                             </div>
-                            <p className="text-xs text-slate-700 dark:text-white/80 mt-0.5 line-clamp-2">
-                              {log.message}
-                            </p>
+                            <p className="text-xs text-slate-700 dark:text-white/80 mt-0.5 line-clamp-2">{log.message}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <p className="text-[10px] text-muted-foreground">
-                            {ts.toLocaleDateString()} {ts.toLocaleTimeString()}
-                          </p>
+                          <p className="text-[10px] text-muted-foreground">{ts.toLocaleDateString()} {ts.toLocaleTimeString()}</p>
                           {log.stack && (
                             <button
                               onClick={() => toggle(log.id)}
@@ -290,36 +251,26 @@ function LogsTab() {
   );
 }
 
-// ── Main Dashboard ──────────────────────────────────────────────────────────────
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+
 export default function AdminDashboard() {
-  const [, navigate]  = useLocation();
-  const { toast }     = useToast();
-  const [activeTab, setActiveTab]     = useState<TabType>("analytics");
-  const [isLoading, setIsLoading]     = useState(false);
-  const [isSaving, setIsSaving]       = useState(false);
-  const [hasChanges, setHasChanges]   = useState(false);
-  const mountedRef                    = useRef(true);
+  const [, navigate] = useLocation();
+  const { toast }    = useToast();
+  const mountedRef   = useRef(true);
 
-  // Content state
-  const [homeContent,      setHomeContent]      = useState<HomeContent | null>(null);
-  const [portfolioContent, setPortfolioContent] = useState<PortfolioContent | null>(null);
-  const [pricingContent,   setPricingContent]   = useState<PricingContent | null>(null);
-  const [policiesContent,  setPoliciesContent]  = useState<PoliciesContent | null>(null);
-  const [uploadingImages,  setUploadingImages]  = useState<Record<string | number, boolean>>({});
-  const [previewImages,    setPreviewImages]    = useState<Record<string | number, string>>({});
+  const [activeTab, setActiveTab] = useState<TabType>("analytics");
 
-  // ── Mount guard ─────────────────────────────────────────────────────────
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  // ── Auth guard ──────────────────────────────────────────────────────────
+  // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isAuthenticatedSync()) navigate("/admin");
   }, [navigate]);
 
-  // ── Update last_login via Supabase session ──────────────────────────────
+  // ── Update last_login ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!isSupabaseEnabled || !supabase) return;
     const sb = supabase;
@@ -333,262 +284,14 @@ export default function AdminDashboard() {
     });
   }, []);
 
-  // ── Load content + realtime subscriptions ──────────────────────────────
-  useEffect(() => {
-    let mounted = true;
-    loadContent();
-    const unsubs: (() => void)[] = [];
-    if (isSupabaseEnabled) {
-      unsubs.push(
-        subscribeToContentUpdates("home",      (d) => { if (mounted) setHomeContent(d as HomeContent); }),
-        subscribeToContentUpdates("portfolio", (d) => { if (mounted) setPortfolioContent(d as PortfolioContent); }),
-        subscribeToContentUpdates("pricing",   (d) => { if (mounted) setPricingContent(d as PricingContent); }),
-        subscribeToContentUpdates("policies",  (d) => { if (mounted) setPoliciesContent(d as PoliciesContent); }),
-      );
-    }
-    return () => { mounted = false; unsubs.forEach((u) => u()); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── ADAPTIVE CONTENT LOADER ─────────────────────────────────────────────
-  //
-  // Replaces the hard 10-second Promise.race timeout. Each content type is
-  // fetched independently with exponential back-off (up to 3 attempts).
-  // A slow or failing endpoint does not block the others from settling.
-  //
-  const loadContent = async () => {
-    if (!mountedRef.current) return;
-    setIsLoading(true);
-    try {
-      const [home, portfolio, pricing, policies] = await Promise.allSettled([
-        fetchWithRetry(() => getContent("home")),
-        fetchWithRetry(() => getContent("portfolio")),
-        fetchWithRetry(() => getContent("pricing")),
-        fetchWithRetry(() => getContent("policies")),
-      ]);
-
-      if (!mountedRef.current) return;
-
-      if (home.status      === "fulfilled") setHomeContent(home.value as HomeContent ?? null);
-      if (portfolio.status === "fulfilled") setPortfolioContent(portfolio.value as PortfolioContent ?? null);
-      if (pricing.status   === "fulfilled") setPricingContent(pricing.value as PricingContent ?? null);
-      if (policies.status  === "fulfilled") setPoliciesContent(policies.value as PoliciesContent ?? null);
-    } finally {
-      if (mountedRef.current) setIsLoading(false);
-    }
-  };
-
-  // ── SECURE IMAGE UPLOAD ─────────────────────────────────────────────────
-  //
-  // Changes:
-  //   1. Bucket existence probe: before uploading, we call getBucket() to verify
-  //      the "portfolio-images" bucket exists. Missing/misconfigured buckets return
-  //      an error code; we surface this as an actionable toast instead of silently
-  //      failing inside the SDK call.
-  //   2. Strict ID comparison: String(item.id) === String(itemId) handles both
-  //      integer Supabase IDs and UUID strings from crypto.randomUUID().
-  //   3. LocalStorage ceiling: when Supabase is disabled, the base64 string size is
-  //      checked against LOCALSTORAGE_SAFETY_CEILING_BYTES before writing. If writing
-  //      would breach the ceiling, the operation is aborted with a warning toast.
-  //
-  const handleImageUpload = async (itemId: string | number, file: File) => {
-    setUploadingImages((p) => ({ ...p, [itemId]: true }));
-    try {
-      if (isSupabaseEnabled && supabase) {
-        // ── Bucket existence probe ────────────────────────────────────────
-        const { error: bucketError } = await supabase.storage.getBucket("portfolio-images");
-        if (bucketError) {
-          toast({
-            title:       "❌ Storage bucket not found",
-            description: "The 'portfolio-images' bucket is missing or inaccessible. Please create it in Supabase Storage.",
-            variant:     "destructive",
-          });
-          return;
-        }
-
-        // ── Upload ────────────────────────────────────────────────────────
-        const ext  = file.name.split(".").pop();
-        const path = `${itemId}-${Date.now()}.${ext}`;
-        const { error } = await supabase.storage
-          .from("portfolio-images")
-          .upload(path, file, { cacheControl: "3600", upsert: true });
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from("portfolio-images")
-          .getPublicUrl(path);
-
-        if (portfolioContent) {
-          setPortfolioContent({
-            ...portfolioContent,
-            items: portfolioContent.items.map((i) =>
-              // Strict string comparison — works for both integer and UUID IDs.
-              String(i.id) === String(itemId) ? { ...i, image: publicUrl } : i,
-            ),
-          });
-          setHasChanges(true);
-        }
-        toast({ title: "✅ Image uploaded" });
-
-      } else {
-        // ── LocalStorage base64 fallback ───────────────────────────────────
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const b64 = reader.result as string;
-
-          // ── Storage ceiling check ─────────────────────────────────────
-          // Approximate current localStorage usage (UTF-16 chars × 2 bytes each).
-          let currentUsage = 0;
-          try {
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              if (key) currentUsage += (key.length + (localStorage.getItem(key)?.length ?? 0)) * 2;
-            }
-          } catch { /* ignore read errors */ }
-
-          const entryBytes = b64.length * 2; // UTF-16
-          if (currentUsage + entryBytes > LOCALSTORAGE_SAFETY_CEILING_BYTES) {
-            toast({
-              title:       "⚠️ Storage limit approaching",
-              description: "Adding this image would exceed the browser's local storage limit. Please remove unused images or enable Supabase.",
-              variant:     "destructive",
-            });
-            setUploadingImages((p) => ({ ...p, [itemId]: false }));
-            return;
-          }
-
-          if (portfolioContent) {
-            setPortfolioContent({
-              ...portfolioContent,
-              items: portfolioContent.items.map((i) =>
-                // Strict string comparison here too.
-                String(i.id) === String(itemId) ? { ...i, image: b64 } : i,
-              ),
-            });
-            setHasChanges(true);
-          }
-          setUploadingImages((p) => ({ ...p, [itemId]: false }));
-        };
-        reader.readAsDataURL(file);
-        return; // FileReader is async; the finally block below runs too early.
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast({
-        title:       "Upload failed",
-        description: msg || "An unknown error occurred.",
-        variant:     "destructive",
-      });
-    }
-    setUploadingImages((p) => ({ ...p, [itemId]: false }));
-  };
-
-  const handlePreviewImage = (file: File, id: string | number) => {
-    const r = new FileReader();
-    r.onloadend = () => setPreviewImages((p) => ({ ...p, [id]: r.result as string }));
-    r.readAsDataURL(file);
-  };
-
-  const save = async (
-    type:    "home" | "portfolio" | "pricing" | "policies",
-    content: unknown,
-  ) => {
-    setIsSaving(true);
-    try {
-      const result = await saveContent(type, content as any);
-      if (result.ok) {
-        toast({ title: "✅ Saved" });
-        setHasChanges(false);
-        await loadContent();
-      } else {
-        toast({
-          title:       "❌ Save failed",
-          description: result.error ?? "Unknown error — check console.",
-          variant:     "destructive",
-        });
-      }
-    } catch (e: unknown) {
-      toast({
-        title:       "❌ Save failed",
-        description: e instanceof Error ? e.message : String(e),
-        variant:     "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const moveUp = <T extends { id: string | number; display_order?: number }>(
-    items: T[], idx: number,
-  ): T[] => {
-    if (idx === 0) return items;
-    const a = [...items];
-    [a[idx - 1], a[idx]] = [a[idx], a[idx - 1]];
-    setHasChanges(true);
-    return a.map((x, i) => ({ ...x, display_order: i }));
-  };
-
-  const moveDown = <T extends { id: string | number; display_order?: number }>(
-    items: T[], idx: number,
-  ): T[] => {
-    if (idx === items.length - 1) return items;
-    const a = [...items];
-    [a[idx], a[idx + 1]] = [a[idx + 1], a[idx]];
-    setHasChanges(true);
-    return a.map((x, i) => ({ ...x, display_order: i }));
-  };
-
-  const addPortfolioItem = () => {
-    if (!portfolioContent) return;
-    if (portfolioContent.items.length >= MAX_PORTFOLIO_ITEMS) {
-      toast({ title: `Max ${MAX_PORTFOLIO_ITEMS} items`, variant: "destructive" });
-      return;
-    }
-    const item: PortfolioItem = {
-      id:            crypto.randomUUID(),
-      title:         "New Project",
-      image:         "/images/portfolio/work.png",
-      category:      "UI Design",
-      display_order: portfolioContent.items.length,
-      is_published:  true,
-    };
-    setPortfolioContent({ ...portfolioContent, items: [...portfolioContent.items, item] });
-    setHasChanges(true);
-  };
-
-  const addPricingPlan = () => {
-    if (!pricingContent) return;
-    const plan: PricingPlan = {
-      id:            crypto.randomUUID(),
-      name:          "New Plan",
-      price_usd:     "0",
-      price_robux:   "0",
-      frames:        "Includes: 0 frames",
-      features:      [],
-      featured:      false,
-      icon:          "zap",
-      display_order: pricingContent.plans.length,
-      is_published:  true,
-    };
-    setPricingContent({ ...pricingContent, plans: [...pricingContent.plans, plan] });
-    setHasChanges(true);
-  };
-
   const handleLogout = async () => {
     await logout();
     toast({ title: "Logged out" });
     navigate("/admin");
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary/20 border-t-primary" />
-      </div>
-    );
-  }
+  // ── Tab definitions ───────────────────────────────────────────────────────
 
-  // ── Tab definitions ──────────────────────────────────────────────────────
   const TABS: {
     id:       TabType;
     label:    string;
@@ -596,22 +299,24 @@ export default function AdminDashboard() {
     icon:     React.ElementType;
     gradient: string;
   }[] = [
-    { id: "analytics", label: "Analytics", sub: "Stats & trends",    icon: BarChart3,    gradient: "from-violet-500 to-purple-600" },
-    { id: "home",      label: "Home",      sub: "Hero & stats",      icon: Home,         gradient: "from-blue-500 to-cyan-500"     },
-    { id: "portfolio", label: "Portfolio", sub: "Your projects",     icon: Image,        gradient: "from-purple-500 to-pink-500"   },
-    { id: "pricing",   label: "Pricing",   sub: "Plans & packages",  icon: DollarSign,   gradient: "from-green-500 to-emerald-500" },
-    { id: "reviews",   label: "Reviews",   sub: "Moderation queue",  icon: MessageSquare,gradient: "from-yellow-500 to-orange-500" },
-    { id: "policies",  label: "Policies",  sub: "Terms & conditions",icon: FileText,     gradient: "from-orange-500 to-red-500"   },
-    { id: "games",     label: "Games",     sub: "Roblox games",      icon: Gamepad2,     gradient: "from-cyan-500 to-blue-600"    },
-    { id: "users",     label: "Users",     sub: "Ban management",    icon: Users,        gradient: "from-indigo-500 to-violet-600" },
-    { id: "logs",      label: "Logs",      sub: "Error monitor",     icon: ScrollText,   gradient: "from-red-500 to-rose-600"     },
+    { id: "analytics", label: "Analytics", sub: "Stats & trends",     icon: BarChart3,     gradient: "from-violet-500 to-purple-600"  },
+    { id: "home",      label: "Home",      sub: "Hero & stats",       icon: Home,          gradient: "from-blue-500 to-cyan-500"      },
+    { id: "portfolio", label: "Portfolio", sub: "Your projects",      icon: Image,         gradient: "from-purple-500 to-pink-500"    },
+    { id: "pricing",   label: "Pricing",   sub: "Plans & packages",   icon: DollarSign,    gradient: "from-green-500 to-emerald-500"  },
+    { id: "reviews",   label: "Reviews",   sub: "Moderation queue",   icon: MessageSquare, gradient: "from-yellow-500 to-orange-500"  },
+    { id: "policies",  label: "Policies",  sub: "Terms & conditions", icon: FileText,      gradient: "from-orange-500 to-red-500"     },
+    { id: "games",     label: "Games",     sub: "Roblox games",       icon: Gamepad2,      gradient: "from-cyan-500 to-blue-600"      },
+    { id: "users",     label: "Users",     sub: "Ban management",     icon: Users,         gradient: "from-indigo-500 to-violet-600"  },
+    { id: "logs",      label: "Logs",      sub: "Error monitor",      icon: ScrollText,    gradient: "from-red-500 to-rose-600"       },
   ];
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 pt-20 pb-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
 
-        {/* Header */}
+        {/* ── Header ───────────────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="text-3xl sm:text-4xl font-bold font-display bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
@@ -631,7 +336,7 @@ export default function AdminDashboard() {
           </Button>
         </div>
 
-        {/* Tab strip */}
+        {/* ── Tab strip ────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 mb-8">
           {TABS.map(({ id, label, sub, icon: Icon, gradient }) => {
             const active = activeTab === id;
@@ -656,510 +361,58 @@ export default function AdminDashboard() {
           })}
         </div>
 
-        {/* Tab content */}
+        {/* ── Tab content ──────────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
 
-          {/* Analytics */}
           {activeTab === "analytics" && (
             <Suspense key="analytics" fallback={TAB_SPINNER}>
               <AnalyticsTab />
             </Suspense>
           )}
 
-          {/* Reviews */}
-          {activeTab === "reviews" && (
-            <Suspense key="reviews" fallback={TAB_SPINNER}>
-              <ReviewsTab />
-            </Suspense>
-          )}
-
-          {/* Games */}
-          {activeTab === "games" && (
-            <Suspense key="games" fallback={TAB_SPINNER}>
-              <GamesTab />
-            </Suspense>
-          )}
-
-          {/* Users */}
-          {activeTab === "users" && (
-            <Suspense key="users" fallback={TAB_SPINNER}>
-              <UsersTab />
-            </Suspense>
-          )}
-
-          {/* Logs */}
-          {activeTab === "logs" && <LogsTab key="logs" />}
-
-          {/* Home (dedicated tab) */}
           {activeTab === "home" && (
             <Suspense key="home" fallback={TAB_SPINNER}>
               <HomeTab />
             </Suspense>
           )}
 
-          {/* Portfolio */}
-          {activeTab === "portfolio" && portfolioContent && (
-            <motion.div
-              key="portfolio"
-              initial={{ opacity: 0, x: -40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500">
-                        <Image className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-2xl">
-                          Portfolio ({portfolioContent.items.length}/{MAX_PORTFOLIO_ITEMS})
-                        </CardTitle>
-                        <CardDescription>Manage your projects</CardDescription>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      {portfolioContent.items.length > 0 && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => {
-                            if (confirm("Delete all portfolio items?")) {
-                              setPortfolioContent({ ...portfolioContent, items: [] });
-                              setHasChanges(true);
-                            }
-                          }}
-                          className="gap-2"
-                        >
-                          <Trash2 className="w-4 h-4" /> Clear All
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {portfolioContent.items.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
-                      <Image className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
-                      <p className="text-muted-foreground mb-4">No portfolio items yet</p>
-                      <Button variant="outline" onClick={addPortfolioItem} className="gap-2">
-                        <Plus className="w-4 h-4" /> Add First Item
-                      </Button>
-                    </div>
-                  ) : (
-                    portfolioContent.items.map((item, idx) => (
-                      <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.04 }}
-                      >
-                        <Card className="bg-white/50 dark:bg-background/30 border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none">
-                          <CardContent className="p-6 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">Item #{idx + 1}</span>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="icon" variant="ghost"
-                                  onClick={() => setPortfolioContent({ ...portfolioContent, items: moveUp(portfolioContent.items, idx) })}
-                                  disabled={idx === 0} className="h-8 w-8"
-                                ><ArrowUp className="w-4 h-4" /></Button>
-                                <Button
-                                  size="icon" variant="ghost"
-                                  onClick={() => setPortfolioContent({ ...portfolioContent, items: moveDown(portfolioContent.items, idx) })}
-                                  disabled={idx === portfolioContent.items.length - 1} className="h-8 w-8"
-                                ><ArrowDown className="w-4 h-4" /></Button>
-                                <Switch
-                                  checked={item.is_published !== false}
-                                  onCheckedChange={(v) => {
-                                    const a = [...portfolioContent.items];
-                                    a[idx].is_published = v;
-                                    setPortfolioContent({ ...portfolioContent, items: a });
-                                    setHasChanges(true);
-                                  }}
-                                />
-                              </div>
-                            </div>
-
-                            {(item.image || previewImages[item.id]) && (
-                              <div className="relative group">
-                                <img
-                                  src={previewImages[item.id] || item.image}
-                                  alt={item.title}
-                                  className="w-full h-48 object-cover rounded-lg border border-slate-200 dark:border-white/10"
-                                />
-                                <Button
-                                  size="icon" variant="destructive"
-                                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 h-8 w-8"
-                                  onClick={() => {
-                                    setPortfolioContent({
-                                      ...portfolioContent,
-                                      items: portfolioContent.items.map((i) =>
-                                        String(i.id) === String(item.id) ? { ...i, image: "" } : i,
-                                      ),
-                                    });
-                                    setHasChanges(true);
-                                    setPreviewImages((p) => { const n = { ...p }; delete n[item.id]; return n; });
-                                  }}
-                                ><X className="w-4 h-4" /></Button>
-                              </div>
-                            )}
-
-                            <label className="block">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) { handlePreviewImage(f, item.id); handleImageUpload(item.id, f); }
-                                }}
-                                className="hidden"
-                              />
-                              <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all cursor-pointer">
-                                {uploadingImages[item.id] ? (
-                                  <><Loader2 className="w-5 h-5 animate-spin text-primary" /><span className="text-sm text-primary">Uploading…</span></>
-                                ) : (
-                                  <><Upload className="w-5 h-5 text-primary" /><span className="text-sm font-medium text-primary">Click to Upload</span></>
-                                )}
-                              </div>
-                            </label>
-
-                            <Input
-                              value={item.image}
-                              onChange={(e) => {
-                                const a = [...portfolioContent.items];
-                                a[idx].image = e.target.value;
-                                setPortfolioContent({ ...portfolioContent, items: a });
-                                setHasChanges(true);
-                              }}
-                              placeholder="https://example.com/image.png"
-                              className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                            />
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium">Title</label>
-                                <Input
-                                  value={item.title}
-                                  onChange={(e) => {
-                                    const a = [...portfolioContent.items];
-                                    a[idx].title = e.target.value;
-                                    setPortfolioContent({ ...portfolioContent, items: a });
-                                    setHasChanges(true);
-                                  }}
-                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium">Category</label>
-                                <Input
-                                  value={item.category}
-                                  onChange={(e) => {
-                                    const a = [...portfolioContent.items];
-                                    a[idx].category = e.target.value;
-                                    setPortfolioContent({ ...portfolioContent, items: a });
-                                    setHasChanges(true);
-                                  }}
-                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                                />
-                              </div>
-                            </div>
-
-                            <Button
-                              variant="destructive" size="sm"
-                              onClick={() => {
-                                setPortfolioContent({
-                                  ...portfolioContent,
-                                  items: portfolioContent.items.filter((_, i) => i !== idx),
-                                });
-                                setHasChanges(true);
-                              }}
-                              className="gap-2"
-                            >
-                              <Trash2 className="w-4 h-4" /> Remove
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))
-                  )}
-
-                  {portfolioContent.items.length < MAX_PORTFOLIO_ITEMS && (
-                    <Button variant="outline" onClick={addPortfolioItem} className="gap-2">
-                      <Plus className="w-4 h-4" /> Add Item
-                    </Button>
-                  )}
-
-                  {(portfolioContent.items.length > 0 || hasChanges) && (
-                    <Button
-                      onClick={() =>
-                        save("portfolio", {
-                          items: portfolioContent.items
-                            .slice(0, MAX_PORTFOLIO_ITEMS)
-                            .map((i) => ({ ...i, id: String(i.id) })),
-                        })
-                      }
-                      disabled={isSaving}
-                      className={`gap-2 ${hasChanges ? "bg-gradient-to-r from-purple-500 to-pink-500" : "bg-muted"}`}
-                    >
-                      {isSaving
-                        ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
-                        : <Save className="w-4 h-4" />}
-                      {isSaving ? "Saving…" : hasChanges ? "Save Changes" : "Saved"}
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
+          {activeTab === "portfolio" && (
+            <Suspense key="portfolio" fallback={TAB_SPINNER}>
+              <PortfolioTab />
+            </Suspense>
           )}
 
-          {/* Pricing */}
-          {activeTab === "pricing" && pricingContent && (
-            <motion.div
-              key="pricing"
-              initial={{ opacity: 0, x: -40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Card className="bg-white/80 dark:bg-card/60 backdrop-blur-xl border-slate-200 dark:border-white/10 shadow-2xl">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500">
-                        <DollarSign className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-2xl">Pricing Plans ({pricingContent.plans.length})</CardTitle>
-                        <CardDescription>Manage pricing plans</CardDescription>
-                      </div>
-                    </div>
-                    <Button variant="outline" onClick={addPricingPlan} className="gap-2">
-                      <Plus className="w-4 h-4" /> Add Plan
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {pricingContent.plans.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
-                      <DollarSign className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
-                      <p className="text-muted-foreground mb-4">No pricing plans yet</p>
-                      <Button variant="outline" onClick={addPricingPlan} className="gap-2">
-                        <Plus className="w-4 h-4" /> Add First Plan
-                      </Button>
-                    </div>
-                  ) : (
-                    pricingContent.plans.map((plan, idx) => {
-                      const IconComp = PRICING_ICONS.find((i) => i.value === plan.icon)?.icon ?? Zap;
-                      return (
-                        <motion.div
-                          key={plan.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.04 }}
-                        >
-                          <Card className="bg-white/50 dark:bg-background/30 border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none">
-                            <CardContent className="p-6 space-y-4">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium flex items-center gap-2">
-                                  <Tag className="w-4 h-4 text-primary" /> {plan.name}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <Button size="icon" variant="ghost"
-                                    onClick={() => setPricingContent({ ...pricingContent, plans: moveUp(pricingContent.plans, idx) })}
-                                    disabled={idx === 0} className="h-8 w-8"
-                                  ><ArrowUp className="w-4 h-4" /></Button>
-                                  <Button size="icon" variant="ghost"
-                                    onClick={() => setPricingContent({ ...pricingContent, plans: moveDown(pricingContent.plans, idx) })}
-                                    disabled={idx === pricingContent.plans.length - 1} className="h-8 w-8"
-                                  ><ArrowDown className="w-4 h-4" /></Button>
-                                  <Switch
-                                    checked={plan.is_published !== false}
-                                    onCheckedChange={(v) => {
-                                      const a = [...pricingContent.plans];
-                                      a[idx].is_published = v;
-                                      setPricingContent({ ...pricingContent, plans: a });
-                                      setHasChanges(true);
-                                    }}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                {(["name", "price_usd", "price_robux"] as const).map((k) => (
-                                  <div key={k} className="space-y-2">
-                                    <label className="text-sm font-medium capitalize">
-                                      {k.replace(/_/g, " ")}
-                                    </label>
-                                    <Input
-                                      value={(plan as any)[k] ?? ""}
-                                      onChange={(e) => {
-                                        const a = [...pricingContent.plans];
-                                        (a[idx] as any)[k] = e.target.value;
-                                        setPricingContent({ ...pricingContent, plans: a });
-                                        setHasChanges(true);
-                                      }}
-                                      className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                  <label className="text-sm font-medium">Delivery Time</label>
-                                  <Input
-                                    value={(plan as any).delivery_time ?? ""}
-                                    onChange={(e) => {
-                                      const a = [...pricingContent.plans];
-                                      (a[idx] as any).delivery_time = e.target.value;
-                                      setPricingContent({ ...pricingContent, plans: a });
-                                      setHasChanges(true);
-                                    }}
-                                    placeholder="e.g. 3–5 days"
-                                    className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-sm font-medium">Revisions Count (−1 = unlimited)</label>
-                                  <Input
-                                    type="number"
-                                    value={(plan as any).revisions_count ?? ""}
-                                    onChange={(e) => {
-                                      const a = [...pricingContent.plans];
-                                      (a[idx] as any).revisions_count = parseInt(e.target.value, 10);
-                                      setPricingContent({ ...pricingContent, plans: a });
-                                      setHasChanges(true);
-                                    }}
-                                    placeholder="e.g. 3"
-                                    className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium">Frames Description</label>
-                                <Input
-                                  value={plan.frames}
-                                  onChange={(e) => {
-                                    const a = [...pricingContent.plans];
-                                    a[idx].frames = e.target.value;
-                                    setPricingContent({ ...pricingContent, plans: a });
-                                    setHasChanges(true);
-                                  }}
-                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                                />
-                              </div>
-
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium">Badge Label (optional)</label>
-                                <Input
-                                  value={(plan as any).badge ?? ""}
-                                  onChange={(e) => {
-                                    const a = [...pricingContent.plans];
-                                    (a[idx] as any).badge = e.target.value || null;
-                                    setPricingContent({ ...pricingContent, plans: a });
-                                    setHasChanges(true);
-                                  }}
-                                  placeholder='e.g. "Most Popular" (leave blank for none)'
-                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                                />
-                              </div>
-
-                              <div className="space-y-2">
-                                <label className="text-sm font-medium">Features (comma separated)</label>
-                                <Input
-                                  value={plan.features?.join(", ") ?? ""}
-                                  onChange={(e) => {
-                                    const a = [...pricingContent.plans];
-                                    a[idx].features = e.target.value.split(",").map((f) => f.trim());
-                                    setPricingContent({ ...pricingContent, plans: a });
-                                    setHasChanges(true);
-                                  }}
-                                  className="bg-white dark:bg-background/50 border-slate-200 dark:border-white/10"
-                                />
-                              </div>
-
-                              <div className="flex flex-wrap gap-2">
-                                {PRICING_ICONS.map(({ value, label, icon: Ic }) => (
-                                  <Button
-                                    key={value}
-                                    variant={plan.icon === value ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => {
-                                      const a = [...pricingContent.plans];
-                                      a[idx].icon = value;
-                                      setPricingContent({ ...pricingContent, plans: a });
-                                      setHasChanges(true);
-                                    }}
-                                    className="gap-2"
-                                  >
-                                    <Ic className="w-4 h-4" /> {label}
-                                  </Button>
-                                ))}
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <Switch
-                                  checked={plan.featured ?? false}
-                                  onCheckedChange={(v) => {
-                                    const a = pricingContent.plans.map((p, i) => ({
-                                      ...p, featured: i === idx ? v : false,
-                                    }));
-                                    setPricingContent({ ...pricingContent, plans: a });
-                                    setHasChanges(true);
-                                  }}
-                                />
-                                <span className="text-sm flex items-center gap-2">
-                                  <Star className="w-4 h-4 text-yellow-500" /> Featured Plan (highlight ring)
-                                </span>
-                              </div>
-
-                              <Button
-                                variant="destructive" size="sm"
-                                onClick={() => {
-                                  setPricingContent({
-                                    ...pricingContent,
-                                    plans: pricingContent.plans.filter((_, i) => i !== idx),
-                                  });
-                                  setHasChanges(true);
-                                }}
-                                className="gap-2"
-                              >
-                                <Trash2 className="w-4 h-4" /> Remove Plan
-                              </Button>
-                            </CardContent>
-                          </Card>
-                        </motion.div>
-                      );
-                    })
-                  )}
-
-                  {pricingContent.plans.length > 0 && (
-                    <Button
-                      onClick={() => save("pricing", pricingContent)}
-                      disabled={isSaving}
-                      className="gap-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
-                    >
-                      {isSaving
-                        ? <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
-                        : <Save className="w-4 h-4" />}
-                      {isSaving ? "Saving…" : "Save Pricing"}
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
+          {activeTab === "pricing" && (
+            <Suspense key="pricing" fallback={TAB_SPINNER}>
+              <PricingTab />
+            </Suspense>
           )}
 
-          {/* Policies (dedicated tab) */}
+          {activeTab === "reviews" && (
+            <Suspense key="reviews" fallback={TAB_SPINNER}>
+              <ReviewsTab />
+            </Suspense>
+          )}
+
           {activeTab === "policies" && (
             <Suspense key="policies" fallback={TAB_SPINNER}>
               <PoliciesTab />
             </Suspense>
           )}
+
+          {activeTab === "games" && (
+            <Suspense key="games" fallback={TAB_SPINNER}>
+              <GamesTab />
+            </Suspense>
+          )}
+
+          {activeTab === "users" && (
+            <Suspense key="users" fallback={TAB_SPINNER}>
+              <UsersTab />
+            </Suspense>
+          )}
+
+          {activeTab === "logs" && <LogsTab key="logs" />}
 
         </AnimatePresence>
       </div>
