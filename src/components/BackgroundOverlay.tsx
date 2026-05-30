@@ -1,23 +1,31 @@
 // src/components/BackgroundOverlay.tsx
 //
-// ─── BACKGROUND CANVAS — CINEMATIC VIGNETTE EDITION ─────────────────────────
+// ─── BACKGROUND CANVAS — MAXIMUM DEPTH CINEMATIC EDITION ────────────────────
 //
 // Layer architecture (bottom → top):
 //
 //   z-index 0  ← this entire fixed wrapper (BackgroundOverlay)
-//   ├── Layer 0: #050508 solid base (fallback if image never loads)
-//   ├── Layer 1: bg.png at full opacity — the raw geometric mesh graphic
-//   ├── Layer 2: ultra-light tint (rgba 0,0,0,0.18) — legibility baseline
-//   ├── Layer 3: CINEMATIC TOP/BOTTOM GRADIENT — dark edge masking
-//   │            linear-gradient(to bottom, #050508 0%, transparent 15%,
-//   │                            transparent 85%, #050508 100%)
-//   └── Layer 4: RADIAL CORNER VIGNETTE — perimeter dimming
-//                radial-gradient(circle, transparent 40%, rgba(5,5,8,0.65) 100%)
+//   ├── Layer 0: #050508 solid base (visible if image never loads)
+//   ├── Layer 1: bg.png — the raw geometric mesh graphic (reduced to 0.72 opacity
+//   │            so the base color darkens it before overlays even apply)
+//   ├── Layer 2: MAIN TINT — global brightness suppression
+//   │            rgba(0, 0, 0, 0.45) — brings overall image luminance down hard
+//   ├── Layer 3: HEAVY TOP/BOTTOM GRADIENT — aggressive edge-to-center fade
+//   │            linear-gradient(to bottom,
+//   │              #050508 0%,
+//   │              rgba(5,5,8,0.4) 30%,
+//   │              rgba(5,5,8,0.4) 70%,
+//   │              #050508 100%)
+//   └── Layer 4: AGGRESSIVE RADIAL CORNER VIGNETTE
+//                radial-gradient(circle,
+//                  transparent 20%,
+//                  rgba(0,0,0,0.85) 75%,
+//                  #050508 100%)
 //
 //   z-index 1  ← galaxy decorative stars/nebulae (in Layout)
 //   z-index 10 ← all page content (Navbar, main, Footer)
 //
-// Design mandate (locked palette):
+// Locked palette:
 //   Brand Primary / Glows:        #6a87ce
 //   Cards / Panels / Footers:     #27282a
 //   Secondary Text / Desc:        #b6c2db
@@ -47,10 +55,9 @@ function BackgroundOverlayInner() {
   }, []);
 
   // ── Layer 1: bg.png ────────────────────────────────────────────────────────
-  // The actual geometric mesh graphic. Rendered at full opacity so the image
-  // is visible through the vignette overlays above it.
-  // backgroundAttachment: fixed on desktop (parallax-stationary on scroll).
-  // Switched to scroll on mobile — iOS WebKit repaint bug with fixed bg.
+  // Opacity dialed down to 0.72 so the #050508 base already pre-darkens the
+  // image before any overlay layers apply. This is the first stage of the
+  // multi-layer darkening pipeline.
 
   const imageStyle: React.CSSProperties = imgFailed
     ? {
@@ -63,61 +70,60 @@ function BackgroundOverlayInner() {
         backgroundPosition:   "center top",
         backgroundRepeat:     "no-repeat",
         backgroundAttachment: isMobile ? "scroll" : "fixed",
-        opacity:              1,
+        opacity:              0.72,
       };
 
-  // ── Layer 2: ultra-light tint ──────────────────────────────────────────────
-  // Minimal dark wash — just enough for white text legibility over
-  // the brightest areas of the image. Must NOT wash out the geometry.
+  // ── Layer 2: MAIN TINT ────────────────────────────────────────────────────
+  // A solid rgba mask at 0.45 opacity — aggressively suppresses the overall
+  // brightness of the image. This is Stage 2 of the darkening pipeline and
+  // the primary reason Image 2 looks so much darker than Image 1.
+  // Without this layer the image bleeds through at full luminance.
 
-  const tintStyle: React.CSSProperties = {
-    background: "rgba(5, 5, 8, 0.18)",
+  const mainTintStyle: React.CSSProperties = {
+    background: "rgba(0, 0, 0, 0.45)",
   };
 
-  // ── Layer 3: CINEMATIC TOP/BOTTOM GRADIENT ────────────────────────────────
+  // ── Layer 3: HEAVY TOP/BOTTOM GRADIENT ───────────────────────────────────
+  // Hard-black at both edges (0% and 100%), fading to a semi-transparent
+  // rgba(5,5,8,0.4) at the 30–70% midband. This keeps the centre of the
+  // image somewhat visible while ensuring the top (Navbar zone) and bottom
+  // (Footer zone) are completely swallowed by the base background colour.
   //
-  // This is the PRIMARY visual depth layer requested in the design directive.
-  // It creates a rich, deep black fade at both the top and bottom edges of the
-  // viewport, giving the background graphic a professional "floating" look that
-  // blends cleanly into the dark page chrome (Navbar, Footer).
-  //
-  // Breakpoints:
-  //   0%   → #050508 (full black — matches html/body background)
-  //   15%  → transparent (image fully visible from this point)
-  //   85%  → transparent (image still fully visible)
-  //   100% → #050508 (full black — blends into Footer)
+  // Previous version: transparent at 15–85% → image too bright in center
+  // New version: rgba(5,5,8,0.4) at 30–70% → sustained darkness throughout
 
   const topBottomGradientStyle: React.CSSProperties = {
-    background: "linear-gradient(to bottom, #050508 0%, transparent 15%, transparent 85%, #050508 100%)",
+    background: "linear-gradient(to bottom, #050508 0%, rgba(5,5,8,0.4) 30%, rgba(5,5,8,0.4) 70%, #050508 100%)",
   };
 
-  // ── Layer 4: RADIAL CORNER VIGNETTE ───────────────────────────────────────
+  // ── Layer 4: AGGRESSIVE RADIAL CORNER VIGNETTE ───────────────────────────
+  // The single most impactful change for achieving the Image 2 look.
+  // Previous version: transparent at 40%, rgba(5,5,8,0.65) at 100%
+  //   → Too gentle. Image edges still fully visible.
+  // New version:
+  //   transparent at 20%  → only a small central zone is unmasked
+  //   rgba(0,0,0,0.85) at 75% → heavy black well before the edge
+  //   #050508 at 100% → pure base colour at screen boundary
   //
-  // A second overlay that dims the far corners and edges of the image without
-  // touching the center. This is the standard cinematic vignette technique —
-  // it draws the viewer's eye to the center of the composition and prevents
-  // the image edges from appearing too bright or unmasked.
-  //
-  // circle: transparent at 40% radius (center is fully unaffected),
-  // gradually becoming rgba(5,5,8,0.65) at the outer edge.
+  // Effect: the background image appears to exist only in the center of the
+  // screen, with the entire perimeter consumed by darkness — exactly matching
+  // the cinematic framing visible in Image 2.
 
   const radialVignetteStyle: React.CSSProperties = {
-    background: "radial-gradient(circle, transparent 40%, rgba(5,5,8,0.65) 100%)",
+    background: "radial-gradient(circle, transparent 20%, rgba(0,0,0,0.85) 75%, #050508 100%)",
   };
 
   return (
     // ── LAYER STACK ROOT ──────────────────────────────────────────────────────
     //
-    // position: fixed + inset: 0 → covers the full viewport on every page,
+    // position: fixed + inset: 0 → covers full viewport on every page,
     // including scrollable pages taller than the viewport.
     //
-    // zIndex: 0 → sits above the transparent Layout root but below all content
-    // layers (z-[1] galaxy, z-[10] content).
+    // zIndex: 0 → renders above the transparent Layout root (#050508 base)
+    // but strictly below all content layers (z-[1] galaxy, z-[10] content).
     //
-    // pointer-events: none → never intercepts any click or touch event.
-    //
-    // isolation: isolate → prevents any child layer from accidentally blending
-    // with the page stacking context outside this wrapper.
+    // pointer-events: none → never intercepts clicks or touches.
+    // isolation: isolate → prevents child layers from blending outside this wrapper.
     <div
       aria-hidden="true"
       className="fixed inset-0 pointer-events-none"
@@ -130,12 +136,12 @@ function BackgroundOverlayInner() {
       {/*
         ── LCP probe image ──────────────────────────────────────────────────────
         Makes bg.png visible to the browser's preload scanner before the CSSOM
-        is built. CSS background-image on Layer 1 is only fetched after layout —
-        this 1×1 hidden img eliminates that 200–600ms LCP gap.
+        is built. CSS background-image on Layer 1 is fetched only after layout —
+        this 1×1 hidden img eliminates the 200–600ms gap.
 
         visibility: hidden + 1×1px → real network request, zero layout impact.
-        display: none would cause browsers to skip the fetch entirely.
-        fetchPriority: "high" → bumps this above other resource fetches.
+        display: none would cause most browsers to skip the fetch entirely.
+        fetchPriority: "high" → prioritised above below-fold resources.
       */}
       {!imgFailed && (
         <img
@@ -157,28 +163,25 @@ function BackgroundOverlayInner() {
         />
       )}
 
-      {/* Layer 1 — bg.png (or fallback gradient) at full opacity */}
+      {/* Layer 1 — bg.png at 0.72 opacity (pre-darkened by #050508 base) */}
       <div
         className="absolute inset-0"
         style={imageStyle}
       />
 
-      {/* Layer 2 — ultra-light tint for text legibility */}
+      {/* Layer 2 — MAIN TINT: rgba(0,0,0,0.45) global brightness suppression */}
       <div
         className="absolute inset-0"
-        style={tintStyle}
+        style={mainTintStyle}
       />
 
-      {/* Layer 3 — CINEMATIC TOP/BOTTOM DARK GRADIENT */}
-      {/* Masks the top and bottom 15% of the image with #050508 */}
-      {/* Creates professional depth: image appears to float in the dark canvas */}
+      {/* Layer 3 — HEAVY TOP/BOTTOM GRADIENT: hard black at edges, dark mid-band */}
       <div
         className="absolute inset-0"
         style={topBottomGradientStyle}
       />
 
-      {/* Layer 4 — RADIAL CORNER VIGNETTE */}
-      {/* Dims the outer perimeter without touching the center composition */}
+      {/* Layer 4 — AGGRESSIVE RADIAL CORNER VIGNETTE: near-black from 20% outward */}
       <div
         className="absolute inset-0"
         style={radialVignetteStyle}
@@ -189,8 +192,7 @@ function BackgroundOverlayInner() {
 
 // ─── Memoised export ──────────────────────────────────────────────────────────
 // memo() prevents re-renders from Layout's star-pool / scroll-class mutations.
-// BackgroundOverlay has no state that changes during normal interaction
-// (only isMobile changes on viewport resize, which is cheap).
+// BackgroundOverlay has no props that change during normal interaction.
 
 export const BackgroundOverlay = memo(BackgroundOverlayInner);
 export default BackgroundOverlay;
