@@ -2,40 +2,53 @@
    TAILWIND CSS v4
    Single @import replaces the v3 @tailwind base/components/utilities triple.
    Processed by @tailwindcss/postcss in postcss.config.js.
+   DO NOT revert to v3 syntax (@tailwind base / @tailwind utilities).
 ───────────────────────────────────────────────────────────────────────────── */
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DARK MODE — CLASS-BASED VARIANT (CRITICAL)
-   Re-wires dark: prefix to fire on .dark ancestor — ALWAYS true on this site.
+   Re-wires dark: prefix to fire whenever .dark is present in the ancestor
+   chain. The <html> element carries class="dark" hardcoded in index.html AND
+   it is re-stamped synchronously by ThemeProvider on mount — so this variant
+   is always active. Without this declaration every dark: utility silently
+   produces no CSS rule, leaving all elements on their light-mode fallbacks.
 ───────────────────────────────────────────────────────────────────────────── */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DESIGN TOKENS — @theme block
-   Tailwind v4: bg-background → --color-background, etc.
+   Tailwind v4 maps utility bg-X → --color-X, text-X → --color-X, etc.
+   These are the ONLY colours used throughout the site.
+
+   NEW PALETTE (2026 mandate):
+     Typography / headers:            #ffffff
+     Cards / panels / modals:         #27282a
+     Muted text / subtle borders:     #b6c2db
+     Accent / CTAs / primary glows:   #6a87ce
+     Base background (under image):   #050508
 ───────────────────────────────────────────────────────────────────────────── */
 @theme {
   /* ── Core palette ─────────────────────────────────────────────────────── */
-  --color-background:           #050508;
-  --color-foreground:           #f4f4f5;
-  --color-card:                 #0b0c10;
-  --color-card-foreground:      #f4f4f5;
-  --color-popover:              #0b0c10;
-  --color-popover-foreground:   #f4f4f5;
-  --color-primary:              #a855f7;
-  --color-primary-foreground:   #ffffff;
-  --color-secondary:            #161620;
-  --color-secondary-foreground: #a1a1aa;
-  --color-muted:                #12121a;
-  --color-muted-foreground:     #71717a;
-  --color-accent:               #7c3aed;
-  --color-accent-foreground:    #f4f4f5;
-  --color-destructive:          #ef4444;
-  --color-destructive-foreground: #fafafa;
-  --color-border:               rgba(255, 255, 255, 0.06);
-  --color-input:                #161620;
-  --color-ring:                 #a855f7;
+  --color-background:             #050508;
+  --color-foreground:             #ffffff;
+  --color-card:                   #27282a;
+  --color-card-foreground:        #ffffff;
+  --color-popover:                #27282a;
+  --color-popover-foreground:     #ffffff;
+  --color-primary:                #6a87ce;
+  --color-primary-foreground:     #ffffff;
+  --color-secondary:              #1e2030;
+  --color-secondary-foreground:   #b6c2db;
+  --color-muted:                  #1a1c22;
+  --color-muted-foreground:       #b6c2db;
+  --color-accent:                 #4f6bb8;
+  --color-accent-foreground:      #ffffff;
+  --color-destructive:            #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border:                 rgba(182, 194, 219, 0.12);
+  --color-input:                  #1e2030;
+  --color-ring:                   #6a87ce;
 
   /* ── Typography ─────────────────────────────────────────────────────────── */
   --font-sans:    "Inter", "Outfit", system-ui, -apple-system, sans-serif;
@@ -52,41 +65,42 @@
 
 /* ─────────────────────────────────────────────────────────────────────────────
    LEGACY CSS CUSTOM PROPERTIES — :root
-   Both @theme tokens AND these :root vars are set so that any inline style or
-   non-Tailwind CSS referencing var(--background), var(--primary), etc. works.
+   Mirrored from @theme so that any inline style or non-Tailwind CSS that
+   references var(--background), var(--primary), etc. resolves correctly.
 ───────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background:             #050508;
-  --foreground:             #f4f4f5;
-  --card:                   #0b0c10;
-  --card-foreground:        #f4f4f5;
-  --popover:                #0b0c10;
-  --popover-foreground:     #f4f4f5;
-  --primary:                #a855f7;
-  --primary-foreground:     #ffffff;
-  --secondary:              #161620;
-  --secondary-foreground:   #a1a1aa;
-  --muted:                  #12121a;
-  --muted-foreground:       #71717a;
-  --accent:                 #7c3aed;
-  --accent-foreground:      #f4f4f5;
-  --destructive:            #ef4444;
-  --destructive-foreground: #fafafa;
-  --border:                 rgba(255, 255, 255, 0.06);
-  --input:                  #161620;
-  --ring:                   #a855f7;
+  --background:              #050508;
+  --foreground:              #ffffff;
+  --card:                    #27282a;
+  --card-foreground:         #ffffff;
+  --popover:                 #27282a;
+  --popover-foreground:      #ffffff;
+  --primary:                 #6a87ce;
+  --primary-foreground:      #ffffff;
+  --secondary:               #1e2030;
+  --secondary-foreground:    #b6c2db;
+  --muted:                   #1a1c22;
+  --muted-foreground:        #b6c2db;
+  --accent:                  #4f6bb8;
+  --accent-foreground:       #ffffff;
+  --destructive:             #ef4444;
+  --destructive-foreground:  #ffffff;
+  --border:                  rgba(182, 194, 219, 0.12);
+  --input:                   #1e2030;
+  --ring:                    #6a87ce;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   HARDCODED DARK OVERRIDES — Imperative Layer
-   This is the definitive fix for Tailwind v4 dark: variant compilation issues.
-   Since this site is permanently dark-locked (html.dark is set synchronously
-   in index.html before React mounts), we use html[class~="dark"] selectors
-   to imperatively override every light-mode color leak at the CSS layer.
-   These rules fire regardless of Tailwind's variant compilation state.
+   IMPERATIVE DARK OVERRIDE LAYER
+   Since this site is permanently dark-locked (html.dark always present),
+   we use html[class~="dark"] selectors to neutralize any light-mode color
+   leaks at the CSS cascade level — independent of Tailwind variant compilation.
+
+   CRITICAL NOTE: This layer must NOT set background-color on .backdrop-blur-xl
+   globally. The previous implementation did this and caused BackgroundOverlay's
+   image layer to be obscured. Each panel's own bg-card/XX class handles it.
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* Force the body/root background to the deep dark palette. */
 html,
 html[class~="dark"],
 html[data-theme="dark"] {
@@ -96,104 +110,84 @@ html[data-theme="dark"] {
 
 html[class~="dark"] body,
 html[data-theme="dark"] body {
-  background-color: #050508 !important;
-  color: #f4f4f5 !important;
+  background-color: transparent !important; /* Let BackgroundOverlay show through */
+  color: #ffffff !important;
 }
 
-/* ── Neutralize all light-mode leaking panel classes ──────────────────────
-   These selectors catch the exact utility combinations used throughout the
-   page components and forcibly override them to dark equivalents.
-──────────────────────────────────────────────────────────────────────────── */
+/* ── Neutralize light-mode panel backgrounds ─────────────────────────────── */
 
-/* bg-white/* variants used on cards/panels */
 html[class~="dark"] .bg-white\/60,
 html[class~="dark"] .bg-white\/70,
 html[class~="dark"] .bg-white\/80,
 html[class~="dark"] .bg-white\/90,
 html[class~="dark"] .bg-white {
-  background-color: rgba(11, 12, 16, 0.85) !important;
+  background-color: rgba(39, 40, 42, 0.82) !important;
 }
 
-/* bg-slate-100 / bg-neutral-50 / bg-gray-50 used on cards */
 html[class~="dark"] .bg-slate-100,
 html[class~="dark"] .bg-slate-50,
 html[class~="dark"] .bg-neutral-50,
 html[class~="dark"] .bg-neutral-100,
 html[class~="dark"] .bg-gray-50,
 html[class~="dark"] .bg-gray-100 {
-  background-color: #0d0e14 !important;
+  background-color: #27282a !important;
 }
 
-/* bg-neutral-100 inside specific contexts (FAQ, plan meta chips) */
-html[class~="dark"] .bg-neutral-100\/50,
-html[class~="dark"] .bg-neutral-200 {
-  background-color: rgba(255, 255, 255, 0.04) !important;
-}
+/* ── Neutralize light-mode borders ──────────────────────────────────────── */
 
-/* border-slate-200 / border-neutral-200 / border-gray-200 */
 html[class~="dark"] .border-slate-200,
 html[class~="dark"] .border-neutral-200,
 html[class~="dark"] .border-gray-200 {
-  border-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(182, 194, 219, 0.14) !important;
 }
 
-/* border-neutral-100 (thin dividers) */
 html[class~="dark"] .border-neutral-100 {
-  border-color: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(182, 194, 219, 0.07) !important;
 }
 
-/* text-slate-900 / text-neutral-900 / text-gray-900 — headings */
+/* ── Neutralize light-mode text ─────────────────────────────────────────── */
+
 html[class~="dark"] .text-slate-900,
 html[class~="dark"] .text-neutral-900,
 html[class~="dark"] .text-gray-900,
 html[class~="dark"] .text-black {
-  color: #f4f4f5 !important;
+  color: #ffffff !important;
 }
 
-/* text-slate-600/700 / text-neutral-600/700 — body copy */
 html[class~="dark"] .text-slate-600,
 html[class~="dark"] .text-slate-700,
 html[class~="dark"] .text-neutral-600,
 html[class~="dark"] .text-neutral-700,
 html[class~="dark"] .text-gray-600,
 html[class~="dark"] .text-gray-700 {
-  color: #a1a1aa !important;
+  color: #b6c2db !important;
 }
 
-/* text-slate-400 / text-neutral-400/500 — muted */
 html[class~="dark"] .text-slate-400,
 html[class~="dark"] .text-neutral-400,
 html[class~="dark"] .text-neutral-500,
 html[class~="dark"] .text-gray-400 {
-  color: #71717a !important;
+  color: rgba(182, 194, 219, 0.65) !important;
 }
 
-/* hover:bg-neutral-50 / hover:bg-slate-50 */
+/* ── Neutralize light-mode hover states ─────────────────────────────────── */
+
 html[class~="dark"] .hover\:bg-neutral-50:hover,
 html[class~="dark"] .hover\:bg-slate-50:hover,
 html[class~="dark"] .hover\:bg-neutral-100:hover,
 html[class~="dark"] .hover\:bg-slate-100:hover {
-  background-color: rgba(255, 255, 255, 0.04) !important;
+  background-color: rgba(182, 194, 219, 0.05) !important;
 }
 
-/* hover:border-neutral-300 */
 html[class~="dark"] .hover\:border-neutral-300:hover,
 html[class~="dark"] .hover\:border-slate-300:hover {
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(182, 194, 219, 0.20) !important;
 }
 
-/* shadow-sm (can look wrong on dark) */
+/* ── Kill light-mode box shadows ────────────────────────────────────────── */
+
 html[class~="dark"] .shadow-sm {
   box-shadow: none !important;
-}
-
-/* bg-[#10121a], bg-[#0d0f16], bg-[#0f1117] — already dark, keep as is */
-/* bg-[#1c1f2e], bg-[#1a1d27] — already dark, keep as is */
-
-/* OrderModal bg-white override */
-html[class~="dark"] .bg-white.dark\:bg-\[\#0f1117\],
-html[class~="dark"] [class*="bg-white"][class*="dark:bg-"] {
-  background-color: #0f1117 !important;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -215,7 +209,7 @@ html {
 }
 
 body {
-  background-color: var(--background);
+  background-color: transparent; /* BackgroundOverlay provides the canvas */
   color: var(--foreground);
   font-family: var(--font-sans);
   line-height: 1.6;
@@ -236,16 +230,16 @@ svg {
   display: block;
 }
 
-/* Custom scrollbar */
+/* ── Custom scrollbar ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar        { width: 6px; height: 6px; }
-::-webkit-scrollbar-track  { background: var(--background); }
-::-webkit-scrollbar-thumb  { background: #3f3f46; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+::-webkit-scrollbar-track  { background: #050508; }
+::-webkit-scrollbar-thumb  { background: rgba(106, 135, 206, 0.40); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #6a87ce; }
 
-/* Text selection */
+/* ── Text selection ────────────────────────────────────────────────────────── */
 ::selection {
-  background-color: color-mix(in srgb, var(--primary) 30%, transparent);
-  color: var(--foreground);
+  background-color: rgba(106, 135, 206, 0.28);
+  color: #ffffff;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -256,25 +250,37 @@ svg {
 .font-mono    { font-family: var(--font-mono); }
 .font-display { font-family: var(--font-display); }
 
-/* Hero gradient headline */
+/* ── Primary gradient headline ─────────────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #a855f7 0%, #7c3aed 50%, #c4b5fd 100%);
+  background: linear-gradient(135deg, #6a87ce 0%, #4f6bb8 45%, #8fa8e0 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Discord glow — used on CTA buttons */
+/* ── Discord glow ──────────────────────────────────────────────────────────── */
 .discord-glow {
-  box-shadow: 0 0 20px rgba(88, 101, 242, 0.4);
+  box-shadow: 0 0 20px rgba(88, 101, 242, 0.40);
   transition: box-shadow 0.3s ease;
 }
 .discord-glow:hover {
-  box-shadow: 0 0 32px rgba(88, 101, 242, 0.65);
+  box-shadow: 0 0 36px rgba(88, 101, 242, 0.65);
+}
+
+/* ── Blue accent glow — primary CTA buttons ───────────────────────────────── */
+.blue-glow {
+  box-shadow: 0 0 24px rgba(106, 135, 206, 0.38), 0 4px 20px rgba(79, 107, 184, 0.28);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+.blue-glow:hover {
+  box-shadow: 0 0 40px rgba(106, 135, 206, 0.58), 0 6px 30px rgba(79, 107, 184, 0.42);
+  transform: translateY(-1px) scale(1.015);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   GALAXY BACKGROUND ANIMATIONS
+   GALAXY BACKGROUND ANIMATION SYSTEM
+   These animate on top of BackgroundOverlay's bg.png, adding depth.
+   All star/nebula colours updated to the new blue palette (#6a87ce family).
 ───────────────────────────────────────────────────────────────────────────── */
 
 @keyframes stars-drift {
@@ -283,8 +289,8 @@ svg {
 }
 
 @keyframes nebula-pulse {
-  0%,100% { opacity: 0.12; transform: scale(1)    translateX(0);   }
-  50%     { opacity: 0.22; transform: scale(1.08) translateX(20px); }
+  0%,100% { opacity: 0.10; transform: scale(1)    translateX(0);   }
+  50%     { opacity: 0.18; transform: scale(1.06) translateX(18px); }
 }
 
 @keyframes shooting-star-fall {
@@ -308,39 +314,39 @@ svg {
 
 .stars-layer-1 {
   background-image:
-    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.70) 0%, transparent 100%),
-    radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.50) 0%, transparent 100%),
-    radial-gradient(1px 1px at 55%  8%, rgba(255,255,255,0.60) 0%, transparent 100%),
-    radial-gradient(1px 1px at 72% 62%, rgba(255,255,255,0.50) 0%, transparent 100%),
-    radial-gradient(1px 1px at 88% 28%, rgba(255,255,255,0.70) 0%, transparent 100%),
-    radial-gradient(1px 1px at 38% 75%, rgba(255,255,255,0.40) 0%, transparent 100%),
-    radial-gradient(1px 1px at 92% 85%, rgba(255,255,255,0.60) 0%, transparent 100%),
-    radial-gradient(1px 1px at 18% 90%, rgba(255,255,255,0.50) 0%, transparent 100%),
-    radial-gradient(1px 1px at 65% 48%, rgba(255,255,255,0.40) 0%, transparent 100%),
-    radial-gradient(1px 1px at 47% 22%, rgba(255,255,255,0.60) 0%, transparent 100%);
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.65) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55%  8%, rgba(255,255,255,0.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 72% 62%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 88% 28%, rgba(255,255,255,0.65) 0%, transparent 100%),
+    radial-gradient(1px 1px at 38% 75%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 92% 85%, rgba(255,255,255,0.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 18% 90%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 65% 48%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 47% 22%, rgba(255,255,255,0.55) 0%, transparent 100%);
   animation: stars-drift 80s ease-in-out infinite alternate;
 }
 
 .stars-layer-2 {
   background-image:
-    radial-gradient(1.5px 1.5px at  8% 30%, rgba(168,85,247,0.60) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 30% 60%, rgba(255,255,255,0.50) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 60% 20%, rgba(196,181,253,0.50) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 80% 45%, rgba(255,255,255,0.40) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 15% 70%, rgba(168,85,247,0.50) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 50% 88%, rgba(255,255,255,0.40) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 95% 12%, rgba(196,181,253,0.60) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 42% 52%, rgba(255,255,255,0.30) 0%, transparent 100%);
+    radial-gradient(1.5px 1.5px at  8% 30%, rgba(106,135,206,0.55) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 30% 60%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 60% 20%, rgba(143,168,224,0.48) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 80% 45%, rgba(255,255,255,0.38) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 15% 70%, rgba(106,135,206,0.45) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 50% 88%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 95% 12%, rgba(143,168,224,0.55) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 42% 52%, rgba(255,255,255,0.28) 0%, transparent 100%);
   animation: stars-drift 120s ease-in-out infinite alternate-reverse;
 }
 
 .stars-layer-3 {
   background-image:
-    radial-gradient(2px 2px at 20% 10%, rgba(255,255,255,0.30) 0%, transparent 100%),
-    radial-gradient(2px 2px at 70% 30%, rgba(168,85,247,0.30) 0%, transparent 100%),
-    radial-gradient(2px 2px at 40% 70%, rgba(255,255,255,0.25) 0%, transparent 100%),
-    radial-gradient(2px 2px at 85% 80%, rgba(196,181,253,0.30) 0%, transparent 100%),
-    radial-gradient(2px 2px at  5% 50%, rgba(255,255,255,0.20) 0%, transparent 100%);
+    radial-gradient(2px 2px at 20% 10%, rgba(255,255,255,0.25) 0%, transparent 100%),
+    radial-gradient(2px 2px at 70% 30%, rgba(106,135,206,0.28) 0%, transparent 100%),
+    radial-gradient(2px 2px at 40% 70%, rgba(255,255,255,0.20) 0%, transparent 100%),
+    radial-gradient(2px 2px at 85% 80%, rgba(143,168,224,0.25) 0%, transparent 100%),
+    radial-gradient(2px 2px at  5% 50%, rgba(255,255,255,0.18) 0%, transparent 100%);
   animation: stars-drift 160s ease-in-out infinite alternate;
 }
 
@@ -351,6 +357,7 @@ svg {
   will-change: opacity, transform;
 }
 
+/* Blue-toned nebulae matching the new palette */
 .nebula-1 {
   width: 60vw;
   height: 60vw;
@@ -359,8 +366,8 @@ svg {
   top: -15%;
   right: -15%;
   background: radial-gradient(circle,
-    rgba(124, 58, 237, 0.22) 0%,
-    rgba(168, 85, 247, 0.10) 50%,
+    rgba(106, 135, 206, 0.14) 0%,
+    rgba(143, 168, 224, 0.06) 55%,
     transparent 75%
   );
   animation: nebula-pulse 25s ease-in-out infinite;
@@ -374,8 +381,8 @@ svg {
   bottom: -10%;
   left: -10%;
   background: radial-gradient(circle,
-    rgba(88, 28, 220, 0.18) 0%,
-    rgba(139, 92, 246, 0.09) 50%,
+    rgba(79, 107, 184, 0.12) 0%,
+    rgba(106, 135, 206, 0.05) 55%,
     transparent 75%
   );
   animation: nebula-pulse 35s ease-in-out infinite reverse;
@@ -395,8 +402,8 @@ svg {
   background: linear-gradient(
     90deg,
     rgba(255,255,255,0)   0%,
-    rgba(255,255,255,0.9) 50%,
-    rgba(196,181,253,0.6) 100%
+    rgba(255,255,255,0.85) 50%,
+    rgba(143,168,224,0.55) 100%
   );
   border-radius: 1px;
   will-change: transform, opacity;
@@ -406,7 +413,7 @@ svg {
 .vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(5,5,8,0.75) 100%);
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(5,5,8,0.65) 100%);
   pointer-events: none;
 }
 
@@ -487,43 +494,33 @@ img:not([width]):not([height]) {
    UTILITY CLASSES
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* Frosted glass card — premium dark */
+/* ── Frosted glass card — new palette ─────────────────────────────────────── */
 .glass-card {
-  background: rgba(11, 12, 16, 0.75);
+  background: rgba(39, 40, 42, 0.72);
   backdrop-filter: blur(14px) saturate(150%);
   -webkit-backdrop-filter: blur(14px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(182, 194, 219, 0.10);
 }
 
-/* Premium dark card panel — replaces bg-white/60 pattern site-wide */
+/* ── Standard dark panel ──────────────────────────────────────────────────── */
 .dark-panel {
-  background: rgba(11, 12, 16, 0.80);
+  background: rgba(39, 40, 42, 0.80);
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(182, 194, 219, 0.10);
 }
 
-/* Hover glow ring */
+/* ── Hover glow ring — blue accent ───────────────────────────────────────── */
 .hover-glow {
   transition: box-shadow 0.25s ease;
 }
 .hover-glow:hover {
   box-shadow:
-    0 0 0 1px var(--primary),
-    0 0 24px color-mix(in srgb, var(--primary) 30%, transparent);
+    0 0 0 1px #6a87ce,
+    0 0 24px rgba(106, 135, 206, 0.30);
 }
 
-/* Purple glow — CTA buttons */
-.purple-glow {
-  box-shadow: 0 0 28px rgba(168, 85, 247, 0.35), 0 4px 24px rgba(124, 58, 237, 0.25);
-  transition: box-shadow 0.3s ease, transform 0.2s ease;
-}
-.purple-glow:hover {
-  box-shadow: 0 0 44px rgba(168, 85, 247, 0.55), 0 6px 32px rgba(124, 58, 237, 0.40);
-  transform: translateY(-1px) scale(1.015);
-}
-
-/* Shimmer loading skeleton */
+/* ── Shimmer loading skeleton ─────────────────────────────────────────────── */
 @keyframes shimmer {
   0%   { background-position: -200% center; }
   100% { background-position:  200% center; }
@@ -532,16 +529,16 @@ img:not([width]):not([height]) {
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(255,255,255,0.04) 25%,
-    rgba(255,255,255,0.10) 50%,
-    rgba(255,255,255,0.04) 75%
+    rgba(39, 40, 42, 0.60) 25%,
+    rgba(182, 194, 219, 0.08) 50%,
+    rgba(39, 40, 42, 0.60) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius);
 }
 
-/* Full-screen loading skeleton */
+/* ── Full-screen loading skeleton ────────────────────────────────────────── */
 .page-skeleton {
   min-height: 100dvh;
   background-color: var(--background);
@@ -550,7 +547,7 @@ img:not([width]):not([height]) {
   justify-content: center;
 }
 
-/* Eco mode */
+/* ── Eco mode ─────────────────────────────────────────────────────────────── */
 .eco-mode .stars-layer,
 .eco-mode .nebula,
 .eco-mode .shooting-star {
@@ -559,25 +556,108 @@ img:not([width]):not([height]) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   GLOBAL CARD / PANEL OVERRIDES
-   Every panel that previously used bg-white/60 dark:bg-card/40 now gets
-   the correct dark surface applied at the CSS layer — belt and suspenders
-   approach alongside the component-level className fixes.
+   CARD & PANEL SYSTEM — NEW PALETTE
+   All card/panel elements that don't carry an explicit bg-card class get the
+   correct #27282a slate-gray surface. Using attribute selectors that are
+   more specific than Tailwind utilities but do not globally override
+   backdrop-blur (which would interfere with BackgroundOverlay rendering).
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* Stats cards, portfolio reel cards, CTA blocks */
-html[class~="dark"] .backdrop-blur-xl {
-  background-color: rgba(11, 12, 16, 0.80);
+/* bg-card utility: resolves to #27282a */
+html[class~="dark"] .bg-card {
+  background-color: #27282a;
 }
 
-/* Ensure grid cells don't bleed out of their containers */
-html[class~="dark"] .grid {
-  container-type: inline-size;
+/* bg-card with opacity modifiers — keep the alpha, switch the base color */
+html[class~="dark"] .bg-card\/40 {
+  background-color: rgba(39, 40, 42, 0.40);
 }
 
-/* Force all card borders to the premium low-opacity white */
+html[class~="dark"] .bg-card\/50 {
+  background-color: rgba(39, 40, 42, 0.50);
+}
+
+html[class~="dark"] .bg-card\/60 {
+  background-color: rgba(39, 40, 42, 0.60);
+}
+
+html[class~="dark"] .bg-card\/70 {
+  background-color: rgba(39, 40, 42, 0.70);
+}
+
+html[class~="dark"] .bg-card\/80 {
+  background-color: rgba(39, 40, 42, 0.80);
+}
+
+/* Force all card-family borders to use the new muted palette */
+html[class~="dark"] [class*="border-white\/"],
 html[class~="dark"] [class*="border-slate-"],
 html[class~="dark"] [class*="border-neutral-"],
 html[class~="dark"] [class*="border-gray-"] {
-  border-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(182, 194, 219, 0.10) !important;
+}
+
+/* Primary colour utilities remapped to #6a87ce */
+html[class~="dark"] .text-primary {
+  color: #6a87ce !important;
+}
+
+html[class~="dark"] .bg-primary {
+  background-color: #6a87ce !important;
+}
+
+html[class~="dark"] .border-primary {
+  border-color: #6a87ce !important;
+}
+
+html[class~="dark"] .bg-primary\/10 {
+  background-color: rgba(106, 135, 206, 0.10) !important;
+}
+
+html[class~="dark"] .bg-primary\/20 {
+  background-color: rgba(106, 135, 206, 0.20) !important;
+}
+
+html[class~="dark"] .border-primary\/20 {
+  border-color: rgba(106, 135, 206, 0.20) !important;
+}
+
+html[class~="dark"] .border-primary\/30 {
+  border-color: rgba(106, 135, 206, 0.30) !important;
+}
+
+html[class~="dark"] .border-primary\/40 {
+  border-color: rgba(106, 135, 206, 0.40) !important;
+}
+
+html[class~="dark"] .border-primary\/50 {
+  border-color: rgba(106, 135, 206, 0.50) !important;
+}
+
+/* Gradient utilities using primary colour */
+html[class~="dark"] .from-primary {
+  --tw-gradient-from: #6a87ce;
+}
+
+html[class~="dark"] .to-primary {
+  --tw-gradient-to: #6a87ce;
+}
+
+html[class~="dark"] .via-primary {
+  --tw-gradient-via: #6a87ce;
+}
+
+/* Muted foreground */
+html[class~="dark"] .text-muted-foreground {
+  color: #b6c2db !important;
+}
+
+/* Foreground text */
+html[class~="dark"] .text-foreground {
+  color: #ffffff !important;
+}
+
+/* Ring colour for focus */
+html[class~="dark"] .ring-primary {
+  --tw-ring-color: #6a87ce;
 }

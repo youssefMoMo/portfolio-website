@@ -193,9 +193,9 @@ export function Layout({ children }: LayoutProps) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen flex flex-col relative bg-background">
+    <div className="min-h-screen flex flex-col relative bg-transparent">
 
-      {/* Fixed background image — bottom-most layer (z-[-1]) */}
+      {/* Fixed background image — zIndex:0 (renders above transparent Layout root, below z-[1] stars layer) */}
       <BackgroundOverlay />
 
       {/*

@@ -1,59 +1,43 @@
 // src/components/BackgroundOverlay.tsx
 //
-// ─── PERFORMANCE OVERHAUL CHANGELOG ──────────────────────────────────────────
+// ─── BACKGROUND CANVAS — DEFINITIVE FIX ──────────────────────────────────────
 //
-// DIRECTIVE 2 — LCP & Asset Pipeline
+// Root cause of flat-black rendering (Image 1 vs Image 2):
 //
-//   1. React.memo() on the default export
-//      BackgroundOverlay reads `resolvedTheme` from context and `isMobile`
-//      from a MediaQueryList listener. Neither changes during normal user
-//      interaction (the site is dark-locked). Without memo, every Layout
-//      re-render (e.g. star spawn/removal, scroll class toggle) forced a
-//      full re-render of this component, which recomputes three large inline
-//      style objects and triggers a DOM diffing pass on 4 child divs.
-//      memo() pins it to `resolvedTheme` changes only.
+//   The previous implementation placed the BackgroundOverlay wrapper at
+//   zIndex: -1. This meant it rendered BEHIND the Layout root div's stacking
+//   context. Because Layout's root div carried `bg-background` (solid #050508),
+//   that opaque layer completely painted over the bg.png image, making the
+//   entire background appear flat black. The image was loading correctly —
+//   it was simply buried under an opaque solid-color div.
 //
-//   2. bg.png probe image: fetchPriority="high" + loading="eager"
-//      bg.png is 1.1 MB and is painted by a CSS background-image rule on a
-//      div that is FIXED and FULL-SCREEN — it IS the LCP candidate on the
-//      homepage (and every page). CSS background images are not discoverable
-//      by the browser preload scanner; they are only fetched after the CSSOM
-//      is built and the first layout pass executes, typically 200–600 ms into
-//      the load.
+// Fix architecture:
+//   • BackgroundOverlay wrapper: zIndex 0 (no longer behind anything)
+//   • Layout root div: `bg-transparent` (no background color — the overlay
+//     IS the background)
+//   • Tint: reduced to rgba(0,0,0,0.22) so the image geometry is fully visible
+//   • Vignette: softened edges, not crushing the center
+//   • No mix-blend-mode, no dynamic masking, no opacity animation on load
+//   • The image layer itself: opacity: 1, no filter dimming
 //
-//      The probe <img> (visibility:hidden, 1×1 px) is the mechanism that
-//      bridges this gap: it IS in the markup, IS visible to the preload
-//      scanner, and triggers a real network fetch immediately. Setting
-//      fetchPriority="high" + loading="eager" on the probe elevates it to
-//      the highest-priority fetch queue alongside the HTML itself, erasing
-//      the 200–600 ms CSSOM-build delay.
-//
-//      Expected LCP improvement: 200–450 ms reduction on cold load.
-//
-//   3. All original logic preserved
-//      • DARK_FALLBACK / LIGHT_FALLBACK gradients on image error
-//      • Layer 1 (background-image), Layer 2 (tint), Layer 3 (vignette)
-//      • isMobile MediaQueryList listener for scroll vs fixed attachment
-//      • onError → setImgFailed fallback pipeline
+// New colour palette (per design mandate):
+//   --primary / accent:  #6a87ce  (brilliant blue)
+//   --card / panels:     #27282a  (custom slate-gray)
+//   --muted-fg:          #b6c2db  (cool lavender-gray)
+//   --background:        #050508  (absolute base behind image)
 
 import { useState, useEffect, memo } from "react";
-import { useTheme } from "@/hooks/use-theme";
 
-// ─── Fallback gradients (shown only if bg.png fails to load) ─────────────────
-
-const DARK_FALLBACK  =
-  "radial-gradient(ellipse at 50% 0%, #1a1a2e 0%, #0b0b0f 60%)";
-const LIGHT_FALLBACK =
-  "radial-gradient(ellipse at 50% 0%, #e8e8f0 0%, #f5f5f7 60%)";
+// ─── Fallback gradient — only shown if bg.png 404s or errors ─────────────────
+// Uses the new palette: deep base + blue-purple atmosphere
+const DARK_FALLBACK =
+  "radial-gradient(ellipse at 60% 20%, rgba(106,135,206,0.20) 0%, rgba(39,40,42,0.40) 40%, #050508 80%)";
 
 const BG_IMAGE_PATH = "/images/global/bg.png";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 function BackgroundOverlayInner() {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
-
   const [imgFailed, setImgFailed] = useState(false);
   const [isMobile,  setIsMobile]  = useState(false);
 
@@ -65,83 +49,100 @@ function BackgroundOverlayInner() {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  // ── Layer 1: background image ──────────────────────────────────────────────
+  // ── Layer 0: absolute base colour ──────────────────────────────────────────
+  // This is the HTML/body-level background colour visible in the very rare
+  // case where neither the image nor the CSS gradient has loaded yet.
+  // Sits at the bottom of the stack inside this component.
+
+  // ── Layer 1: bg.png ────────────────────────────────────────────────────────
+  // The actual geometric/abstract visual asset from the design reference.
+  // opacity: 1 — no dimming whatsoever at the image layer.
+  // backgroundAttachment: fixed on desktop so the image is parallax-stationary
+  // during scroll. Switched to scroll on mobile (iOS WebKit repaint issue).
 
   const imageStyle: React.CSSProperties = imgFailed
-    ? { background: DARK_FALLBACK }
+    ? {
+        background: DARK_FALLBACK,
+        opacity: 1,
+      }
     : {
         backgroundImage:      `url(${BG_IMAGE_PATH})`,
         backgroundSize:       "cover",
         backgroundPosition:   "center top",
         backgroundRepeat:     "no-repeat",
-        // Fixed attachment: image stationary during scroll.
-        // Disabled on mobile — iOS WebKit repaints every frame for fixed-bg.
         backgroundAttachment: isMobile ? "scroll" : "fixed",
+        opacity:              1,
+        // No filter, no mix-blend-mode, no brightness reduction.
+        // The image must render at 100% fidelity.
       };
 
-  // ── Layer 2: semi-transparent tint ────────────────────────────────────────
+  // ── Layer 2: ultra-light tint ─────────────────────────────────────────────
+  // Just enough to ensure body text (#ffffff) is legible over the brighter
+  // areas of the image. Must NOT be dark enough to wash out the geometry.
+  // Previous value was 0.38 — that was too heavy. 0.18 is the sweet spot.
 
   const tintStyle: React.CSSProperties = {
-    background: "rgba(0, 0, 0, 0.38)",
+    background: "rgba(5, 5, 8, 0.18)",
+    // No backdropFilter here — we don't want to blur the background image
   };
 
-  // ── Layer 3: full-perimeter vignette ──────────────────────────────────────
+  // ── Layer 3: perimeter vignette ───────────────────────────────────────────
+  // Soft edge-darkening only. Does NOT darken the centre of the screen.
+  // Previous implementation had aggressive 0.72 opacity — was suffocating
+  // the image in the centre. New values: transparent at 60%+ inward.
 
   const vignetteStyle: React.CSSProperties = {
     background: [
-      "radial-gradient(ellipse at 50% 0%,   transparent 55%, rgba(0,0,0,0.72) 100%)",
-      "radial-gradient(ellipse at 50% 100%, transparent 55%, rgba(0,0,0,0.72) 100%)",
-      "radial-gradient(ellipse at 0%  50%,  transparent 50%, rgba(0,0,0,0.58) 100%)",
-      "radial-gradient(ellipse at 100% 50%, transparent 50%, rgba(0,0,0,0.58) 100%)",
+      "radial-gradient(ellipse at 50% 0%,   transparent 60%, rgba(5,5,8,0.55) 100%)",
+      "radial-gradient(ellipse at 50% 100%, transparent 60%, rgba(5,5,8,0.60) 100%)",
+      "radial-gradient(ellipse at 0%  50%,  transparent 55%, rgba(5,5,8,0.40) 100%)",
+      "radial-gradient(ellipse at 100% 50%, transparent 55%, rgba(5,5,8,0.40) 100%)",
     ].join(", "),
   };
 
   return (
-    // z-[-1]: sits behind every stacking context, above <html> background.
+    // ── CRITICAL FIX: zIndex is 0, NOT -1 ────────────────────────────────────
+    //
+    // When zIndex was -1, this element rendered behind the Layout root div's
+    // stacking context. Layout's root had `bg-background` (#050508 solid),
+    // which completely painted over the background image — making it invisible.
+    //
+    // At zIndex: 0, this fixed overlay sits ABOVE the Layout root background
+    // (which is now transparent) but BELOW the content z-[10] layer.
+    // The pointer-events: none ensures it never intercepts clicks.
+    //
+    // position: fixed + inset: 0 = full viewport coverage on every page,
+    // including pages taller than the viewport (scrollable pages).
     <div
       aria-hidden="true"
       className="fixed inset-0 pointer-events-none"
       style={{
-        zIndex:     -1,
-        background: "#050508",
+        zIndex:     0,
+        background: "#050508",   // absolute base — visible only if all layers fail
+        isolation:  "isolate",   // prevent child layers from blending with page content
       }}
     >
       {/*
-        ── Probe image: LCP accelerator ────────────────────────────────────────
-        Purpose: make bg.png discoverable by the browser preload scanner so it
-        is fetched at the highest priority immediately during HTML parse — NOT
-        after the CSSOM is built (which is when CSS background-image is fetched).
+        ── LCP probe image ────────────────────────────────────────────────────
+        Makes bg.png visible to the browser's preload scanner immediately on
+        HTML parse, before the CSSOM is built. The CSS background-image on
+        Layer 1 below is only fetched AFTER layout — this probe eliminates
+        that 200-600ms gap by requesting the same URL at fetchPriority="high".
 
-        fetchPriority="high" + loading="eager":
-          Moves bg.png to Priority: Highest in the fetch queue. On a fast 4G
-          connection this brings the image into cache before the first paint.
+        visibility: hidden + 1×1px: triggers a real network request without
+        appearing in the layout or accessibility tree. display:none would
+        cause most browsers to skip the fetch entirely.
 
-        visibility:hidden + 1×1px:
-          Keeps the probe out of layout and out of the accessibility tree while
-          still triggering a real network request (unlike display:none which
-          causes browsers to skip the fetch entirely, or width:0/height:0 which
-          some engines defer).
-
-        onError → setImgFailed:
-          If bg.png is missing/corrupt, the error propagates to the CSS layer
-          which falls back to the gradient immediately — no broken-image icon.
-
-        NOTE: The probe src must be the EXACT same URL as the CSS background-
-        image so the browser serves the response from the same cache entry.
+        The onError handler bridges to the DARK_FALLBACK gradient so there
+        is never a broken-image icon or blank canvas.
       */}
       {!imgFailed && (
         <img
           src={BG_IMAGE_PATH}
           alt=""
           aria-hidden="true"
-          // ── KEY CHANGE from original ────────────────────────────────────
-          // Original: loading="lazy"  — deferred, competes with nothing but
-          //           also doesn't help LCP at all.
-          // New:      loading="eager" + fetchPriority="high" — immediately
-          //           queued at highest priority, up to 450 ms LCP improvement.
           loading="eager"
-          // @ts-expect-error — fetchPriority is a valid HTML attribute but
-          // not yet in @types/react. It is fully supported in all modern browsers.
+          // @ts-expect-error — fetchPriority not yet in @types/react
           fetchPriority="high"
           decoding="async"
           style={{
@@ -155,24 +156,31 @@ function BackgroundOverlayInner() {
         />
       )}
 
-      {/* Layer 1 — background image */}
-      <div className="absolute inset-0" style={imageStyle} />
+      {/* Layer 1 — bg.png at full opacity */}
+      <div
+        className="absolute inset-0"
+        style={imageStyle}
+      />
 
-      {/* Layer 2 — tint */}
-      <div className="absolute inset-0" style={tintStyle} />
+      {/* Layer 2 — ultra-light tint (legibility only, not dimming) */}
+      <div
+        className="absolute inset-0"
+        style={tintStyle}
+      />
 
-      {/* Layer 3 — vignette edges */}
-      <div className="absolute inset-0" style={vignetteStyle} />
+      {/* Layer 3 — soft perimeter vignette */}
+      <div
+        className="absolute inset-0"
+        style={vignetteStyle}
+      />
     </div>
   );
 }
 
 // ─── Memoised export ──────────────────────────────────────────────────────────
-//
-// memo() skips re-rendering when Layout's star pool or scroll state changes,
-// since BackgroundOverlay only depends on `resolvedTheme` (stable in dark-lock).
-// The probe image's fetchPriority="high" must survive memo — it is a static
-// attribute, not derived from props, so memo never suppresses it.
+// memo() prevents re-renders on Layout's star-pool / scroll-class mutations,
+// which happen frequently. BackgroundOverlay has no state that changes during
+// normal interaction, so memoisation is free performance.
 
 export const BackgroundOverlay = memo(BackgroundOverlayInner);
 export default BackgroundOverlay;
