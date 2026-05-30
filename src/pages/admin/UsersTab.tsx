@@ -3,10 +3,10 @@
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { banUser, unbanUser, sendAdminMessage, clearAdminMessage } from "@/lib/adminApi";
+import { banUser, unbanUser, sendAdminMessage, clearAdminMessage, deleteAllSessions } from "@/lib/adminApi";
 import {
   ShieldBan, ShieldCheck, Send, X, Loader2, RefreshCw,
-  AlertCircle, ChevronDown, ChevronUp, Search, Users,
+  AlertCircle, ChevronDown, ChevronUp, Search, Users, Trash2,
 } from "lucide-react";
 import { useLanguage } from "@/hooks/use-language";
 
@@ -420,8 +420,10 @@ export default function UsersTab() {
   const [error,    setError]                           = useState<string | null>(null);
   const [search,   setSearch]                          = useState("");
   const [filter,   setFilter]                          = useState<"all" | "active" | "banned">("all");
+  const [clearingAll, setClearingAll]                  = useState(false);
   const nowMs                                          = useNow(15_000);
   const pollTimerRef                                   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { msg: clearFeedback, flash: flashClear }      = useFeedback();
 
   const filterLabels: Record<string, string> = {
     all:    t("admin.reviews.filterAll"),
@@ -511,6 +513,20 @@ export default function UsersTab() {
     );
   });
 
+  const handleClearAll = useCallback(async () => {
+    if (!window.confirm(t("admin.users.clearAllConfirm"))) return;
+    setClearingAll(true);
+    try {
+      await deleteAllSessions();
+      setSessions([]);
+      flashClear(t("admin.users.clearAll"), true);
+    } catch (e: unknown) {
+      flashClear((e as Error).message, false);
+    } finally {
+      setClearingAll(false);
+    }
+  }, [t, flashClear]);
+
   return (
     <div className="space-y-5">
 
@@ -565,6 +581,29 @@ export default function UsersTab() {
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
           {t("admin.users.refresh")}
         </button>
+
+        {/* Clear All Sessions */}
+        <button
+          onClick={handleClearAll}
+          disabled={clearingAll || sessions.length === 0}
+          className="flex items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-950/20 hover:bg-red-950/40 disabled:opacity-35 px-3 py-2 text-xs text-red-400 hover:text-red-300 transition-colors"
+          title={t("admin.users.clearAllConfirm")}
+        >
+          {clearingAll
+            ? <Loader2 size={12} className="animate-spin" />
+            : <Trash2 size={12} />}
+          {t("admin.users.clearAll")}
+        </button>
+
+        {clearFeedback && (
+          <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
+            clearFeedback.ok
+              ? "text-emerald-300 bg-emerald-500/10"
+              : "text-red-300 bg-red-500/10"
+          }`}>
+            {clearFeedback.text}
+          </span>
+        )}
 
         <span className="text-xs text-white/25 tabular-nums">
           {filtered.length} / {sessions.length}

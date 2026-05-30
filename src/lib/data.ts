@@ -162,6 +162,7 @@ export type TranslationKey =
   | "admin.users.dbError"
   | "admin.users.reasonPlaceholder" | "admin.users.welcomeBack" | "admin.users.msgPlaceholder"
   | "admin.users.inactive" | "admin.users.loading"
+  | "admin.users.clearAll" | "admin.users.clearAllConfirm"
   // Admin — Games Tab
   | "admin.games.title"    | "admin.games.desc"
   | "admin.games.addTitle" | "admin.games.editTitle"
@@ -432,6 +433,8 @@ export const translations: Translations = {
     "admin.users.msgPlaceholder": "Message shown to this user now…",
     "admin.users.inactive": "Inactive",
     "admin.users.loading": "Loading sessions…",
+    "admin.users.clearAll": "Clear All Sessions",
+    "admin.users.clearAllConfirm": "Delete all session records? This cannot be undone.",
 
     // Admin — Games Tab
     "admin.games.title": "Games",
@@ -803,6 +806,8 @@ export const translations: Translations = {
     "admin.users.msgPlaceholder": "رسالة تظهر لهذا المستخدم الآن…",
     "admin.users.inactive": "غير نشط",
     "admin.users.loading": "جاري تحميل الجلسات…",
+    "admin.users.clearAll": "حذف جميع الجلسات",
+    "admin.users.clearAllConfirm": "حذف جميع سجلات الجلسات؟ لا يمكن التراجع.",
 
     // Admin — Games Tab
     "admin.games.title": "الألعاب",
@@ -1174,6 +1179,8 @@ export const translations: Translations = {
     "admin.users.msgPlaceholder": "Mensaje mostrado a este usuario ahora…",
     "admin.users.inactive": "Inactivo",
     "admin.users.loading": "Cargando sesiones…",
+    "admin.users.clearAll": "Borrar Todas las Sesiones",
+    "admin.users.clearAllConfirm": "¿Eliminar todos los registros de sesiones? Esta acción no se puede deshacer.",
 
     // Admin — Games Tab
     "admin.games.title": "Juegos",

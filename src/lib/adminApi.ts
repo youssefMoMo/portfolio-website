@@ -221,6 +221,21 @@ export async function clearAdminMessage(sessionId: string, sessionToken?: string
   return sendAdminMessage({ sessionId, sessionToken, message: null });
 }
 
+/**
+ * Hard-deletes ALL rows from user_sessions.
+ * Used by the admin "Clear All Sessions" button.
+ * The .neq filter is a Supabase requirement — DELETE without a WHERE clause
+ * is blocked by default; matching on a column that every row satisfies
+ * (id != '00000000-0000-0000-0000-000000000000') effectively targets all rows.
+ */
+export async function deleteAllSessions(): Promise<void> {
+  const { error } = await supabase
+    .from("user_sessions")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+  if (error) throw new Error(`deleteAllSessions failed: ${error.message}`);
+}
+
 export async function clearUnbanMessage(sessionId: string) {
   const { error } = await supabase
     .from("user_sessions")

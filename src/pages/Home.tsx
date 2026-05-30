@@ -334,7 +334,7 @@ export default function Home() {
               transition={{ delay: 0.2, duration: 0.7 }}
               className="text-5xl md:text-7xl lg:text-8xl font-bold font-display leading-tight"
             >
-              <span className="bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+              <span className="text-primary">
                 {content?.hero_title1 || t("hero.title1")}
               </span>
               <br />
@@ -370,7 +370,7 @@ export default function Home() {
             <Link href="/portfolio">
               <Button
                 size="lg"
-                className="gap-2 rounded-full px-8 h-12 text-base font-semibold bg-gradient-to-r from-primary to-indigo-500 hover:from-primary/90 hover:to-indigo-500/90"
+                className="gap-2 rounded-full px-8 h-12 text-base font-semibold bg-primary hover:bg-primary/90 text-white"
               >
                 {t("btn.portfolio")} <ArrowRight className="w-4 h-4" />
               </Button>
@@ -425,7 +425,7 @@ export default function Home() {
                       re-fetch on a live admin update.
                     */}
                     <div className="min-h-[2.5rem] flex items-center justify-center">
-                      <p className="text-3xl md:text-4xl font-bold font-display bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
+                      <p className="text-3xl md:text-4xl font-bold font-display text-primary">
                         {dynamicValues[stat.id] || stat.value}
                       </p>
                     </div>
@@ -576,7 +576,7 @@ export default function Home() {
                 <Link href="/pricing">
                   <Button
                     size="lg"
-                    className="gap-2 rounded-full px-8 bg-gradient-to-r from-primary to-indigo-500"
+                    className="gap-2 rounded-full px-8 bg-primary hover:bg-primary/90 text-white font-semibold"
                   >
                     {t("cta.plan")} <ArrowRight className="w-4 h-4" />
                   </Button>
