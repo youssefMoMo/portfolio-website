@@ -1,97 +1,101 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   Tailwind CSS v4 — single import replaces @tailwind base/components/utilities
-   @tailwindcss/postcss processes this directive; do NOT change it to the
-   v3 @tailwind syntax or the entire stylesheet will fail to compile.
+   TAILWIND CSS v4
+   Single @import replaces the v3 @tailwind base/components/utilities triple.
+   Processed by @tailwindcss/postcss in postcss.config.js.
+   DO NOT revert to v3 syntax (@tailwind base / @tailwind utilities).
 ───────────────────────────────────────────────────────────────────────────── */
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   THEME / CSS CUSTOM PROPERTIES
-   All design tokens live here so Tailwind utilities and hand-written CSS
-   reference the same source of truth.  dark-mode values are in .dark { }.
+   DARK MODE — CLASS-BASED VARIANT (CRITICAL)
+
+   In Tailwind v4 the `dark:` variant defaults to the `prefers-color-scheme`
+   media query, NOT the `.dark` HTML class.  This site hard-locks the HTML
+   element to class="dark" on every mount (see ThemeProvider + Layout.tsx).
+
+   @custom-variant below re-wires the `dark:` prefix to match whenever .dark
+   is present anywhere in the ancestor chain, which is always true here.
+
+   WITHOUT this declaration every `dark:bg-*`, `dark:text-*`, `dark:border-*`
+   utility in every component silently produces no CSS rule — leaving all
+   elements rendering their light-mode fallbacks (bg-white/60, bg-white/80)
+   over a dark background, producing the solid gray boxes visible in the
+   broken screenshots.
 ───────────────────────────────────────────────────────────────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
 
-:root {
-  /* Primitive palette */
-  --color-background:    #0b0b0f;
-  --color-foreground:    #f4f4f5;
-  --color-card:          #111118;
-  --color-card-fg:       #f4f4f5;
-  --color-popover:       #111118;
-  --color-popover-fg:    #f4f4f5;
-  --color-primary:       #a78bfa;   /* violet-400 */
-  --color-primary-fg:    #0b0b0f;
-  --color-secondary:     #1e1e2e;
-  --color-secondary-fg:  #a1a1aa;
-  --color-muted:         #1a1a27;
-  --color-muted-fg:      #71717a;
-  --color-accent:        #7c3aed;   /* violet-700 */
-  --color-accent-fg:     #f4f4f5;
-  --color-destructive:   #ef4444;
-  --color-destructive-fg:#fafafa;
-  --color-border:        #27272a;
-  --color-input:         #1e1e2e;
-  --color-ring:          #a78bfa;
+/* ─────────────────────────────────────────────────────────────────────────────
+   DESIGN TOKENS — @theme block
 
-  /* Tailwind v4 semantic mappings */
-  --background:          var(--color-background);
-  --foreground:          var(--color-foreground);
-  --card:                var(--color-card);
-  --card-foreground:     var(--color-card-fg);
-  --popover:             var(--color-popover);
-  --popover-foreground:  var(--color-popover-fg);
-  --primary:             var(--color-primary);
-  --primary-foreground:  var(--color-primary-fg);
-  --secondary:           var(--color-secondary);
-  --secondary-foreground:var(--color-secondary-fg);
-  --muted:               var(--color-muted);
-  --muted-foreground:    var(--color-muted-fg);
-  --accent:              var(--color-accent);
-  --accent-foreground:   var(--color-accent-fg);
-  --destructive:         var(--color-destructive);
-  --destructive-foreground: var(--color-destructive-fg);
-  --border:              var(--color-border);
-  --input:               var(--color-input);
-  --ring:                var(--color-ring);
+   In Tailwind v4, design tokens that utility classes reference (bg-background,
+   text-primary, border-border, etc.) must be declared in @theme {}.
+   Tokens here generate both the CSS custom property AND the utility lookup so
+   that `bg-background` compiles to `background-color: var(--color-background)`.
 
-  /* Typography */
-  --font-sans:   'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
-  --font-mono:   'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+   Naming convention: Tailwind v4 maps utility `bg-X` → `--color-X`.
+   So to make `bg-background` work we register `--color-background`.
+───────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* ── Core palette ─────────────────────────────────────────────────────── */
+  --color-background:         #0b0b0f;
+  --color-foreground:         #f4f4f5;
+  --color-card:               #111118;
+  --color-card-foreground:    #f4f4f5;
+  --color-popover:            #111118;
+  --color-popover-foreground: #f4f4f5;
+  --color-primary:            #a78bfa;
+  --color-primary-foreground: #0b0b0f;
+  --color-secondary:          #1e1e2e;
+  --color-secondary-foreground: #a1a1aa;
+  --color-muted:              #1a1a27;
+  --color-muted-foreground:   #71717a;
+  --color-accent:             #7c3aed;
+  --color-accent-foreground:  #f4f4f5;
+  --color-destructive:        #ef4444;
+  --color-destructive-foreground: #fafafa;
+  --color-border:             #27272a;
+  --color-input:              #1e1e2e;
+  --color-ring:               #a78bfa;
 
-  /* Spacing / radius */
-  --radius:      0.5rem;
-  --radius-sm:   calc(var(--radius) - 2px);
-  --radius-md:   calc(var(--radius) + 0px);
-  --radius-lg:   calc(var(--radius) + 4px);
-  --radius-xl:   calc(var(--radius) + 8px);
+  /* ── Typography ─────────────────────────────────────────────────────────── */
+  --font-sans:    "Inter", "Outfit", system-ui, -apple-system, sans-serif;
+  --font-mono:    "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --font-display: "Outfit", "Inter", system-ui, sans-serif;
 
-  /* Galaxy background sizing */
-  --galaxy-star-size-1: 1px;
-  --galaxy-star-size-2: 2px;
-  --galaxy-star-size-3: 3px;
+  /* ── Border radius ──────────────────────────────────────────────────────── */
+  --radius:    0.5rem;
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 8px);
 }
 
-/* Dark mode — site is dark-locked so this always applies */
-.dark {
-  --background:          #0b0b0f;
-  --foreground:          #f4f4f5;
-  --card:                #111118;
-  --card-foreground:     #f4f4f5;
-  --popover:             #111118;
-  --popover-foreground:  #f4f4f5;
-  --primary:             #a78bfa;
-  --primary-foreground:  #0b0b0f;
-  --secondary:           #1e1e2e;
-  --secondary-foreground:#a1a1aa;
-  --muted:               #1a1a27;
-  --muted-foreground:    #71717a;
-  --accent:              #7c3aed;
-  --accent-foreground:   #f4f4f5;
-  --destructive:         #ef4444;
+/* ─────────────────────────────────────────────────────────────────────────────
+   LEGACY CSS CUSTOM PROPERTIES
+   Kept on :root so that any inline styles or non-Tailwind CSS that references
+   var(--background), var(--primary), etc. continues to resolve correctly.
+   These shadow the @theme tokens above — both point to the same values.
+───────────────────────────────────────────────────────────────────────────── */
+:root {
+  --background:            #0b0b0f;
+  --foreground:            #f4f4f5;
+  --card:                  #111118;
+  --card-foreground:       #f4f4f5;
+  --popover:               #111118;
+  --popover-foreground:    #f4f4f5;
+  --primary:               #a78bfa;
+  --primary-foreground:    #0b0b0f;
+  --secondary:             #1e1e2e;
+  --secondary-foreground:  #a1a1aa;
+  --muted:                 #1a1a27;
+  --muted-foreground:      #71717a;
+  --accent:                #7c3aed;
+  --accent-foreground:     #f4f4f5;
+  --destructive:           #ef4444;
   --destructive-foreground:#fafafa;
-  --border:              #27272a;
-  --input:               #1e1e2e;
-  --ring:                #a78bfa;
+  --border:                #27272a;
+  --input:                 #1e1e2e;
+  --ring:                  #a78bfa;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -121,26 +125,20 @@ body {
   overflow-x: hidden;
 }
 
-/* Focus ring — keyboard-only */
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
-/* Remove default list styles when list-none is used */
-ol, ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-img, video, svg {
+img,
+video,
+svg {
   max-width: 100%;
   height: auto;
   display: block;
 }
 
-/* Scrollbar styling — dark theme */
+/* Custom scrollbar */
 ::-webkit-scrollbar        { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track  { background: var(--background); }
 ::-webkit-scrollbar-thumb  { background: #3f3f46; border-radius: 3px; }
@@ -156,10 +154,11 @@ img, video, svg {
    TYPOGRAPHY UTILITIES
 ───────────────────────────────────────────────────────────────────────────── */
 
-.font-sans  { font-family: var(--font-sans); }
-.font-mono  { font-family: var(--font-mono); }
+.font-sans    { font-family: var(--font-sans); }
+.font-mono    { font-family: var(--font-mono); }
+.font-display { font-family: var(--font-display); }
 
-/* Gradient headline — used on the hero */
+/* Hero gradient headline */
 .gradient-text {
   background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 50%, #c4b5fd 100%);
   -webkit-background-clip: text;
@@ -167,30 +166,36 @@ img, video, svg {
   background-clip: text;
 }
 
+/* Discord glow — used on CTA buttons */
+.discord-glow {
+  box-shadow: 0 0 20px rgba(88, 101, 242, 0.4);
+  transition: box-shadow 0.3s ease;
+}
+.discord-glow:hover {
+  box-shadow: 0 0 32px rgba(88, 101, 242, 0.65);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    GALAXY BACKGROUND — Layout.tsx renders these layers inside a fixed wrapper.
 
-   Layer hierarchy (bottom → top):
-     .galaxy-bg          Container for all star/nebula layers
-     .stars-layer-1/2/3  CSS-animated star fields (parallax speeds)
-     .nebula-1/2         Radial gradient blobs with drift animation
-     .shooting-stars-container  Houses individual .shooting-star elements
-     .vignette           Radial overlay that darkens the edges
+   Stack (bottom → top):
+     .galaxy-bg              overflow:hidden container for star/nebula layers
+     .stars-layer-1/2/3      Animated star fields — three parallax speeds
+     .nebula-1/2             Radial gradient blobs with drift animation
+     .shooting-stars-container  Holds individual .shooting-star elements
+     .vignette               Edge-darkening radial overlay
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* Keyframe: slow parallax drift for star layers */
 @keyframes stars-drift {
-  from { transform: translateY(0px) translateX(0px); }
+  from { transform: translateY(0px)   translateX(0px);  }
   to   { transform: translateY(-40px) translateX(15px); }
 }
 
-/* Keyframe: gentle breathing pulse for nebula blobs */
 @keyframes nebula-pulse {
-  0%, 100% { opacity: 0.12; transform: scale(1) translateX(0); }
-  50%       { opacity: 0.22; transform: scale(1.08) translateX(20px); }
+  0%,100% { opacity: 0.12; transform: scale(1)    translateX(0);   }
+  50%     { opacity: 0.22; transform: scale(1.08) translateX(20px); }
 }
 
-/* Keyframe: shooting star streak diagonal */
 @keyframes shooting-star-fall {
   0%   { transform: translateX(0) translateY(0) scaleX(0.3); opacity: 1; }
   70%  { opacity: 1; }
@@ -212,39 +217,39 @@ img, video, svg {
 
 .stars-layer-1 {
   background-image:
-    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.7) 0%, transparent 100%),
-    radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.5) 0%, transparent 100%),
-    radial-gradient(1px 1px at 55% 8%,  rgba(255,255,255,0.6) 0%, transparent 100%),
-    radial-gradient(1px 1px at 72% 62%, rgba(255,255,255,0.5) 0%, transparent 100%),
-    radial-gradient(1px 1px at 88% 28%, rgba(255,255,255,0.7) 0%, transparent 100%),
-    radial-gradient(1px 1px at 38% 75%, rgba(255,255,255,0.4) 0%, transparent 100%),
-    radial-gradient(1px 1px at 92% 85%, rgba(255,255,255,0.6) 0%, transparent 100%),
-    radial-gradient(1px 1px at 18% 90%, rgba(255,255,255,0.5) 0%, transparent 100%),
-    radial-gradient(1px 1px at 65% 48%, rgba(255,255,255,0.4) 0%, transparent 100%),
-    radial-gradient(1px 1px at 47% 22%, rgba(255,255,255,0.6) 0%, transparent 100%);
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.70) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.50) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55%  8%, rgba(255,255,255,0.60) 0%, transparent 100%),
+    radial-gradient(1px 1px at 72% 62%, rgba(255,255,255,0.50) 0%, transparent 100%),
+    radial-gradient(1px 1px at 88% 28%, rgba(255,255,255,0.70) 0%, transparent 100%),
+    radial-gradient(1px 1px at 38% 75%, rgba(255,255,255,0.40) 0%, transparent 100%),
+    radial-gradient(1px 1px at 92% 85%, rgba(255,255,255,0.60) 0%, transparent 100%),
+    radial-gradient(1px 1px at 18% 90%, rgba(255,255,255,0.50) 0%, transparent 100%),
+    radial-gradient(1px 1px at 65% 48%, rgba(255,255,255,0.40) 0%, transparent 100%),
+    radial-gradient(1px 1px at 47% 22%, rgba(255,255,255,0.60) 0%, transparent 100%);
   animation: stars-drift 80s ease-in-out infinite alternate;
 }
 
 .stars-layer-2 {
   background-image:
-    radial-gradient(1.5px 1.5px at 8% 30%,  rgba(167,139,250,0.6) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 30% 60%,  rgba(255,255,255,0.5) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 60% 20%,  rgba(196,181,253,0.5) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 80% 45%,  rgba(255,255,255,0.4) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 15% 70%,  rgba(167,139,250,0.5) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 50% 88%,  rgba(255,255,255,0.4) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 95% 12%,  rgba(196,181,253,0.6) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 42% 52%,  rgba(255,255,255,0.3) 0%, transparent 100%);
+    radial-gradient(1.5px 1.5px at  8% 30%, rgba(167,139,250,0.60) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 30% 60%, rgba(255,255,255,0.50) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 60% 20%, rgba(196,181,253,0.50) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 80% 45%, rgba(255,255,255,0.40) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 15% 70%, rgba(167,139,250,0.50) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 50% 88%, rgba(255,255,255,0.40) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 95% 12%, rgba(196,181,253,0.60) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 42% 52%, rgba(255,255,255,0.30) 0%, transparent 100%);
   animation: stars-drift 120s ease-in-out infinite alternate-reverse;
 }
 
 .stars-layer-3 {
   background-image:
-    radial-gradient(2px 2px at 20% 10%, rgba(255,255,255,0.3) 0%, transparent 100%),
-    radial-gradient(2px 2px at 70% 30%, rgba(167,139,250,0.3) 0%, transparent 100%),
+    radial-gradient(2px 2px at 20% 10%, rgba(255,255,255,0.30) 0%, transparent 100%),
+    radial-gradient(2px 2px at 70% 30%, rgba(167,139,250,0.30) 0%, transparent 100%),
     radial-gradient(2px 2px at 40% 70%, rgba(255,255,255,0.25) 0%, transparent 100%),
-    radial-gradient(2px 2px at 85% 80%, rgba(196,181,253,0.3) 0%, transparent 100%),
-    radial-gradient(2px 2px at 5%  50%, rgba(255,255,255,0.2) 0%, transparent 100%);
+    radial-gradient(2px 2px at 85% 80%, rgba(196,181,253,0.30) 0%, transparent 100%),
+    radial-gradient(2px 2px at  5% 50%, rgba(255,255,255,0.20) 0%, transparent 100%);
   animation: stars-drift 160s ease-in-out infinite alternate;
 }
 
@@ -262,7 +267,11 @@ img, video, svg {
   max-height: 700px;
   top: -15%;
   right: -15%;
-  background: radial-gradient(circle, rgba(124,58,237,0.18) 0%, rgba(167,139,250,0.08) 50%, transparent 75%);
+  background: radial-gradient(circle,
+    rgba(124, 58,237,0.18) 0%,
+    rgba(167,139,250,0.08) 50%,
+    transparent 75%
+  );
   animation: nebula-pulse 25s ease-in-out infinite;
 }
 
@@ -273,7 +282,11 @@ img, video, svg {
   max-height: 600px;
   bottom: -10%;
   left: -10%;
-  background: radial-gradient(circle, rgba(88,28,220,0.14) 0%, rgba(139,92,246,0.07) 50%, transparent 75%);
+  background: radial-gradient(circle,
+    rgba( 88, 28,220,0.14) 0%,
+    rgba(139, 92,246,0.07) 50%,
+    transparent 75%
+  );
   animation: nebula-pulse 35s ease-in-out infinite reverse;
 }
 
@@ -288,7 +301,12 @@ img, video, svg {
   position: absolute;
   width: 120px;
   height: 1.5px;
-  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 50%, rgba(196,181,253,0.6) 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0)   0%,
+    rgba(255,255,255,0.9) 50%,
+    rgba(196,181,253,0.6) 100%
+  );
   border-radius: 1px;
   will-change: transform, opacity;
   animation: shooting-star-fall 1.2s ease-out forwards;
@@ -302,9 +320,8 @@ img, video, svg {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   SCROLL-BASED ANIMATION PAUSING
-   Layout.tsx adds .is-scrolling to <body> during scroll; removes it after
-   a 150 ms debounce. Pausing GPU layers during scroll prevents jank.
+   SCROLL + VISIBILITY ANIMATION PAUSING
+   Layout.tsx adds/removes these body classes automatically.
 ───────────────────────────────────────────────────────────────────────────── */
 
 body.is-scrolling .stars-layer,
@@ -312,18 +329,12 @@ body.is-scrolling .nebula {
   animation-play-state: paused;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   PAGE VISIBILITY — pause all GPU layers when tab is hidden
-   Layout.tsx toggles .page-hidden on <body> via the Page Visibility API.
-───────────────────────────────────────────────────────────────────────────── */
-
 body.page-hidden .stars-layer,
 body.page-hidden .nebula {
   animation-play-state: paused !important;
 }
 
 body.page-hidden .shooting-star {
-  /* Remove from compositor entirely — cheaper than pause */
   display: none !important;
 }
 
@@ -341,7 +352,7 @@ body.page-hidden .galaxy-bg {
 
 /* ─────────────────────────────────────────────────────────────────────────────
    WILL-CHANGE BUDGET
-   Scope `will-change` hints only to elements that are actually animated.
+   Scope hints to only the elements that are actually animated.
 ───────────────────────────────────────────────────────────────────────────── */
 
 .shooting-star { will-change: transform, opacity; }
@@ -365,7 +376,7 @@ body.page-hidden .galaxy-bg {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   LAZY IMAGE FADE-IN — smooth reveal without JS
+   LAZY IMAGE FADE-IN
 ───────────────────────────────────────────────────────────────────────────── */
 
 img[loading="lazy"] {
@@ -378,17 +389,16 @@ img[loading="lazy"]:not([src=""]) {
   opacity: 1;
 }
 
-/* Prevent layout shift for unsized images */
 img:not([width]):not([height]) {
   max-width: 100%;
   height: auto;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   UTILITY CLASSES — hand-crafted helpers not covered by Tailwind
+   UTILITY CLASSES
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* Glass card — dark frosted look used across portfolio cards */
+/* Frosted glass card */
 .glass-card {
   background: rgba(17, 17, 24, 0.7);
   backdrop-filter: blur(12px) saturate(140%);
@@ -396,13 +406,14 @@ img:not([width]):not([height]) {
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-/* Soft glow ring on hover */
+/* Hover glow ring */
 .hover-glow {
   transition: box-shadow 0.25s ease;
 }
 .hover-glow:hover {
-  box-shadow: 0 0 0 1px var(--primary),
-              0 0 24px color-mix(in srgb, var(--primary) 30%, transparent);
+  box-shadow:
+    0 0 0 1px var(--primary),
+    0 0 24px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 /* Shimmer loading skeleton */
@@ -423,11 +434,19 @@ img:not([width]):not([height]) {
   border-radius: var(--radius);
 }
 
-/* Page skeleton — full-screen shimmer matching the dark background */
+/* Full-screen loading skeleton — matches dark background */
 .page-skeleton {
   min-height: 100dvh;
   background-color: var(--background);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Eco mode — DualMarqueeSection and Layout respect this class on <html> */
+.eco-mode .stars-layer,
+.eco-mode .nebula,
+.eco-mode .shooting-star {
+  animation-play-state: paused !important;
+  display: none !important;
 }

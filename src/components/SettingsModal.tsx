@@ -292,7 +292,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           whileHover={{ scale: 1.08 }}
                           whileTap={{ scale: 0.93 }}
                           onClick={() => handleLanguageChange(langOption.value)}
-                          className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group ${
+                          className={`relative p-3 sm:p-4 rounded-xl border transition-all duration-300 overflow-hidden group w-full min-h-[80px] sm:min-h-[88px] ${ 
                             isActive
                               ? "bg-gradient-to-br " + langOption.color + " border-transparent shadow-lg"
                               : "bg-background/50 border-white/10 hover:border-white/20"
@@ -310,7 +310,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               <img
                                 src={FLAG_IMAGES[langOption.value]}
                                 alt={langOption.label}
-                                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover shadow-sm"
+                                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover shadow-sm flex-shrink-0 aspect-square"
                                 onError={() =>
                                   setFlagErrors((prev) => ({ ...prev, [langOption.value]: true }))
                                 }
