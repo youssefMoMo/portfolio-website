@@ -1,39 +1,10 @@
 // src/pages/AdminDashboard.tsx
 //
-// ─── PERFORMANCE OVERHAUL CHANGELOG ──────────────────────────────────────────
-//
-// DIRECTIVE 2 — Admin Code Splitting (all tabs lazy-loaded)
-//
-//   Before: 6 of 9 tabs were lazy; Portfolio (~22 KB) and Pricing (~20 KB)
-//           were rendered inline in this file, bloating the initial bundle.
-//
-//   After:  ALL 8 non-trivial tabs are lazy-loaded:
-//             AnalyticsTab  → page-admin-analytics.js
-//             HomeTab       → page-admin-home.js
-//             PortfolioTab  → page-admin-portfolio.js  ← NEW
-//             PricingTab    → page-admin-pricing.js    ← NEW
-//             PoliciesTab   → page-admin-policies.js
-//             ReviewsTab    → page-admin-reviews.js
-//             GamesTab      → page-admin-games.js
-//             UsersTab      → page-admin-users.js
-//
-//   LogsTab remains inline (it has no external dependencies, is <4 KB, and
-//   is needed immediately on first render for the error badge count).
-//
-//   AdminDashboard itself is now a pure orchestrator:
-//     • Auth guard + logout
-//     • Tab navigation strip
-//     • AnimatePresence with Suspense fallback per tab
-//     • No content-editing state (each tab owns its own)
-//
-//   Estimated main-chunk reduction: ~42 KB pre-gzip.
-//
-// All original behaviour preserved:
-//   • Auth guard (isAuthenticatedSync)
-//   • last_login update via Supabase
-//   • LogsTab with 30 s auto-poll
-//   • TAB_SPINNER fallback
-//   • All icons and tab definitions
+// FLAT UI PURGE: All bg-gradient-to-r gradient classes removed from tab buttons.
+// Active tab: solid bg-primary (#6a87ce)
+// Inactive tab: default outline variant
+// Icon accent boxes in LogsTab: solid flat bg-[#27282a] border border-white/10
+// Header h1: flat text-primary (no gradient text)
 
 import React, {
   useState, useEffect, useRef, lazy, Suspense,
@@ -56,7 +27,7 @@ import {
 import { isSupabaseEnabled, supabase } from "@/lib/supabase";
 import { isAuthenticatedSync, logout }  from "@/lib/auth";
 
-// ── Lazy tab imports ─────────────────────────────────────────────────────────
+// ── Lazy tab imports ──────────────────────────────────────────────────────────
 
 const AnalyticsTab  = lazy(() => import(/* webpackChunkName: "page-admin-analytics"  */ "./admin/AnalyticsTab"));
 const ReviewsTab    = lazy(() => import(/* webpackChunkName: "page-admin-reviews"    */ "./admin/ReviewsTab"));
@@ -73,7 +44,7 @@ type TabType =
   | "analytics" | "home"     | "portfolio" | "pricing"
   | "policies"  | "reviews"  | "games"     | "users"   | "logs";
 
-// ── Shared tab loading indicator ─────────────────────────────────────────────
+// ── Shared tab loading indicator ──────────────────────────────────────────────
 
 const TAB_SPINNER = (
   <div className="flex items-center justify-center py-24">
@@ -90,7 +61,7 @@ const LOG_CFG = {
   unhandled: { color: "bg-purple-500/15 border-purple-500/30",text: "text-purple-400", icon: "🟣", label: "Unhandled" },
 } as const;
 
-// ── LogsTab — inline (fast path, no external deps, <4 KB) ────────────────────
+// ── LogsTab — inline (fast path, no external deps, <4 KB) ─────────────────────
 
 function LogsTab() {
   const { toast }  = useToast();
@@ -144,8 +115,9 @@ function LogsTab() {
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-r from-red-500 to-rose-600">
-                <ScrollText className="w-6 h-6 text-white" />
+              {/* FLAT UI: solid icon box, no gradient */}
+              <div className="p-2 rounded-lg bg-[#27282a] border border-white/10">
+                <ScrollText className="w-6 h-6 text-red-400" />
               </div>
               <div>
                 <CardTitle className="text-2xl">Error Logs ({counts.all})</CardTitle>
@@ -251,7 +223,7 @@ function LogsTab() {
   );
 }
 
-// ── Main Dashboard ────────────────────────────────────────────────────────────
+// ── Main Dashboard ─────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
@@ -265,12 +237,12 @@ export default function AdminDashboard() {
     return () => { mountedRef.current = false; };
   }, []);
 
-  // ── Auth guard ────────────────────────────────────────────────────────────
+  // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isAuthenticatedSync()) navigate("/admin");
   }, [navigate]);
 
-  // ── Update last_login ─────────────────────────────────────────────────────
+  // ── Update last_login ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!isSupabaseEnabled || !supabase) return;
     const sb = supabase;
@@ -290,36 +262,39 @@ export default function AdminDashboard() {
     navigate("/admin");
   };
 
-  // ── Tab definitions ───────────────────────────────────────────────────────
+  // ── Tab definitions ────────────────────────────────────────────────────────
+  // FLAT UI: `gradient` field removed entirely.
+  // Active state: bg-primary text-white
+  // Inactive state: default outline variant
 
   const TABS: {
-    id:       TabType;
-    label:    string;
-    sub:      string;
-    icon:     React.ElementType;
-    gradient: string;
+    id:    TabType;
+    label: string;
+    sub:   string;
+    icon:  React.ElementType;
   }[] = [
-    { id: "analytics", label: "Analytics", sub: "Stats & trends",     icon: BarChart3,     gradient: "from-violet-500 to-purple-600"  },
-    { id: "home",      label: "Home",      sub: "Hero & stats",       icon: Home,          gradient: "from-blue-500 to-cyan-500"      },
-    { id: "portfolio", label: "Portfolio", sub: "Your projects",      icon: Image,         gradient: "from-purple-500 to-pink-500"    },
-    { id: "pricing",   label: "Pricing",   sub: "Plans & packages",   icon: DollarSign,    gradient: "from-green-500 to-emerald-500"  },
-    { id: "reviews",   label: "Reviews",   sub: "Moderation queue",   icon: MessageSquare, gradient: "from-yellow-500 to-orange-500"  },
-    { id: "policies",  label: "Policies",  sub: "Terms & conditions", icon: FileText,      gradient: "from-orange-500 to-red-500"     },
-    { id: "games",     label: "Games",     sub: "Roblox games",       icon: Gamepad2,      gradient: "from-cyan-500 to-blue-600"      },
-    { id: "users",     label: "Users",     sub: "Ban management",     icon: Users,         gradient: "from-indigo-500 to-violet-600"  },
-    { id: "logs",      label: "Logs",      sub: "Error monitor",      icon: ScrollText,    gradient: "from-red-500 to-rose-600"       },
+    { id: "analytics", label: "Analytics", sub: "Stats & trends",     icon: BarChart3     },
+    { id: "home",      label: "Home",      sub: "Hero & stats",       icon: Home          },
+    { id: "portfolio", label: "Portfolio", sub: "Your projects",      icon: Image         },
+    { id: "pricing",   label: "Pricing",   sub: "Plans & packages",   icon: DollarSign    },
+    { id: "reviews",   label: "Reviews",   sub: "Moderation queue",   icon: MessageSquare },
+    { id: "policies",  label: "Policies",  sub: "Terms & conditions", icon: FileText      },
+    { id: "games",     label: "Games",     sub: "Roblox games",       icon: Gamepad2      },
+    { id: "users",     label: "Users",     sub: "Ban management",     icon: Users         },
+    { id: "logs",      label: "Logs",      sub: "Error monitor",      icon: ScrollText    },
   ];
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 pt-20 pb-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-background pt-20 pb-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
 
-        {/* ── Header ───────────────────────────────────────────────────────── */}
+        {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-bold font-display bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+            {/* FLAT UI: plain text-primary heading, no gradient text */}
+            <h1 className="text-3xl sm:text-4xl font-bold font-display text-primary">
               Admin Dashboard
             </h1>
             <p className="text-muted-foreground mt-2 flex items-center gap-2">
@@ -337,31 +312,40 @@ export default function AdminDashboard() {
         </div>
 
         {/* ── Tab strip ────────────────────────────────────────────────────── */}
+        {/*
+          FLAT UI ENFORCEMENT:
+          Active:   solid bg-primary text-white border-transparent — no gradient
+          Inactive: standard outline (bg-transparent border-white/10)
+          The icon box next to the label also uses a flat bg-primary/15 tint.
+        */}
         <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2 mb-8">
-          {TABS.map(({ id, label, sub, icon: Icon, gradient }) => {
+          {TABS.map(({ id, label, sub, icon: Icon }) => {
             const active = activeTab === id;
             return (
-              <Button
+              <button
                 key={id}
-                variant={active ? "default" : "outline"}
                 onClick={() => setActiveTab(id)}
-                className={`h-auto py-2.5 px-2 gap-1.5 flex-col items-center text-center transition-all duration-300 ${
-                  active
-                    ? `bg-gradient-to-r ${gradient} text-white shadow-lg border-transparent`
-                    : "hover:shadow-md"
-                }`}
+                className={`
+                  h-auto py-2.5 px-2 gap-1.5 flex flex-col items-center text-center
+                  rounded-md border text-sm font-medium
+                  transition-colors duration-150
+                  ${active
+                    ? "bg-primary text-white border-transparent shadow-md"
+                    : "bg-transparent border-white/10 text-muted-foreground hover:bg-white/5 hover:text-white hover:border-white/20"
+                  }
+                `}
               >
                 <Icon className="w-4 h-4" />
                 <div>
                   <div className="font-semibold text-[11px] leading-tight">{label}</div>
                   <div className="text-[9px] opacity-75 leading-tight hidden sm:block">{sub}</div>
                 </div>
-              </Button>
+              </button>
             );
           })}
         </div>
 
-        {/* ── Tab content ──────────────────────────────────────────────────── */}
+        {/* ── Tab content ────────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
 
           {activeTab === "analytics" && (

@@ -123,6 +123,7 @@ export type TranslationKey =
   | "games.error"     | "games.errorTitle" | "games.retry"     | "games.reload"
   | "games.defaultName" | "games.credit"   | "games.playNow"
   | "games.noGamesTitle" | "games.noGamesText"
+  | "games.playOnRoblox" | "games.visitsLabel"
   | "games.ctaTitle"  | "games.ctaText"    | "games.contactDiscord"
   // Admin Login
   | "admin.panelTitle" | "admin.discordStepDesc" | "admin.passwordStepDesc"
@@ -340,6 +341,8 @@ export const translations: Translations = {
     "games.defaultName": "Game",
     "games.credit": "UI/UX Design by Youssef Design",
     "games.playNow": "Play Now",
+    "games.playOnRoblox": "Play on Roblox",
+    "games.visitsLabel": "total visits",
     "games.noGamesTitle": "No Games Found",
     "games.noGamesText": "Check back later for updates",
     "games.ctaTitle": "Want Your Game Featured Here?",
@@ -713,6 +716,8 @@ export const translations: Translations = {
     "games.defaultName": "لعبة",
     "games.credit": "تصميم واجهة المستخدم بواسطة يوسف ديزاين",
     "games.playNow": "العب الآن",
+    "games.playOnRoblox": "العب على Roblox",
+    "games.visitsLabel": "إجمالي الزيارات",
     "games.noGamesTitle": "لم يتم العثور على ألعاب",
     "games.noGamesText": "تحقق لاحقاً للحصول على تحديثات",
     "games.ctaTitle": "هل تريد أن تُعرض لعبتك هنا؟",
@@ -1086,6 +1091,8 @@ export const translations: Translations = {
     "games.defaultName": "Juego",
     "games.credit": "Diseño UI/UX por Youssef Design",
     "games.playNow": "Jugar Ahora",
+    "games.playOnRoblox": "Jugar en Roblox",
+    "games.visitsLabel": "visitas totales",
     "games.noGamesTitle": "No Se Encontraron Juegos",
     "games.noGamesText": "Vuelve más tarde para ver actualizaciones",
     "games.ctaTitle": "¿Quieres que tu Juego Aparezca Aquí?",

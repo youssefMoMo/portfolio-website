@@ -177,6 +177,7 @@ function Skeleton({ large }: { large?: boolean }) {
 
 // ── Featured hero card ──────────────────────────────────────────
 function FeaturedCard({ game }: { game: GameEntry }) {
+  const { t } = useLanguage();
   const meta = GAME_META[game.place_id] ?? DEFAULT_META;
   return (
     <motion.div
@@ -213,7 +214,7 @@ function FeaturedCard({ game }: { game: GameEntry }) {
             target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors shadow-lg"
           >
-            <Play className="w-4 h-4 fill-current" /> Play on Roblox
+            <Play className="w-4 h-4 fill-current" /> {t("games.playOnRoblox")}
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
@@ -224,6 +225,7 @@ function FeaturedCard({ game }: { game: GameEntry }) {
 
 // ── Regular game card ───────────────────────────────────────────
 function GameCard({ game, index }: { game: GameEntry; index: number }) {
+  const { t } = useLanguage();
   const meta = GAME_META[game.place_id] ?? DEFAULT_META;
   return (
     <motion.div
@@ -276,7 +278,7 @@ function GameCard({ game, index }: { game: GameEntry; index: number }) {
           >
             <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-primary/25 bg-primary/8 hover:bg-primary/18 text-primary font-semibold text-sm transition-all duration-200 group/btn">
               <Play className="w-3.5 h-3.5 fill-current" />
-              Play on Roblox
+              {t("games.playOnRoblox")}
               <ExternalLink className="w-3 h-3 opacity-0 group-hover/btn:opacity-100 transition-opacity" />
             </div>
           </a>
@@ -340,10 +342,9 @@ export default function Games() {
           </motion.div>
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
             className="text-3xl sm:text-5xl md:text-6xl font-bold font-display mb-4">
-            <span className="bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-              Games I Designed
-            </span>{" "}
-            <span className="text-foreground">UI For</span>
+            <span className="text-primary">
+              {t("games.title")}
+            </span>
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
             className="text-muted-foreground max-w-2xl mx-auto mb-6 text-sm sm:text-base">
@@ -355,7 +356,7 @@ export default function Games() {
             className="inline-flex flex-wrap items-center justify-center gap-4 px-6 py-3 rounded-2xl bg-card/50 border border-white/8 text-sm">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <span className="font-bold text-foreground">{fmt(total)}</span> total visits
+              <span className="font-bold text-foreground">{fmt(total)}</span> {t("games.visitsLabel")}
             </div>
             <div className="w-px h-4 bg-white/10" />
             <div className="flex items-center gap-1.5 text-muted-foreground">

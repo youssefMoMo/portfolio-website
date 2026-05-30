@@ -444,7 +444,17 @@ export default function UsersTab() {
         setError(`${t("admin.users.dbError")}: ${qErr.message}`);
         setSessions([]);
       } else {
-        setSessions((data || []) as unknown as Session[]);
+        // Deduplicate by session_token — guards against any phantom rows from
+        // upsert-on-conflict replay events in the DB that slipped past the
+        // UNIQUE constraint during race conditions.
+        const raw = (data || []) as unknown as Session[];
+        const seen = new Set<string>();
+        const deduped = raw.filter((s) => {
+          if (seen.has(s.session_token)) return false;
+          seen.add(s.session_token);
+          return true;
+        });
+        setSessions(deduped);
       }
     } catch (err: unknown) {
       setError(`${t("admin.users.dbError")}: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -468,7 +478,14 @@ export default function UsersTab() {
         { event: "INSERT", schema: "public", table: "user_sessions" },
         (payload) => {
           const row = payload.new as Session;
-          setSessions((prev) => prev.some((s) => s.id === row.id) ? prev : [row, ...prev]);
+          // Deduplicate by both id AND session_token to prevent phantom duplicates
+          // that appear when a upsert-on-conflict triggers an INSERT event in the
+          // realtime log even though the logical row already exists.
+          setSessions((prev) =>
+            prev.some((s) => s.id === row.id || s.session_token === row.session_token)
+              ? prev.map((s) => s.session_token === row.session_token ? { ...s, ...row } : s)
+              : [row, ...prev]
+          );
         }
       )
       .on("postgres_changes",
