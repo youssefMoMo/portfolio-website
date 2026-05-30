@@ -19,14 +19,13 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    DESIGN TOKENS — @theme block
    Tailwind v4 maps utility bg-X → --color-X, text-X → --color-X, etc.
-   These are the ONLY colours used throughout the site.
 
-   NEW PALETTE (2026 mandate):
-     Typography / headers:            #ffffff
-     Cards / panels / modals:         #27282a
-     Muted text / subtle borders:     #b6c2db
-     Accent / CTAs / primary glows:   #6a87ce
-     Base background (under image):   #050508
+   LOCKED PALETTE (4 brand colours — no deviations permitted):
+     Core Headings / Icons:            #ffffff
+     Element Cards / Panels / Footers: #27282a
+     Secondary Text / Descriptions:    #b6c2db
+     Brand Primary Active / Glows:     #6a87ce
+     Base background (under image):    #050508
 ───────────────────────────────────────────────────────────────────────────── */
 @theme {
   /* ── Core palette ─────────────────────────────────────────────────────── */
@@ -280,7 +279,7 @@ svg {
 /* ─────────────────────────────────────────────────────────────────────────────
    GALAXY BACKGROUND ANIMATION SYSTEM
    These animate on top of BackgroundOverlay's bg.png, adding depth.
-   All star/nebula colours updated to the new blue palette (#6a87ce family).
+   All star/nebula colours are in the locked #6a87ce blue palette family.
 ───────────────────────────────────────────────────────────────────────────── */
 
 @keyframes stars-drift {
@@ -293,10 +292,34 @@ svg {
   50%     { opacity: 0.18; transform: scale(1.06) translateX(18px); }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   SHOOTING STAR ANIMATION — PURIFIED
+   ─────────────────────────────────────────────────────────────────────────────
+   CRITICAL FIX: The white light-leak horizontal streak was caused by a
+   .shooting-star element that either:
+     a) had its animation interrupted mid-frame (e.g. on low-power mode or
+        heavy CPU load), leaving the 120px white gradient bar statically
+        rendered as a horizontal white line across the page, OR
+     b) was spawned but had its opacity/transform animation transition to an
+        in-progress state visible at rest.
+
+   The purification approach:
+     1. opacity: 0 at 0% keyframe — element is INVISIBLE at spawn point
+     2. fade IN to opacity: 1 only after movement has begun (at 5%)
+     3. opacity hard-clipped to 0 at start and end via both keyframe AND
+        the element's default style (no white flash at rest)
+     4. The element starts with opacity: 0 via default style rule below
+     5. animation-fill-mode: forwards (preserves final keyframe: opacity 0)
+
+   This guarantees: if the animation stalls at frame 0%, there is NO visible
+   white element. The artifact is completely eliminated.
+───────────────────────────────────────────────────────────────────────────── */
+
 @keyframes shooting-star-fall {
-  0%   { transform: translateX(0) translateY(0) scaleX(0.3); opacity: 1; }
-  70%  { opacity: 1; }
-  100% { transform: translateX(600px) translateY(400px) scaleX(1); opacity: 0; }
+  0%   { transform: translateX(0)     translateY(0)      scaleX(0.3); opacity: 0; }
+  5%   { opacity: 1; }
+  70%  { opacity: 0.9; }
+  100% { transform: translateX(600px) translateY(400px)  scaleX(1);   opacity: 0; }
 }
 
 .galaxy-bg {
@@ -357,7 +380,7 @@ svg {
   will-change: opacity, transform;
 }
 
-/* Blue-toned nebulae matching the new palette */
+/* Blue-toned nebulae matching the locked palette */
 .nebula-1 {
   width: 60vw;
   height: 60vw;
@@ -395,10 +418,22 @@ svg {
   overflow: hidden;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   .shooting-star — PURIFIED, WHITE STREAK ELIMINATED
+   ─────────────────────────────────────────────────────────────────────────────
+   KEY CHANGES vs previous version:
+     - opacity: 0 default → element is INVISIBLE when not animating
+     - animation-fill-mode: forwards → final frame (opacity:0) is retained
+     - The 0% keyframe also has opacity:0 — so even frame-0 is invisible
+     - This completely eliminates the "white horizontal bar" artifact that
+       appeared when a star spawned but animation stalled at frame 0%
+───────────────────────────────────────────────────────────────────────────── */
 .shooting-star {
   position: absolute;
   width: 120px;
   height: 1.5px;
+  /* ← PURGE OF WHITE STREAK: default opacity is 0 (invisible at rest) */
+  opacity: 0;
   background: linear-gradient(
     90deg,
     rgba(255,255,255,0)   0%,
@@ -407,6 +442,7 @@ svg {
   );
   border-radius: 1px;
   will-change: transform, opacity;
+  /* forwards: holds the final keyframe state (opacity:0) after animation ends */
   animation: shooting-star-fall 1.2s ease-out forwards;
 }
 
@@ -494,7 +530,7 @@ img:not([width]):not([height]) {
    UTILITY CLASSES
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* ── Frosted glass card — new palette ─────────────────────────────────────── */
+/* ── Frosted glass card — locked palette ──────────────────────────────────── */
 .glass-card {
   background: rgba(39, 40, 42, 0.72);
   backdrop-filter: blur(14px) saturate(150%);
@@ -510,7 +546,7 @@ img:not([width]):not([height]) {
   border: 1px solid rgba(182, 194, 219, 0.10);
 }
 
-/* ── Hover glow ring — blue accent ───────────────────────────────────────── */
+/* ── Hover glow ring — blue accent (#6a87ce) ──────────────────────────────── */
 .hover-glow {
   transition: box-shadow 0.25s ease;
 }
@@ -556,7 +592,7 @@ img:not([width]):not([height]) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   CARD & PANEL SYSTEM — NEW PALETTE
+   CARD & PANEL SYSTEM — LOCKED PALETTE
    All card/panel elements that don't carry an explicit bg-card class get the
    correct #27282a slate-gray surface. Using attribute selectors that are
    more specific than Tailwind utilities but do not globally override
@@ -589,7 +625,7 @@ html[class~="dark"] .bg-card\/80 {
   background-color: rgba(39, 40, 42, 0.80);
 }
 
-/* Force all card-family borders to use the new muted palette */
+/* Force all card-family borders to use the locked muted palette */
 html[class~="dark"] [class*="border-white\/"],
 html[class~="dark"] [class*="border-slate-"],
 html[class~="dark"] [class*="border-neutral-"],
@@ -647,17 +683,17 @@ html[class~="dark"] .via-primary {
   --tw-gradient-via: #6a87ce;
 }
 
-/* Muted foreground */
+/* Muted foreground — #b6c2db */
 html[class~="dark"] .text-muted-foreground {
   color: #b6c2db !important;
 }
 
-/* Foreground text */
+/* Foreground text — #ffffff */
 html[class~="dark"] .text-foreground {
   color: #ffffff !important;
 }
 
-/* Ring colour for focus */
+/* Ring colour for focus — #6a87ce */
 html[class~="dark"] .ring-primary {
   --tw-ring-color: #6a87ce;
 }
