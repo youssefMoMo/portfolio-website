@@ -394,12 +394,12 @@ export default function Games() {
 
         {/* ── CTA ── */}
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-          className="bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-3xl p-10 sm:p-14 text-center shadow-sm dark:shadow-none">
+          className="bg-card/40 backdrop-blur-xl border border-white/10 rounded-3xl p-10 sm:p-14 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-5 border border-primary/20">
             <Users className="w-3.5 h-3.5" /> Open for projects
           </div>
-          <h2 className="text-2xl sm:text-3xl font-display font-bold mb-3 text-slate-900 dark:text-zinc-100">{t("games.ctaTitle")}</h2>
-          <p className="text-slate-600 dark:text-zinc-400 mb-8 max-w-xl mx-auto text-sm">{t("games.ctaText")}</p>
+          <h2 className="text-2xl sm:text-3xl font-display font-bold mb-3 text-zinc-100">{t("games.ctaTitle")}</h2>
+          <p className="text-zinc-400 mb-8 max-w-xl mx-auto text-sm">{t("games.ctaText")}</p>
           <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
             <Button size="lg" className="gap-2 rounded-full px-8 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow" onClick={openDiscord}>
               <MessageSquare className="w-5 h-5" /> {t("games.contactDiscord")}

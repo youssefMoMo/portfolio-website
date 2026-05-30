@@ -355,7 +355,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.6 }}
-              className="text-lg md:text-xl text-slate-600 dark:text-zinc-400 max-w-2xl mx-auto"
+              className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto"
             >
               {content?.hero_subtitle || t("hero.subtitle")}
             </motion.p>
@@ -409,7 +409,7 @@ export default function Home() {
                   initial="hidden"
                   whileInView="visible"
                   viewport={{ once: true }}
-                  className="group relative p-6 rounded-2xl bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-300 text-center shadow-sm dark:shadow-none"
+                  className="group relative p-6 rounded-2xl bg-card/50 backdrop-blur-xl border border-white/[0.06] hover:border-primary/30 transition-all duration-300 text-center"
                 >
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="relative">
@@ -429,7 +429,7 @@ export default function Home() {
                         {dynamicValues[stat.id] || stat.value}
                       </p>
                     </div>
-                    <p className="text-sm text-slate-600 dark:text-zinc-400 mt-1">{t(`stat.${stat.icon}` as import("@/lib/data").TranslationKey)}</p>
+                    <p className="text-sm text-zinc-400 mt-1">{t(`stat.${stat.icon}` as import("@/lib/data").TranslationKey)}</p>
                   </div>
                 </motion.div>
               );
@@ -457,7 +457,7 @@ export default function Home() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.1 }}
-              className="text-slate-600 dark:text-zinc-400 max-w-xl mx-auto"
+              className="text-zinc-400 max-w-xl mx-auto"
             >
               {t("portfolio.subtitle")}
             </motion.p>
@@ -503,7 +503,7 @@ export default function Home() {
               {[...weeklyItems, ...weeklyItems].map((item, i) => (
                 <div
                   key={`${item.id}-${i}`}
-                  className="group relative overflow-hidden rounded-2xl bg-slate-100 dark:bg-card/40 border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-all duration-500 w-[320px] md:w-[380px] flex-shrink-0"
+                  className="group relative overflow-hidden rounded-2xl bg-card/40 border border-white/[0.06] hover:border-primary/30 transition-all duration-500 w-[320px] md:w-[380px] flex-shrink-0"
                 >
                   <div className="aspect-video overflow-hidden bg-card/60 relative">
                     <HomeImage
@@ -553,7 +553,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="relative rounded-3xl bg-white/60 dark:bg-card/40 backdrop-blur-xl border border-slate-200 dark:border-white/10 p-12 md:p-16 text-center overflow-hidden shadow-sm dark:shadow-none"
+            className="relative rounded-3xl bg-card/50 backdrop-blur-xl border border-white/[0.08] p-12 md:p-16 text-center overflow-hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-cyan-500/10" />
             <div className="relative">
@@ -565,11 +565,11 @@ export default function Home() {
                 downward when content?.cta_title loads.
               */}
               <div className="min-h-[3rem] flex items-center justify-center mb-4">
-                <h2 className="text-3xl md:text-4xl font-display font-bold text-slate-900 dark:text-zinc-100">
+                <h2 className="text-3xl md:text-4xl font-display font-bold text-zinc-100">
                   {(content?.cta_title && content.cta_title.trim()) || t("cta.title")}
                 </h2>
               </div>
-              <p className="text-slate-600 dark:text-zinc-400 max-w-xl mx-auto mb-8">
+              <p className="text-zinc-400 max-w-xl mx-auto mb-8">
                 {(content?.cta_subtitle && content.cta_subtitle.trim()) || t("cta.subtitle")}
               </p>
               <div className="flex flex-wrap gap-4 justify-center">

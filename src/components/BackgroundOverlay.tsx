@@ -68,7 +68,7 @@ function BackgroundOverlayInner() {
   // ── Layer 1: background image ──────────────────────────────────────────────
 
   const imageStyle: React.CSSProperties = imgFailed
-    ? { background: isDark ? DARK_FALLBACK : LIGHT_FALLBACK }
+    ? { background: DARK_FALLBACK }
     : {
         backgroundImage:      `url(${BG_IMAGE_PATH})`,
         backgroundSize:       "cover",
@@ -82,27 +82,18 @@ function BackgroundOverlayInner() {
   // ── Layer 2: semi-transparent tint ────────────────────────────────────────
 
   const tintStyle: React.CSSProperties = {
-    background: isDark
-      ? "rgba(0, 0, 0, 0.34)"
-      : "rgba(255, 255, 255, 0.40)",
+    background: "rgba(0, 0, 0, 0.38)",
   };
 
   // ── Layer 3: full-perimeter vignette ──────────────────────────────────────
 
   const vignetteStyle: React.CSSProperties = {
-    background: isDark
-      ? [
-          "radial-gradient(ellipse at 50% 0%,   transparent 55%, rgba(0,0,0,0.70) 100%)",
-          "radial-gradient(ellipse at 50% 100%, transparent 55%, rgba(0,0,0,0.70) 100%)",
-          "radial-gradient(ellipse at 0%  50%,  transparent 50%, rgba(0,0,0,0.55) 100%)",
-          "radial-gradient(ellipse at 100% 50%, transparent 50%, rgba(0,0,0,0.55) 100%)",
-        ].join(", ")
-      : [
-          "radial-gradient(ellipse at 50% 0%,   transparent 55%, rgba(200,200,210,0.40) 100%)",
-          "radial-gradient(ellipse at 50% 100%, transparent 55%, rgba(200,200,210,0.40) 100%)",
-          "radial-gradient(ellipse at 0%  50%,  transparent 50%, rgba(200,200,210,0.30) 100%)",
-          "radial-gradient(ellipse at 100% 50%, transparent 50%, rgba(200,200,210,0.30) 100%)",
-        ].join(", "),
+    background: [
+      "radial-gradient(ellipse at 50% 0%,   transparent 55%, rgba(0,0,0,0.72) 100%)",
+      "radial-gradient(ellipse at 50% 100%, transparent 55%, rgba(0,0,0,0.72) 100%)",
+      "radial-gradient(ellipse at 0%  50%,  transparent 50%, rgba(0,0,0,0.58) 100%)",
+      "radial-gradient(ellipse at 100% 50%, transparent 50%, rgba(0,0,0,0.58) 100%)",
+    ].join(", "),
   };
 
   return (
@@ -112,7 +103,7 @@ function BackgroundOverlayInner() {
       className="fixed inset-0 pointer-events-none"
       style={{
         zIndex:     -1,
-        background: isDark ? "#0b0b0f" : "#f5f5f7",
+        background: "#050508",
       }}
     >
       {/*

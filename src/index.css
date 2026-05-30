@@ -2,60 +2,40 @@
    TAILWIND CSS v4
    Single @import replaces the v3 @tailwind base/components/utilities triple.
    Processed by @tailwindcss/postcss in postcss.config.js.
-   DO NOT revert to v3 syntax (@tailwind base / @tailwind utilities).
 ───────────────────────────────────────────────────────────────────────────── */
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DARK MODE — CLASS-BASED VARIANT (CRITICAL)
-
-   In Tailwind v4 the `dark:` variant defaults to the `prefers-color-scheme`
-   media query, NOT the `.dark` HTML class.  This site hard-locks the HTML
-   element to class="dark" on every mount (see ThemeProvider + Layout.tsx).
-
-   @custom-variant below re-wires the `dark:` prefix to match whenever .dark
-   is present anywhere in the ancestor chain, which is always true here.
-
-   WITHOUT this declaration every `dark:bg-*`, `dark:text-*`, `dark:border-*`
-   utility in every component silently produces no CSS rule — leaving all
-   elements rendering their light-mode fallbacks (bg-white/60, bg-white/80)
-   over a dark background, producing the solid gray boxes visible in the
-   broken screenshots.
+   Re-wires dark: prefix to fire on .dark ancestor — ALWAYS true on this site.
 ───────────────────────────────────────────────────────────────────────────── */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ─────────────────────────────────────────────────────────────────────────────
    DESIGN TOKENS — @theme block
-
-   In Tailwind v4, design tokens that utility classes reference (bg-background,
-   text-primary, border-border, etc.) must be declared in @theme {}.
-   Tokens here generate both the CSS custom property AND the utility lookup so
-   that `bg-background` compiles to `background-color: var(--color-background)`.
-
-   Naming convention: Tailwind v4 maps utility `bg-X` → `--color-X`.
-   So to make `bg-background` work we register `--color-background`.
+   Tailwind v4: bg-background → --color-background, etc.
 ───────────────────────────────────────────────────────────────────────────── */
 @theme {
   /* ── Core palette ─────────────────────────────────────────────────────── */
-  --color-background:         #0b0b0f;
-  --color-foreground:         #f4f4f5;
-  --color-card:               #111118;
-  --color-card-foreground:    #f4f4f5;
-  --color-popover:            #111118;
-  --color-popover-foreground: #f4f4f5;
-  --color-primary:            #a78bfa;
-  --color-primary-foreground: #0b0b0f;
-  --color-secondary:          #1e1e2e;
+  --color-background:           #050508;
+  --color-foreground:           #f4f4f5;
+  --color-card:                 #0b0c10;
+  --color-card-foreground:      #f4f4f5;
+  --color-popover:              #0b0c10;
+  --color-popover-foreground:   #f4f4f5;
+  --color-primary:              #a855f7;
+  --color-primary-foreground:   #ffffff;
+  --color-secondary:            #161620;
   --color-secondary-foreground: #a1a1aa;
-  --color-muted:              #1a1a27;
-  --color-muted-foreground:   #71717a;
-  --color-accent:             #7c3aed;
-  --color-accent-foreground:  #f4f4f5;
-  --color-destructive:        #ef4444;
+  --color-muted:                #12121a;
+  --color-muted-foreground:     #71717a;
+  --color-accent:               #7c3aed;
+  --color-accent-foreground:    #f4f4f5;
+  --color-destructive:          #ef4444;
   --color-destructive-foreground: #fafafa;
-  --color-border:             #27272a;
-  --color-input:              #1e1e2e;
-  --color-ring:               #a78bfa;
+  --color-border:               rgba(255, 255, 255, 0.06);
+  --color-input:                #161620;
+  --color-ring:                 #a855f7;
 
   /* ── Typography ─────────────────────────────────────────────────────────── */
   --font-sans:    "Inter", "Outfit", system-ui, -apple-system, sans-serif;
@@ -71,31 +51,149 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   LEGACY CSS CUSTOM PROPERTIES
-   Kept on :root so that any inline styles or non-Tailwind CSS that references
-   var(--background), var(--primary), etc. continues to resolve correctly.
-   These shadow the @theme tokens above — both point to the same values.
+   LEGACY CSS CUSTOM PROPERTIES — :root
+   Both @theme tokens AND these :root vars are set so that any inline style or
+   non-Tailwind CSS referencing var(--background), var(--primary), etc. works.
 ───────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background:            #0b0b0f;
-  --foreground:            #f4f4f5;
-  --card:                  #111118;
-  --card-foreground:       #f4f4f5;
-  --popover:               #111118;
-  --popover-foreground:    #f4f4f5;
-  --primary:               #a78bfa;
-  --primary-foreground:    #0b0b0f;
-  --secondary:             #1e1e2e;
-  --secondary-foreground:  #a1a1aa;
-  --muted:                 #1a1a27;
-  --muted-foreground:      #71717a;
-  --accent:                #7c3aed;
-  --accent-foreground:     #f4f4f5;
-  --destructive:           #ef4444;
-  --destructive-foreground:#fafafa;
-  --border:                #27272a;
-  --input:                 #1e1e2e;
-  --ring:                  #a78bfa;
+  --background:             #050508;
+  --foreground:             #f4f4f5;
+  --card:                   #0b0c10;
+  --card-foreground:        #f4f4f5;
+  --popover:                #0b0c10;
+  --popover-foreground:     #f4f4f5;
+  --primary:                #a855f7;
+  --primary-foreground:     #ffffff;
+  --secondary:              #161620;
+  --secondary-foreground:   #a1a1aa;
+  --muted:                  #12121a;
+  --muted-foreground:       #71717a;
+  --accent:                 #7c3aed;
+  --accent-foreground:      #f4f4f5;
+  --destructive:            #ef4444;
+  --destructive-foreground: #fafafa;
+  --border:                 rgba(255, 255, 255, 0.06);
+  --input:                  #161620;
+  --ring:                   #a855f7;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   HARDCODED DARK OVERRIDES — Imperative Layer
+   This is the definitive fix for Tailwind v4 dark: variant compilation issues.
+   Since this site is permanently dark-locked (html.dark is set synchronously
+   in index.html before React mounts), we use html[class~="dark"] selectors
+   to imperatively override every light-mode color leak at the CSS layer.
+   These rules fire regardless of Tailwind's variant compilation state.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* Force the body/root background to the deep dark palette. */
+html,
+html[class~="dark"],
+html[data-theme="dark"] {
+  background-color: #050508 !important;
+  color-scheme: dark !important;
+}
+
+html[class~="dark"] body,
+html[data-theme="dark"] body {
+  background-color: #050508 !important;
+  color: #f4f4f5 !important;
+}
+
+/* ── Neutralize all light-mode leaking panel classes ──────────────────────
+   These selectors catch the exact utility combinations used throughout the
+   page components and forcibly override them to dark equivalents.
+──────────────────────────────────────────────────────────────────────────── */
+
+/* bg-white/* variants used on cards/panels */
+html[class~="dark"] .bg-white\/60,
+html[class~="dark"] .bg-white\/70,
+html[class~="dark"] .bg-white\/80,
+html[class~="dark"] .bg-white\/90,
+html[class~="dark"] .bg-white {
+  background-color: rgba(11, 12, 16, 0.85) !important;
+}
+
+/* bg-slate-100 / bg-neutral-50 / bg-gray-50 used on cards */
+html[class~="dark"] .bg-slate-100,
+html[class~="dark"] .bg-slate-50,
+html[class~="dark"] .bg-neutral-50,
+html[class~="dark"] .bg-neutral-100,
+html[class~="dark"] .bg-gray-50,
+html[class~="dark"] .bg-gray-100 {
+  background-color: #0d0e14 !important;
+}
+
+/* bg-neutral-100 inside specific contexts (FAQ, plan meta chips) */
+html[class~="dark"] .bg-neutral-100\/50,
+html[class~="dark"] .bg-neutral-200 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* border-slate-200 / border-neutral-200 / border-gray-200 */
+html[class~="dark"] .border-slate-200,
+html[class~="dark"] .border-neutral-200,
+html[class~="dark"] .border-gray-200 {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+/* border-neutral-100 (thin dividers) */
+html[class~="dark"] .border-neutral-100 {
+  border-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* text-slate-900 / text-neutral-900 / text-gray-900 — headings */
+html[class~="dark"] .text-slate-900,
+html[class~="dark"] .text-neutral-900,
+html[class~="dark"] .text-gray-900,
+html[class~="dark"] .text-black {
+  color: #f4f4f5 !important;
+}
+
+/* text-slate-600/700 / text-neutral-600/700 — body copy */
+html[class~="dark"] .text-slate-600,
+html[class~="dark"] .text-slate-700,
+html[class~="dark"] .text-neutral-600,
+html[class~="dark"] .text-neutral-700,
+html[class~="dark"] .text-gray-600,
+html[class~="dark"] .text-gray-700 {
+  color: #a1a1aa !important;
+}
+
+/* text-slate-400 / text-neutral-400/500 — muted */
+html[class~="dark"] .text-slate-400,
+html[class~="dark"] .text-neutral-400,
+html[class~="dark"] .text-neutral-500,
+html[class~="dark"] .text-gray-400 {
+  color: #71717a !important;
+}
+
+/* hover:bg-neutral-50 / hover:bg-slate-50 */
+html[class~="dark"] .hover\:bg-neutral-50:hover,
+html[class~="dark"] .hover\:bg-slate-50:hover,
+html[class~="dark"] .hover\:bg-neutral-100:hover,
+html[class~="dark"] .hover\:bg-slate-100:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* hover:border-neutral-300 */
+html[class~="dark"] .hover\:border-neutral-300:hover,
+html[class~="dark"] .hover\:border-slate-300:hover {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+/* shadow-sm (can look wrong on dark) */
+html[class~="dark"] .shadow-sm {
+  box-shadow: none !important;
+}
+
+/* bg-[#10121a], bg-[#0d0f16], bg-[#0f1117] — already dark, keep as is */
+/* bg-[#1c1f2e], bg-[#1a1d27] — already dark, keep as is */
+
+/* OrderModal bg-white override */
+html[class~="dark"] .bg-white.dark\:bg-\[\#0f1117\],
+html[class~="dark"] [class*="bg-white"][class*="dark:bg-"] {
+  background-color: #0f1117 !important;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -160,7 +258,7 @@ svg {
 
 /* Hero gradient headline */
 .gradient-text {
-  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 50%, #c4b5fd 100%);
+  background: linear-gradient(135deg, #a855f7 0%, #7c3aed 50%, #c4b5fd 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -176,14 +274,7 @@ svg {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   GALAXY BACKGROUND — Layout.tsx renders these layers inside a fixed wrapper.
-
-   Stack (bottom → top):
-     .galaxy-bg              overflow:hidden container for star/nebula layers
-     .stars-layer-1/2/3      Animated star fields — three parallax speeds
-     .nebula-1/2             Radial gradient blobs with drift animation
-     .shooting-stars-container  Holds individual .shooting-star elements
-     .vignette               Edge-darkening radial overlay
+   GALAXY BACKGROUND ANIMATIONS
 ───────────────────────────────────────────────────────────────────────────── */
 
 @keyframes stars-drift {
@@ -232,11 +323,11 @@ svg {
 
 .stars-layer-2 {
   background-image:
-    radial-gradient(1.5px 1.5px at  8% 30%, rgba(167,139,250,0.60) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at  8% 30%, rgba(168,85,247,0.60) 0%, transparent 100%),
     radial-gradient(1.5px 1.5px at 30% 60%, rgba(255,255,255,0.50) 0%, transparent 100%),
     radial-gradient(1.5px 1.5px at 60% 20%, rgba(196,181,253,0.50) 0%, transparent 100%),
     radial-gradient(1.5px 1.5px at 80% 45%, rgba(255,255,255,0.40) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 15% 70%, rgba(167,139,250,0.50) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 15% 70%, rgba(168,85,247,0.50) 0%, transparent 100%),
     radial-gradient(1.5px 1.5px at 50% 88%, rgba(255,255,255,0.40) 0%, transparent 100%),
     radial-gradient(1.5px 1.5px at 95% 12%, rgba(196,181,253,0.60) 0%, transparent 100%),
     radial-gradient(1.5px 1.5px at 42% 52%, rgba(255,255,255,0.30) 0%, transparent 100%);
@@ -246,7 +337,7 @@ svg {
 .stars-layer-3 {
   background-image:
     radial-gradient(2px 2px at 20% 10%, rgba(255,255,255,0.30) 0%, transparent 100%),
-    radial-gradient(2px 2px at 70% 30%, rgba(167,139,250,0.30) 0%, transparent 100%),
+    radial-gradient(2px 2px at 70% 30%, rgba(168,85,247,0.30) 0%, transparent 100%),
     radial-gradient(2px 2px at 40% 70%, rgba(255,255,255,0.25) 0%, transparent 100%),
     radial-gradient(2px 2px at 85% 80%, rgba(196,181,253,0.30) 0%, transparent 100%),
     radial-gradient(2px 2px at  5% 50%, rgba(255,255,255,0.20) 0%, transparent 100%);
@@ -268,8 +359,8 @@ svg {
   top: -15%;
   right: -15%;
   background: radial-gradient(circle,
-    rgba(124, 58,237,0.18) 0%,
-    rgba(167,139,250,0.08) 50%,
+    rgba(124, 58, 237, 0.22) 0%,
+    rgba(168, 85, 247, 0.10) 50%,
     transparent 75%
   );
   animation: nebula-pulse 25s ease-in-out infinite;
@@ -283,8 +374,8 @@ svg {
   bottom: -10%;
   left: -10%;
   background: radial-gradient(circle,
-    rgba( 88, 28,220,0.14) 0%,
-    rgba(139, 92,246,0.07) 50%,
+    rgba(88, 28, 220, 0.18) 0%,
+    rgba(139, 92, 246, 0.09) 50%,
     transparent 75%
   );
   animation: nebula-pulse 35s ease-in-out infinite reverse;
@@ -315,13 +406,12 @@ svg {
 .vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(11,11,15,0.7) 100%);
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(5,5,8,0.75) 100%);
   pointer-events: none;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SCROLL + VISIBILITY ANIMATION PAUSING
-   Layout.tsx adds/removes these body classes automatically.
 ───────────────────────────────────────────────────────────────────────────── */
 
 body.is-scrolling .stars-layer,
@@ -343,7 +433,7 @@ body.page-hidden .galaxy-bg {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MARQUEE SECTIONS — DualMarqueeSection.tsx
+   MARQUEE SECTIONS
 ───────────────────────────────────────────────────────────────────────────── */
 
 .dual-marquee-row {
@@ -352,7 +442,6 @@ body.page-hidden .galaxy-bg {
 
 /* ─────────────────────────────────────────────────────────────────────────────
    WILL-CHANGE BUDGET
-   Scope hints to only the elements that are actually animated.
 ───────────────────────────────────────────────────────────────────────────── */
 
 .shooting-star { will-change: transform, opacity; }
@@ -360,7 +449,7 @@ body.page-hidden .galaxy-bg {
 .nebula        { will-change: opacity, transform; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   FONT DISPLAY — belt-and-suspenders for any font served outside Google Fonts
+   FONT DISPLAY
 ───────────────────────────────────────────────────────────────────────────── */
 
 @font-face {
@@ -398,12 +487,20 @@ img:not([width]):not([height]) {
    UTILITY CLASSES
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* Frosted glass card */
+/* Frosted glass card — premium dark */
 .glass-card {
-  background: rgba(17, 17, 24, 0.7);
+  background: rgba(11, 12, 16, 0.75);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Premium dark card panel — replaces bg-white/60 pattern site-wide */
+.dark-panel {
+  background: rgba(11, 12, 16, 0.80);
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* Hover glow ring */
@@ -414,6 +511,16 @@ img:not([width]):not([height]) {
   box-shadow:
     0 0 0 1px var(--primary),
     0 0 24px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+/* Purple glow — CTA buttons */
+.purple-glow {
+  box-shadow: 0 0 28px rgba(168, 85, 247, 0.35), 0 4px 24px rgba(124, 58, 237, 0.25);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+.purple-glow:hover {
+  box-shadow: 0 0 44px rgba(168, 85, 247, 0.55), 0 6px 32px rgba(124, 58, 237, 0.40);
+  transform: translateY(-1px) scale(1.015);
 }
 
 /* Shimmer loading skeleton */
@@ -434,7 +541,7 @@ img:not([width]):not([height]) {
   border-radius: var(--radius);
 }
 
-/* Full-screen loading skeleton — matches dark background */
+/* Full-screen loading skeleton */
 .page-skeleton {
   min-height: 100dvh;
   background-color: var(--background);
@@ -443,10 +550,34 @@ img:not([width]):not([height]) {
   justify-content: center;
 }
 
-/* Eco mode — DualMarqueeSection and Layout respect this class on <html> */
+/* Eco mode */
 .eco-mode .stars-layer,
 .eco-mode .nebula,
 .eco-mode .shooting-star {
   animation-play-state: paused !important;
   display: none !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   GLOBAL CARD / PANEL OVERRIDES
+   Every panel that previously used bg-white/60 dark:bg-card/40 now gets
+   the correct dark surface applied at the CSS layer — belt and suspenders
+   approach alongside the component-level className fixes.
+───────────────────────────────────────────────────────────────────────────── */
+
+/* Stats cards, portfolio reel cards, CTA blocks */
+html[class~="dark"] .backdrop-blur-xl {
+  background-color: rgba(11, 12, 16, 0.80);
+}
+
+/* Ensure grid cells don't bleed out of their containers */
+html[class~="dark"] .grid {
+  container-type: inline-size;
+}
+
+/* Force all card borders to the premium low-opacity white */
+html[class~="dark"] [class*="border-slate-"],
+html[class~="dark"] [class*="border-neutral-"],
+html[class~="dark"] [class*="border-gray-"] {
+  border-color: rgba(255, 255, 255, 0.07) !important;
 }
