@@ -4,88 +4,50 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         CRITICAL NETWORK HINTS — must appear before any subresource request
-         so the browser opens TCP/TLS connections during HTML parse, not after.
+    <!-- ── Critical network hints — must precede all subresource requests ──── -->
 
-         Order matters: preconnect > dns-prefetch > everything else.
-         Each preconnect saves one full RTT (~100–300 ms on mobile networks)
-         per origin per page load.
-    ═══════════════════════════════════════════════════════════════════════ -->
-
-    <!-- Google Fonts — two separate origins, both needed -->
+    <!-- Google Fonts — two separate origins -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-    <!-- Supabase — REST, Auth, Realtime, and Storage all share the project
-         origin (https://<ref>.supabase.co). The VITE env var is injected at
-         build time; this comment placeholder is replaced by the real URL in
-         the Vite HTML transform plugin defined in vite.config.ts.
-         If you are not using the plugin approach, hard-code your project URL:
+    <!-- Supabase — replaced at build time by supabasePreconnectPlugin in vite.config.ts.
+         If the plugin is not running, hard-code your project URL here instead:
            <link rel="preconnect" href="https://YOURREF.supabase.co" crossorigin />
     -->
     <!--SUPABASE_PRECONNECT_PLACEHOLDER-->
 
-    <!-- Roblox Open-Cloud API — used by /api/roblox proxy and useRobloxData -->
+    <!-- Roblox Open-Cloud API -->
     <link rel="preconnect" href="https://apis.roblox.com" crossorigin />
-    <!-- DNS-only for the secondary Roblox CDN domain (no CORS needed) -->
     <link rel="dns-prefetch" href="https://thumbnails.roblox.com" />
     <link rel="dns-prefetch" href="https://www.roblox.com" />
 
-    <!-- Vercel Edge Network (static assets served from the same hostname in
-         production; adding a preconnect here is a no-op on Vercel but is
-         useful when self-hosting or using a custom CDN prefix) -->
     <link rel="dns-prefetch" href="https://vercel.live" />
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         FONTS — display=swap (replaces display=optional)
-         
-         display=optional: browser only uses the web font if it has already
-         been cached. First-visit users see the fallback font PERMANENTLY even
-         if the web font arrives in < 100 ms.
-         
-         display=swap: browser renders with system font immediately, then swaps
-         to the web font when it arrives. Slight reflow but users always see
-         the brand font on first visit — critical for the gradient headline.
-         
-         Combined with the preconnect hints above, the font stylesheet and
-         font file requests are pipelined immediately, making the swap happen
-         within the first 100–200 ms on fast connections (imperceptible).
-    ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- ── Fonts — display=swap for immediate first paint with fallback ────── -->
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         PAGE META
-    ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- ── Page meta ───────────────────────────────────────────────────────── -->
     <title>Youssef Design | Professional Roblox UI/UX Designer</title>
     <meta
       name="description"
       content="Youssef Design - Professional Roblox UI/UX Designer specializing in immersive game interfaces"
     />
-    <meta
-      name="keywords"
-      content="Roblox, UI/UX, Game Design, Interface Design"
-    />
+    <meta name="keywords" content="Roblox, UI/UX, Game Design, Interface Design" />
     <meta name="author" content="Youssef Design" />
     <meta name="robots" content="index, follow" />
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         FAVICONS
-    ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- ── Favicons ─────────────────────────────────────────────────────────── -->
     <link rel="icon" type="image/png" href="/images/global/favicon.png" />
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0b0b0f" />
 
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         DARK-MODE FLASH PREVENTION
-         Runs synchronously before first paint so the <html> element always
-         carries class="dark" when the page is visible. Without this, a brief
-         white flash can occur on slow devices before React hydrates.
-    ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- ── Dark-mode flash prevention ──────────────────────────────────────── -->
+    <!-- Runs synchronously before first paint — ensures `class="dark"` is
+         always set on <html> before React mounts, preventing a white flash. -->
     <script>
       (function () {
         try {
