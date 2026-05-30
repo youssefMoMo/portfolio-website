@@ -168,7 +168,7 @@ export default function Navbar() {
         dir={isRTL ? "rtl" : "ltr"}
         className={`sticky top-0 z-50 w-full transition-all duration-300 ${
           scrolled
-            ? "border-b border-slate-200 dark:border-white/8 bg-white/90 dark:bg-background/80 backdrop-blur-xl shadow-sm"
+            ? "bg-white/90 dark:bg-background/80 backdrop-blur-xl shadow-sm"
             : "bg-transparent"
         }`}
       >
