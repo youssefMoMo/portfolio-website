@@ -105,7 +105,7 @@ function BackgroundOverlayInner() {
     background: "radial-gradient(circle, transparent 40%, rgba(5,5,8,0.65) 100%)",
   };
 
-  return (\
+  return (
     // ── LAYER STACK ROOT ──────────────────────────────────────────────────────
     //
     // position: fixed + inset: 0 → covers the full viewport on every page,
