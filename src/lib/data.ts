@@ -114,6 +114,16 @@ export type TranslationKey =
   | "reviews.badge"  | "reviews.title"      | "reviews.subtitle"
   | "reviews.based"  | "reviews.reviewsText" | "reviews.ctaTitle"
   | "reviews.ctaText" | "reviews.writeReview"
+  | "reviews.yourName" | "reviews.yourRating" | "reviews.yourFeedback"
+  | "reviews.yourReview" | "reviews.feedbackPlaceholder" | "reviews.submitReview"
+  | "reviews.verified" | "reviews.noReviews" | "reviews.noReviewsYet"
+  | "reviews.shareExperience" | "reviews.weLoveFeedback" | "reviews.characters"
+  | "reviews.enterName" | "reviews.ratingRequired" | "reviews.selectRating"
+  | "reviews.nameRequired" | "reviews.nameMinChars" | "reviews.reviewTooShort"
+  | "reviews.reviewMinChars" | "reviews.submitted" | "reviews.thankYou"
+  | "reviews.error" | "reviews.tryAgain" | "reviews.submit"
+  | "reviews.submitting" | "reviews.submitFailed" | "reviews.noProfanity"
+  | "reviews.outOf5" | "reviews.rating"
   // Policies Page
   | "policies.badge" | "policies.title"         | "policies.subtitle"
   | "policies.questionsTitle" | "policies.askDiscord" | "policies.contactDiscord"
@@ -317,6 +327,35 @@ export const translations: Translations = {
     "reviews.ctaTitle": "Have we worked together?",
     "reviews.ctaText": "I'd love to hear your thoughts on the design process and final results.",
     "reviews.writeReview": "Write a Review",
+    "reviews.yourName": "Your Name",
+    "reviews.yourRating": "Your Rating",
+    "reviews.yourFeedback": "Your Feedback",
+    "reviews.yourReview": "Your Review",
+    "reviews.feedbackPlaceholder": "How was your experience working with me?",
+    "reviews.submitReview": "Submit Review",
+    "reviews.submitting": "Submitting...",
+    "reviews.submit": "Submit",
+    "reviews.submitted": "Review Submitted! 🎉",
+    "reviews.thankYou": "Thank you for your feedback!",
+    "reviews.submitFailed": "Failed to submit. Please try again.",
+    "reviews.verified": "Verified",
+    "reviews.noReviews": "No reviews yet",
+    "reviews.noReviewsYet": "No reviews yet — be the first!",
+    "reviews.shareExperience": "Share Your Experience",
+    "reviews.weLoveFeedback": "We'd love to hear your feedback!",
+    "reviews.characters": "characters",
+    "reviews.enterName": "Enter your name",
+    "reviews.ratingRequired": "Rating Required",
+    "reviews.selectRating": "Please select a star rating before submitting.",
+    "reviews.nameRequired": "Name Required",
+    "reviews.nameMinChars": "Please enter your name (at least 2 characters).",
+    "reviews.reviewTooShort": "Review Too Short",
+    "reviews.reviewMinChars": "Please write at least 10 characters.",
+    "reviews.error": "Error",
+    "reviews.tryAgain": "Failed to save review. Please try again.",
+    "reviews.noProfanity": "⚠️ Please keep your review respectful. No profanity allowed.",
+    "reviews.outOf5": "out of 5 stars",
+    "reviews.rating": "Rating",
 
     // Policies Page
     "policies.badge": "Legal",
@@ -692,6 +731,35 @@ export const translations: Translations = {
     "reviews.ctaTitle": "هل عملنا معاً؟",
     "reviews.ctaText": "يسعدني سماع أفكارك عن عملية التصميم والنتائج النهائية.",
     "reviews.writeReview": "اكتب تقييمك",
+    "reviews.yourName": "اسمك",
+    "reviews.yourRating": "تقييمك",
+    "reviews.yourFeedback": "تعليقك",
+    "reviews.yourReview": "مراجعتك",
+    "reviews.feedbackPlaceholder": "كيف كانت تجربتك في العمل معي؟",
+    "reviews.submitReview": "إرسال المراجعة",
+    "reviews.submitting": "جاري الإرسال...",
+    "reviews.submit": "إرسال",
+    "reviews.submitted": "تم إرسال المراجعة! 🎉",
+    "reviews.thankYou": "شكراً على ملاحظاتك!",
+    "reviews.submitFailed": "فشل الإرسال. يرجى المحاولة مرة أخرى.",
+    "reviews.verified": "موثق",
+    "reviews.noReviews": "لا توجد مراجعات بعد",
+    "reviews.noReviewsYet": "لا توجد مراجعات بعد — كن الأول!",
+    "reviews.shareExperience": "شارك تجربتك",
+    "reviews.weLoveFeedback": "يسعدنا سماع ملاحظاتك!",
+    "reviews.characters": "حرف",
+    "reviews.enterName": "أدخل اسمك",
+    "reviews.ratingRequired": "التقييم مطلوب",
+    "reviews.selectRating": "يرجى اختيار تقييم بالنجوم قبل الإرسال.",
+    "reviews.nameRequired": "الاسم مطلوب",
+    "reviews.nameMinChars": "يرجى إدخال اسمك (حرفان على الأقل).",
+    "reviews.reviewTooShort": "المراجعة قصيرة جداً",
+    "reviews.reviewMinChars": "يرجى كتابة 10 أحرف على الأقل.",
+    "reviews.error": "خطأ",
+    "reviews.tryAgain": "فشل حفظ المراجعة. يرجى المحاولة مرة أخرى.",
+    "reviews.noProfanity": "⚠️ يرجى الحفاظ على أدب الحوار. لا يُسمح باستخدام ألفاظ بذيئة.",
+    "reviews.outOf5": "من أصل 5 نجوم",
+    "reviews.rating": "التقييم",
 
     // Policies
     "policies.badge": "قانوني",
@@ -1067,6 +1135,35 @@ export const translations: Translations = {
     "reviews.ctaTitle": "¿Hemos trabajado juntos?",
     "reviews.ctaText": "Me encantaría escuchar tus pensamientos sobre el proceso de diseño y los resultados finales.",
     "reviews.writeReview": "Escribir una Reseña",
+    "reviews.yourName": "Tu Nombre",
+    "reviews.yourRating": "Tu Calificación",
+    "reviews.yourFeedback": "Tu Opinión",
+    "reviews.yourReview": "Tu Reseña",
+    "reviews.feedbackPlaceholder": "¿Cómo fue tu experiencia trabajando conmigo?",
+    "reviews.submitReview": "Enviar Reseña",
+    "reviews.submitting": "Enviando...",
+    "reviews.submit": "Enviar",
+    "reviews.submitted": "¡Reseña Enviada! 🎉",
+    "reviews.thankYou": "¡Gracias por tus comentarios!",
+    "reviews.submitFailed": "Error al enviar. Por favor intenta de nuevo.",
+    "reviews.verified": "Verificado",
+    "reviews.noReviews": "Aún no hay reseñas",
+    "reviews.noReviewsYet": "¡Aún no hay reseñas — sé el primero!",
+    "reviews.shareExperience": "Comparte Tu Experiencia",
+    "reviews.weLoveFeedback": "¡Nos encantaría escuchar tus comentarios!",
+    "reviews.characters": "caracteres",
+    "reviews.enterName": "Ingresa tu nombre",
+    "reviews.ratingRequired": "Calificación Requerida",
+    "reviews.selectRating": "Por favor selecciona una calificación antes de enviar.",
+    "reviews.nameRequired": "Nombre Requerido",
+    "reviews.nameMinChars": "Por favor ingresa tu nombre (mínimo 2 caracteres).",
+    "reviews.reviewTooShort": "Reseña Demasiado Corta",
+    "reviews.reviewMinChars": "Por favor escribe al menos 10 caracteres.",
+    "reviews.error": "Error",
+    "reviews.tryAgain": "No se pudo guardar la reseña. Por favor intenta de nuevo.",
+    "reviews.noProfanity": "⚠️ Por favor mantente respetuoso. No se permite lenguaje obsceno.",
+    "reviews.outOf5": "de 5 estrellas",
+    "reviews.rating": "Calificación",
 
     // Policies
     "policies.badge": "Legal",

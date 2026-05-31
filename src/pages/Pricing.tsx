@@ -259,7 +259,7 @@ export default function Pricing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="text-4xl md:text-6xl font-bold font-display mb-5 bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent"
+            className="text-4xl md:text-6xl font-bold font-display mb-5 text-primary"
           >
             {t("pricing.title")}
           </motion.h1>
@@ -311,8 +311,8 @@ export default function Pricing() {
                     <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
                       <span className={`px-4 py-1 rounded-full text-[11px] font-bold tracking-widest uppercase whitespace-nowrap shadow-lg ${
                         plan.featured
-                          ? "bg-gradient-to-r from-primary to-indigo-500 text-white"
-                          : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
+                          ? "bg-primary text-white"
+                          : "bg-[#27282a] border border-primary/30 text-primary"
                       }`}>
                         {badgeLabel}
                       </span>

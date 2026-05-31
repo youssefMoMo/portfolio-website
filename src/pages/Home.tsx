@@ -355,7 +355,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.6 }}
-              className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto"
+              className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto text-center [text-wrap:balance]"
             >
               {content?.hero_subtitle || t("hero.subtitle")}
             </motion.p>
