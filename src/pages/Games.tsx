@@ -1,5 +1,13 @@
-// src/pages/Games.tsx — Phase 2 polished layout
-// Featured hero game + clean stat badges + contribution labels + Roblox links
+// src/pages/Games.tsx — Framer Motion Glassmorphic + Shimmer Upgrade
+//
+// ANIMATION MANDATE (100% Framer Motion — zero CSS transitions):
+//  • All containers: bg-background/60 backdrop-blur-md border border-white/5
+//  • Staggered entrance: custom={index} → variants with delay: i * 0.05
+//  • Shimmer beam: motion.div sweep across card border exclusively on hover
+//  • FeaturedCard: spring-physics parallax on hover
+//  • GameCard: whileHover scale+y spring, shimmer, staggered on load
+//  • All buttons: whileHover + whileTap spring physics
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,34 +20,23 @@ import { openDiscord } from "@/lib/discord";
 import { supabase, isSupabaseEnabled } from "@/lib/supabase";
 import { getUniverseIds, getRobloxGameImages, getRobloxVisits } from "@/lib/roblox";
 
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
 interface GameEntry {
   id: string; place_id: string; name: string; universe_id: string | null;
   visits: number; icon_url: string; creator: string;
   display_order: number; is_published: boolean;
-  /** Optional override: full Roblox URL or raw 15-digit place ID string */
   link?: string;
 }
 
-/**
- * Safely builds a Roblox game URL from either:
- *  - A raw place ID (any length, always treated as a STRING to avoid
- *    JS Number truncation of 15-digit IDs > Number.MAX_SAFE_INTEGER).
- *  - A fully-qualified URL (passes through unchanged).
- * Falls back to place_id when no link override is set.
- */
 function getRobloxUrl(game: GameEntry): string {
   const raw = (game.link ?? game.place_id ?? "").trim();
   if (!raw) return "#";
-  // Already a full URL — pass through untouched
   if (raw.startsWith("http")) return raw;
-  // Raw ID — always embed as a string, never parse to Number
   return `https://www.roblox.com/games/${raw}`;
 }
 
-// Extended metadata applied on top of Supabase/fallback data
-interface GameMeta {
-  genre: string; role: string; highlight: boolean;
-}
+interface GameMeta { genre: string; role: string; highlight: boolean; }
 const GAME_META: Record<string, GameMeta> = {
   "111021125092689": { genre: "Adventure",  role: "UI/UX Designer",          highlight: true  },
   "128915436393653": { genre: "Action RPG", role: "UI/UX Designer",          highlight: false },
@@ -132,22 +129,80 @@ function fmt(v: number) {
   return n.toLocaleString();
 }
 
-// ── Thumbnail ───────────────────────────────────────────────────
+// ─── Spring config ─────────────────────────────────────────────────────────────
+
+const SPRING = { type: "spring", stiffness: 400, damping: 15 } as const;
+const SPRING_SOFT = { type: "spring", stiffness: 120, damping: 18 } as const;
+
+// ─── Staggered card variants (auto delay by index) ─────────────────────────────
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.05, type: "spring", stiffness: 120, damping: 18 },
+  }),
+};
+
+// ─── Metallic shimmer beam ─────────────────────────────────────────────────────
+
+function ShimmerBeam({ rounded = "rounded-2xl" }: { rounded?: string }) {
+  return (
+    <motion.div
+      className={`absolute inset-0 pointer-events-none ${rounded} overflow-hidden z-10`}
+      initial="rest"
+      whileHover="hover"
+    >
+      <motion.div
+        variants={{
+          rest: { x: "-120%", opacity: 0 },
+          hover: {
+            x: "220%",
+            opacity: [0, 0.6, 0.6, 0],
+            transition: { duration: 0.7, ease: [0.4, 0, 0.2, 1] },
+          },
+        }}
+        className="absolute inset-y-0 w-1/3"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 35%, rgba(255,255,255,0.32) 50%, rgba(255,255,255,0.12) 65%, transparent 100%)",
+          mixBlendMode: "overlay",
+        }}
+      />
+    </motion.div>
+  );
+}
+
+// ─── GameThumbnail ─────────────────────────────────────────────────────────────
+
 function GameThumbnail({ iconUrl, name, large }: { iconUrl: string; name: string; large?: boolean }) {
   const [src, setSrc]       = useState(iconUrl || "");
   const [failed, setFailed] = useState(!iconUrl);
   useEffect(() => { if (iconUrl) { setSrc(iconUrl); setFailed(false); } }, [iconUrl]);
-  const cls = `absolute inset-0 w-full h-full object-cover ${large ? "transition-transform duration-700 group-hover:scale-105" : "transition-transform duration-500 group-hover:scale-107"}`;
-  if (failed || !src) return (
-    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/20 via-card to-indigo-500/20">
-      <Gamepad2 className={`${large ? "w-24 h-24" : "w-14 h-14"} text-primary/20`} />
-    </div>
+
+  if (failed || !src) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/20 via-card to-indigo-500/20">
+        <Gamepad2 className={`${large ? "w-24 h-24" : "w-14 h-14"} text-primary/20`} />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src} alt={name}
+      className="absolute inset-0 w-full h-full object-cover"
+      loading="lazy" decoding="async"
+      onError={() => setFailed(true)}
+    />
   );
-  return <img src={src} alt={name} className={cls} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
 }
 
-// ── Stat badge ──────────────────────────────────────────────────
-function Badge({ icon: Icon, label, value, accent }: { icon: React.ElementType; label: string; value: string; accent?: string }) {
+// ─── Badge ─────────────────────────────────────────────────────────────────────
+
+function Badge({ icon: Icon, label, value, accent }: {
+  icon: React.ElementType; label: string; value: string; accent?: string;
+}) {
   return (
     <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold ${accent ?? "bg-white/5 border-white/10 text-white/70"}`}>
       <Icon className="w-3 h-3 flex-shrink-0" />
@@ -157,11 +212,22 @@ function Badge({ icon: Icon, label, value, accent }: { icon: React.ElementType; 
   );
 }
 
-// ── Skeleton ────────────────────────────────────────────────────
-function Skeleton({ large }: { large?: boolean }) {
+// ─── Skeleton ──────────────────────────────────────────────────────────────────
+
+function Skeleton({ large, index = 0 }: { large?: boolean; index?: number }) {
   return (
-    <div className={`rounded-2xl overflow-hidden bg-card/40 border border-white/5 animate-pulse ${large ? "col-span-full" : ""}`}>
-      <div className={`${large ? "aspect-[21/9]" : "aspect-video"} bg-white/5`} />
+    <motion.div
+      custom={index}
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      className={`rounded-2xl overflow-hidden bg-background/60 backdrop-blur-md border border-white/5 ${large ? "col-span-full" : ""}`}
+    >
+      <motion.div
+        animate={{ opacity: [0.3, 0.6, 0.3] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+        className={`${large ? "aspect-[21/9]" : "aspect-video"} bg-white/5`}
+      />
       <div className="p-5 space-y-3">
         <div className="h-5 bg-white/5 rounded w-3/4" />
         <div className="h-3 bg-white/5 rounded w-1/2" />
@@ -171,124 +237,190 @@ function Skeleton({ large }: { large?: boolean }) {
         </div>
         <div className="h-10 bg-white/5 rounded-xl mt-3" />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
-// ── Featured hero card ──────────────────────────────────────────
+// ─── FeaturedCard ──────────────────────────────────────────────────────────────
+
 function FeaturedCard({ game }: { game: GameEntry }) {
   const { t } = useLanguage();
   const meta = GAME_META[game.place_id] ?? DEFAULT_META;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55 }}
-      className="group relative col-span-full rounded-3xl overflow-hidden bg-card/60 border border-primary/25 shadow-2xl shadow-primary/8 mb-2"
+      custom={0}
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      whileHover={{ scale: 1.005, y: -4 }}
+      transition={SPRING}
+      className="group relative col-span-full rounded-3xl overflow-hidden bg-background/60 backdrop-blur-md border border-primary/25 shadow-2xl shadow-primary/8 mb-2"
     >
-      {/* Background image */}
+      {/* Shimmer on border */}
+      <ShimmerBeam rounded="rounded-3xl" />
+
       <div className="relative aspect-[21/9] sm:aspect-[16/6] overflow-hidden">
-        <GameThumbnail iconUrl={game.icon_url || ""} name={game.name} large />
+        <motion.div
+          className="absolute inset-0"
+          whileHover={{ scale: 1.04 }}
+          transition={{ type: "spring", stiffness: 180, damping: 24 }}
+        >
+          <GameThumbnail iconUrl={game.icon_url || ""} name={game.name} large />
+        </motion.div>
+
         <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/50 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
         {/* Featured badge */}
-        <div className="absolute top-5 left-5 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-white text-[11px] font-bold uppercase tracking-wider shadow-lg">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3, ...SPRING }}
+          className="absolute top-5 left-5 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-white text-[11px] font-bold uppercase tracking-wider shadow-lg"
+        >
           <Award className="w-3.5 h-3.5" /> Featured Project
-        </div>
+        </motion.div>
 
         {/* Content overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-10 z-10">
-          <div className="flex flex-wrap gap-2 mb-3">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, ...SPRING_SOFT }}
+            className="flex flex-wrap gap-2 mb-3"
+          >
             <Badge icon={Eye}   label="Visits" value={fmt(game.visits)} accent="bg-cyan-500/15 border-cyan-500/30 text-cyan-300" />
             <Badge icon={Brush} label="Role"   value={meta.role}        accent="bg-primary/15 border-primary/30 text-primary" />
             <Badge icon={Zap}   label="Genre"  value={meta.genre}       accent="bg-white/8 border-white/15 text-white/70" />
-          </div>
-          <h2 className="text-2xl sm:text-4xl font-display font-bold text-white mb-1 drop-shadow-lg leading-tight">
+          </motion.div>
+
+          <motion.h2
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, ...SPRING_SOFT }}
+            className="text-2xl sm:text-4xl font-display font-bold text-white mb-1 drop-shadow-lg leading-tight text-balance"
+          >
             {game.name}
-          </h2>
-          <p className="text-white/60 text-sm mb-5">
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="text-white/60 text-sm mb-5"
+          >
             by <span className="text-white/85 font-medium">{game.creator}</span>
-          </p>
-          <a
+          </motion.p>
+
+          <motion.a
             href={getRobloxUrl(game)}
             target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors shadow-lg"
+            whileHover={{ scale: 1.04, y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            transition={SPRING}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 shadow-lg"
           >
             <Play className="w-4 h-4 fill-current" /> {t("games.playOnRoblox")}
             <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+          </motion.a>
         </div>
       </div>
     </motion.div>
   );
 }
 
-// ── Regular game card ───────────────────────────────────────────
+// ─── GameCard ─────────────────────────────────────────────────────────────────
+
 function GameCard({ game, index }: { game: GameEntry; index: number }) {
   const { t } = useLanguage();
   const meta = GAME_META[game.place_id] ?? DEFAULT_META;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 + index * 0.06, duration: 0.4 }}
-      whileHover={{ y: -5 }}
-      className="group"
+      custom={index + 1}
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      whileHover={{ scale: 1.02, y: -6 }}
+      whileTap={{ scale: 0.98 }}
+      transition={SPRING}
+      className="group relative h-full rounded-2xl overflow-hidden bg-background/60 backdrop-blur-md border border-white/5 hover:border-primary/25 shadow-lg flex flex-col"
     >
-      <div className="h-full rounded-2xl overflow-hidden bg-card/60 backdrop-blur-xl border border-white/5 hover:border-primary/25 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 flex flex-col">
+      {/* Metallic shimmer beam on hover */}
+      <ShimmerBeam />
 
-        {/* Thumbnail */}
-        <div className="relative aspect-video overflow-hidden flex-shrink-0">
+      {/* Thumbnail */}
+      <div className="relative aspect-video overflow-hidden flex-shrink-0">
+        <motion.div
+          className="absolute inset-0"
+          whileHover={{ scale: 1.07 }}
+          transition={{ type: "spring", stiffness: 200, damping: 26 }}
+        >
           <GameThumbnail iconUrl={game.icon_url || ""} name={game.name} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-400" />
-          {/* Visit badge overlay */}
-          <div className="absolute top-3 right-3 z-10">
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-sm text-[11px] text-white font-semibold border border-white/10">
-              <Eye className="w-3 h-3 text-cyan-400" /> {fmt(game.visits)}
-            </div>
+        </motion.div>
+
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"
+          initial={{ opacity: 0 }}
+          whileHover={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        />
+
+        {/* Visit badge overlay */}
+        <div className="absolute top-3 right-3 z-10">
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-sm text-[11px] text-white font-semibold border border-white/10">
+            <Eye className="w-3 h-3 text-cyan-400" /> {fmt(game.visits)}
+          </div>
+        </div>
+      </div>
+
+      {/* Card body */}
+      <div className="p-5 flex flex-col flex-1 gap-3">
+        <h3 className="text-sm sm:text-base font-bold font-display leading-snug line-clamp-2" title={game.name}>
+          {game.name}
+        </h3>
+
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">
+            by <span className="text-foreground/80 font-medium">{game.creator}</span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-semibold">
+              <Brush className="w-2.5 h-2.5" /> {meta.role}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-muted-foreground">
+              <Zap className="w-2.5 h-2.5" /> {meta.genre}
+            </span>
           </div>
         </div>
 
-        {/* Card body */}
-        <div className="p-5 flex flex-col flex-1 gap-3">
-          {/* Title */}
-          <h3 className="text-sm sm:text-base font-bold font-display leading-snug line-clamp-2" title={game.name}>
-            {game.name}
-          </h3>
-
-          {/* Contribution + creator */}
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">
-              by <span className="text-foreground/80 font-medium">{game.creator}</span>
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-semibold">
-                <Brush className="w-2.5 h-2.5" /> {meta.role}
-              </span>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-muted-foreground">
-                <Zap className="w-2.5 h-2.5" /> {meta.genre}
-              </span>
-            </div>
+        <motion.a
+          href={getRobloxUrl(game)}
+          target="_blank" rel="noopener noreferrer"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          transition={SPRING}
+          className="mt-auto block"
+        >
+          <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-primary/25 bg-primary/8 hover:bg-primary/18 text-primary font-semibold text-sm group/btn">
+            <Play className="w-3.5 h-3.5 fill-current" />
+            {t("games.playOnRoblox")}
+            <motion.div
+              initial={{ opacity: 0, x: -4 }}
+              whileHover={{ opacity: 1, x: 0 }}
+              transition={SPRING}
+            >
+              <ExternalLink className="w-3 h-3" />
+            </motion.div>
           </div>
-
-          {/* Roblox link */}
-          <a
-            href={getRobloxUrl(game)}
-            target="_blank" rel="noopener noreferrer"
-            className="mt-auto block"
-          >
-            <div className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-primary/25 bg-primary/8 hover:bg-primary/18 text-primary font-semibold text-sm transition-all duration-200 group/btn">
-              <Play className="w-3.5 h-3.5 fill-current" />
-              {t("games.playOnRoblox")}
-              <ExternalLink className="w-3 h-3 opacity-0 group-hover/btn:opacity-100 transition-opacity" />
-            </div>
-          </a>
-        </div>
+        </motion.a>
       </div>
     </motion.div>
   );
 }
 
-// ── Main page ───────────────────────────────────────────────────
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function Games() {
   const { t } = useLanguage();
   const [games, setGames]     = useState<GameEntry[]>([]);
@@ -326,37 +458,51 @@ export default function Games() {
     return () => { supabase?.removeChannel(channel); };
   }, [load]);
 
-  const total      = games.reduce((s, g) => s + (Number(g.visits) || 0), 0);
-  const featured   = games.find(g => (GAME_META[g.place_id] ?? DEFAULT_META).highlight) ?? games[0] ?? null;
-  const rest       = featured ? games.filter(g => g.id !== featured.id) : games;
+  const total    = games.reduce((s, g) => s + (Number(g.visits) || 0), 0);
+  const featured = games.find(g => (GAME_META[g.place_id] ?? DEFAULT_META).highlight) ?? games[0] ?? null;
+  const rest     = featured ? games.filter(g => g.id !== featured.id) : games;
 
   return (
     <div className="min-h-screen pt-8 pb-20 px-4 sm:px-6">
       <div className="max-w-7xl mx-auto">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="text-center mb-12 sm:mb-14">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-6 border border-primary/20">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            transition={SPRING_SOFT}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-6 border border-primary/20"
+          >
             <Gamepad2 className="w-4 h-4" /> {t("games.badge")}
           </motion.div>
-          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="text-3xl sm:text-5xl md:text-6xl font-bold font-display mb-4">
-            <span className="text-primary">
-              {t("games.title")}
-            </span>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, ...SPRING_SOFT }}
+            className="text-3xl sm:text-5xl md:text-6xl font-bold font-display mb-4 text-balance"
+          >
+            <span className="text-primary">{t("games.title")}</span>
           </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-            className="text-muted-foreground max-w-2xl mx-auto mb-6 text-sm sm:text-base">
+
+          <motion.p
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, ...SPRING_SOFT }}
+            className="text-muted-foreground max-w-2xl mx-auto mb-6 text-sm sm:text-base text-balance"
+          >
             {t("games.subtitle")}
           </motion.p>
 
-          {/* Stats summary bar */}
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
-            className="inline-flex flex-wrap items-center justify-center gap-4 px-6 py-3 rounded-2xl bg-card/50 border border-white/8 text-sm">
+          {/* Stats bar — glassmorphic */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3, ...SPRING_SOFT }}
+            className="inline-flex flex-wrap items-center justify-center gap-4 px-6 py-3 rounded-2xl bg-background/60 backdrop-blur-md border border-white/5 text-sm"
+          >
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <span className="font-bold text-foreground">{fmt(total)}</span> {t("games.visitsLabel")}
+              <span className="font-bold text-foreground">{fmt(total)}</span>
+              {t("games.visitsLabel")}
             </div>
             <div className="w-px h-4 bg-white/10" />
             <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -371,42 +517,67 @@ export default function Games() {
           </motion.div>
         </div>
 
-        {/* ── Grid ── */}
+        {/* Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 mb-10">
-          {loading ? (
-            <>
-              <Skeleton large />
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} />)}
-            </>
-          ) : (
-            <AnimatePresence>
-              {/* Featured card spans full width */}
-              {featured && <FeaturedCard key={featured.id} game={featured} />}
-              {/* Rest of games */}
-              {rest.map((game, i) => <GameCard key={game.place_id || game.id} game={game} index={i} />)}
-            </AnimatePresence>
-          )}
+          <AnimatePresence mode="wait">
+            {loading ? (
+              <>
+                <Skeleton large index={0} />
+                {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} index={i + 1} />)}
+              </>
+            ) : (
+              <>
+                {featured && <FeaturedCard key={featured.id} game={featured} />}
+                {rest.map((game, i) => (
+                  <GameCard key={game.place_id || game.id} game={game} index={i} />
+                ))}
+              </>
+            )}
+          </AnimatePresence>
         </div>
 
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }}
-          className="text-center text-sm text-muted-foreground mb-12">
+        <motion.p
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          transition={{ delay: 0.9 }}
+          className="text-center text-sm text-muted-foreground mb-12"
+        >
           …and many more projects available on request
         </motion.p>
 
-        {/* ── CTA ── */}
-        <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-          className="bg-card/40 backdrop-blur-xl border border-white/10 rounded-3xl p-10 sm:p-14 text-center">
+        {/* CTA — glassmorphic */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={SPRING_SOFT}
+          className="relative overflow-hidden bg-background/60 backdrop-blur-xl border border-white/5 rounded-3xl p-10 sm:p-14 text-center"
+        >
+          <ShimmerBeam rounded="rounded-3xl" />
+
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-5 border border-primary/20">
             <Users className="w-3.5 h-3.5" /> Open for projects
           </div>
-          <h2 className="text-2xl sm:text-3xl font-display font-bold mb-3 text-zinc-100">{t("games.ctaTitle")}</h2>
-          <p className="text-zinc-400 mb-8 max-w-xl mx-auto text-sm">{t("games.ctaText")}</p>
-          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
-            <Button size="lg" className="gap-2 rounded-full px-8 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow" onClick={openDiscord}>
+          <h2 className="text-2xl sm:text-3xl font-display font-bold mb-3 text-zinc-100 text-balance">
+            {t("games.ctaTitle")}
+          </h2>
+          <p className="text-zinc-400 mb-8 max-w-xl mx-auto text-sm text-balance">
+            {t("games.ctaText")}
+          </p>
+          <motion.div
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.97 }}
+            transition={SPRING}
+          >
+            <Button
+              size="lg"
+              className="gap-2 rounded-full px-8 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold discord-glow"
+              onClick={openDiscord}
+            >
               <MessageSquare className="w-5 h-5" /> {t("games.contactDiscord")}
             </Button>
           </motion.div>
         </motion.div>
+
       </div>
     </div>
   );
